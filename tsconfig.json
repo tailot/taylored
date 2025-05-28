@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "baseUrl": ".",
+    "paths": {
+      "parse-diff": ["declarations/parse-diff.d.ts"]
+    },
+    "module": "commonjs",
+    "outDir": "./dist",
+    "rootDir": "./", // Se index.ts è nella root, altrimenti specifica la cartella src
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node"
+  }
+}

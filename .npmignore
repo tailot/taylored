@@ -1,0 +1,8 @@
+.taylored
+.gitignore
+.npmignore
+.github
+test
+node_modules
+index.ts
+tsconfig.json

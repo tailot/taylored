@@ -3,9 +3,6 @@
 Make changes to a branch a plugin. A command-line tool to manage and apply '\''.taylored'\'' plugins. It supports applying, removing, verifying plugins, and generating them from a branch (GIT).
 
 ## What is Taylored?
-a
-a
-a
 
 Taylored is a tool that helps you manage source code changes in the form of "plugins" or "patches". These plugins are represented by files with the `.taylored` extension, which contain the differences (diffs) compared to a specific version of the code.
 

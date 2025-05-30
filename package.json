@@ -1,6 +1,6 @@
 {
   "name": "taylored",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "Make changes to a branch a plugin. A command-line tool to manage and apply plugins '.taylored'. Supports applying, removing, verifying plugins, and generating them from branch (GIT).",
   "keywords": [
     "plugins",

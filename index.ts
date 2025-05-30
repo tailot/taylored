@@ -28,11 +28,16 @@ Usage:
     taylored --upgrade
     (Re-generates each .taylored file against HEAD, checking for continued purity. Reports conflicts.)
 
+  For updating offsets of an existing taylored file:
+    taylored --offset <taylored_file_name>
+    (Updates the specified .taylored file in place using the lib/git-patch-offset-updater.js logic)
+
+
 Arguments:
   <taylored_file_name>      : Name of the taylored file (e.g., 'my_patch' or 'my_patch.taylored').
                               If the '.taylored' extension is omitted, it will be automatically appended.
                               This file is assumed to be located in the '.taylored/' directory.
-                              Used by --add, --remove, --verify-add, --verify-remove.
+                              Used by --add, --remove, --verify-add, --verify-remove, --offset.
   <branch_name>             : Name of the branch to diff against HEAD for --save.
                               The output will be .taylored/<branch_name_sanitized>.taylored in the current directory.
 
@@ -47,6 +52,9 @@ Options:
   --upgrade                 : Attempt to upgrade all existing .taylored files in the '.taylored/' directory.
                               Each file is re-diffed against HEAD using its name as the branch name.
                               Updates if still pure, otherwise reports as obsolete/conflicted.
+  --offset                  : Update offsets for a given patch file in .taylored/
+                              (e.g., my-feature or my-feature.taylored)
+
 
 Note:
   All operations must be run from the root directory of a Git repository (i.e., a directory containing a '.git' folder).
@@ -64,6 +72,10 @@ Example (list taylored files):
 Example (upgrade taylored files):
   taylored --upgrade
 
+Example (update patch offsets):
+  taylored --offset my_changes
+  taylored --offset my_changes.taylored
+
 Description:
   This script has several modes:
   1. Applying/Removing/Verifying Patches: Uses 'git apply' to manage changes.
@@ -75,6 +87,9 @@ Description:
      It attempts to regenerate the diff using the taylored file's name (minus extension) as the branch name.
      If the new diff is still 'pure' (all additions or all deletions), the file is updated.
      If the new diff is mixed, the file is reported as 'obsolete' or 'conflicted' and is not changed.
+  5. Updating Patch Offsets: Uses the 'git-patch-offset-updater' library to attempt to update the line
+     numbers (offsets) within a specified .taylored file so it can apply cleanly to the current
+     repository state. This is useful if the underlying code has changed since the patch was created.
   The script must be run from the root of a Git repository.
 */
 
@@ -82,6 +97,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
+
+// Import the library for updating patch offsets
+// Path adjusted to be relative to the current file (index.ts).
+// This works for direct execution (e.g., with ts-node).
+const { updatePatchOffsets } = require('./lib/git-patch-offset-updater.js');
 
 const TAYLORED_DIR_NAME = '.taylored';
 const TAYLORED_FILE_EXTENSION = '.taylored';
@@ -98,12 +118,13 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
     console.error(`  taylored --upgrade`);
+    console.error(`  taylored --offset <taylored_file_name>`); // Added offset command
 
     if (detailed || errorMessage) { // Show details if error or explicitly requested
         console.error("\nArguments:");
         console.error(`  <taylored_file_name>      : Name of the taylored file (e.g., 'my_patch' or 'my_patch${TAYLORED_FILE_EXTENSION}').`);
         console.error(`                            If the '${TAYLORED_FILE_EXTENSION}' extension is omitted, it will be automatically appended.`);
-        console.error(`                            Assumed to be in the '${TAYLORED_DIR_NAME}/' directory. Used by apply/remove/verify modes.`);
+        console.error(`                            Assumed to be in the '${TAYLORED_DIR_NAME}/' directory. Used by apply/remove/verify/offset modes.`);
         console.error(`  <branch_name>             : Branch name for 'git diff <branch_name> HEAD' (for --save).`);
         console.error(`                            Output: ${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}`);
         console.error("\nOptions:");
@@ -115,6 +136,7 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
         console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
         console.error(`  --upgrade                 : Attempt to upgrade all ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/'.`);
+        console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`); // Added offset description
         console.error("\nNote:");
         console.error(`  All commands must be run from the root of a Git repository.`);
         console.error("\nExamples:");
@@ -123,6 +145,7 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error(`  taylored --save feature/new-design`);
         console.error(`  taylored --list`);
         console.error(`  taylored --upgrade`);
+        console.error(`  taylored --offset my_feature_patch`); // Added offset example
     }
     process.exit(1);
 }
@@ -263,7 +286,7 @@ async function handleApplyOperation(
             console.error("  Execution failed. The current directory might be in an inconsistent or partially modified state.");
             console.error("  Please check git status.");
         }
-        throw error;
+        throw error; // Re-throw to be caught by main error handler
     }
 }
 
@@ -442,6 +465,77 @@ async function handleUpgradeOperation(CWD: string): Promise<void> {
     }
 }
 
+// --- START: New function to handle --offset command ---
+/**
+ * Handles the '--offset' command.
+ * Updates the offsets of a specified patch file in the .taylored directory.
+ * @param userInputFileName The name of the taylored file provided by the user.
+ * @param CWD The current working directory (expected to be the Git repository root).
+ */
+async function handleOffsetCommand(userInputFileName: string, CWD: string): Promise<void> {
+    console.log(`INFO: Initiating --offset operation for taylored file: '${userInputFileName}'.`);
+
+    let resolvedTayloredFileName = userInputFileName;
+    if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
+        resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
+        console.log(`INFO: Using actual file name '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
+    }
+
+    // The patch file is expected to be inside the .taylored directory.
+    // The updatePatchOffsets library expects the path to the patch file relative to CWD or absolute.
+    const patchPathInTayloredDir = path.join(TAYLORED_DIR_NAME, resolvedTayloredFileName);
+    const absolutePatchPath = path.join(CWD, patchPathInTayloredDir);
+
+    console.log(`  Target Patch File: ${absolutePatchPath}`);
+    console.log(`  Repository Root (assumed): ${CWD}`);
+
+    try {
+        // Call the imported library function.
+        // The library itself handles finding the repo root if not explicitly passed,
+        // but since we are already in CWD (repo root), passing it explicitly or not
+        // should yield the same result for patchPath resolution within the library.
+        // For simplicity, we pass the patch path relative to CWD (which is repo root).
+        // The library will make it absolute and find the repo root again.
+        const result = await updatePatchOffsets(patchPathInTayloredDir, CWD);
+
+        console.log(`\nSUCCESS: Offset update process for '${resolvedTayloredFileName}' completed.`);
+        console.log(`  Output Path (should be same as input): ${result.outputPath}`);
+        console.log(`  Operation Type: ${result.operationType}`);
+        console.log(`  Patch Generated Non-Empty: ${result.patchGeneratedNonEmpty}`);
+
+        if (result.operationType === "backwards (revert)") {
+            console.warn("  WARNING: A REVERT PATCH was generated. This means the original patch might have already been integrated or its reverse was applicable.");
+        } else if (!result.patchGeneratedNonEmpty) {
+            console.warn(`  RESULT: An empty patch was generated (operation: ${result.operationType}). The patch might be a no-op or already fully integrated.`);
+        } else if (result.operationType === "forwards") {
+            console.log("  Offsets updated successfully (patch applied forwards)!");
+        } else {
+            console.log(`  Offsets updated (operation: ${result.operationType}).`);
+        }
+
+    } catch (error: any) {
+        console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
+        // The updatePatchOffsets library should provide a detailed error message.
+        let message = error.message || 'An unknown error occurred during offset update.';
+        
+        // Log additional details if available from the library's error object
+        const detailsToLog = [];
+        if (error.stdout) detailsToLog.push(`Git STDOUT from library: ${error.stdout}`);
+        if (error.stderr) detailsToLog.push(`Git STDERR from library: ${error.stderr}`);
+        if (error.originalError && error.originalError.message && error.originalError.message !== error.message) {
+            detailsToLog.push(`Original error from library: ${error.originalError.message}`);
+        }
+        
+        console.error(`  Error: ${message}`);
+        if (detailsToLog.length > 0) {
+            console.error("  Details from offset update library:\n" + detailsToLog.join("\n"));
+        }
+        // Re-throw to be caught by the main error handler in main()
+        throw error;
+    }
+}
+// --- END: New function to handle --offset command ---
+
 
 async function main(): Promise<void> {
     const rawArgs: string[] = process.argv.slice(2);
@@ -453,9 +547,10 @@ async function main(): Promise<void> {
     }
 
     const mode = rawArgs[0];
-    let branchName: string | undefined;
+    let argument: string | undefined; // General argument for modes that take one
 
-    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--upgrade'];
+    // Updated list of modes that require Git check
+    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--upgrade', '--offset'];
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
         try {
@@ -478,11 +573,11 @@ async function main(): Promise<void> {
             if (rawArgs.length !== 2) {
                 printUsageAndExit("CRITICAL ERROR: --save option requires exactly one <branch_name> argument.");
             }
-            branchName = rawArgs[1];
-            if (branchName.startsWith('--')) {
-                printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchName}' after --save. It cannot start with '--'.`);
+            argument = rawArgs[1];
+            if (argument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${argument}' after --save. It cannot start with '--'.`);
             }
-            await handleSaveOperation(branchName, CWD);
+            await handleSaveOperation(argument, CWD);
         } else if (mode === '--list') {
             if (rawArgs.length !== 1) {
                 printUsageAndExit("CRITICAL ERROR: --list option does not take any arguments.");
@@ -494,6 +589,21 @@ async function main(): Promise<void> {
             }
             await handleUpgradeOperation(CWD);
         }
+        // --- START: Integrate --offset command handling ---
+        else if (mode === '--offset') {
+            if (rawArgs.length !== 2) {
+                printUsageAndExit("CRITICAL ERROR: --offset option requires exactly one <taylored_file_name> argument.");
+            }
+            argument = rawArgs[1];
+            if (argument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${argument}' after --offset. It cannot start with '--'.`);
+            }
+            if (argument.includes(path.sep) || argument.includes('/') || argument.includes('\\')) {
+                printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${argument}') must be a simple filename without path separators. It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
+            }
+            await handleOffsetCommand(argument, CWD);
+        }
+        // --- END: Integrate --offset command handling ---
         else {
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];
             if (applyModes.includes(mode)) {
@@ -502,6 +612,9 @@ async function main(): Promise<void> {
                 }
                 const userInputFileName = rawArgs[1];
 
+                if (userInputFileName.startsWith('--')) {
+                     printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${userInputFileName}' after ${mode}. It cannot start with '--'.`);
+                }
                 if (userInputFileName.includes(path.sep) || userInputFileName.includes('/') || userInputFileName.includes('\\')) {
                     printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${userInputFileName}') must be a simple filename without path separators (e.g., 'my_patch'). It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
                 }
@@ -528,11 +641,11 @@ async function main(): Promise<void> {
     } catch (error: any) {
         console.error("\nOperation terminated due to an error.");
         // Specific messages should have been logged by the handlers.
-        // Additional generic error message if not already part of the thrown error.
+        // If the error object has a message and it hasn't been marked as alreadyLogged (a convention you might add in handlers)
         if (error && error.message && !error.alreadyLogged) {
-           // console.error(`  Error details: ${error.message}`); // Usually redundant if handlers log well
+           // console.error(`  Error details: ${error.message}`); // Usually redundant if handlers log well and re-throw
         }
-        process.exit(1);
+        process.exit(1); // Ensure exit code is set for errors
     }
 }
 

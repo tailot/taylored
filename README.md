@@ -1,6 +1,6 @@
 # taylored
 
-Make changes to a branch a plugin. A command-line tool to manage and apply '\''.taylored'\'' plugins. It supports applying, removing, verifying plugins, and generating them from a branch (GIT).
+Make changes to a branch a plugin. A command-line tool to manage and apply '\'''.taylored'\''' plugins. It supports applying, removing, verifying plugins, and generating them from a branch (GIT).
 
 ## What is Taylored?
 
@@ -146,4 +146,45 @@ Here are the commands you can use with Taylored:
     ```bash
     taylored --upgrade
     ```
-    Attempts to upgrade all existing `.taylored` files in the `.taylored/` directory. For each file, it assumes the filename (minus the `.taylored` extension) is the name of a branch. It then re-calculates the diff
+    Attempts to upgrade all existing `.taylored` files in the `.taylored/` directory. For each file, it assumes the filename (minus the `.taylored` extension) is the name of a branch. It then re-calculates the diff against HEAD. If the new diff is still "pure" (all additions or all deletions), the file is updated. Otherwise, it is marked as obsolete/conflicted and not changed.
+
+    *Example:*
+    ```bash
+    taylored --upgrade
+    ```
+
+* #### Update offsets of an existing `.taylored` file
+    ```bash
+    taylored --offset <taylored_file_name>
+    ```
+    Updates the line number offsets within the specified `.taylored` file (located in the `.taylored/` directory) so that it can be applied cleanly to the current state of the repository. This is useful if the underlying code has changed since the patch was originally created, causing the original line numbers in the patch to no longer match. The command uses the `lib/git-patch-offset-updater.js` logic to achieve this. The file is updated in place.
+
+    *Example:*
+    ```bash
+    taylored --offset my_feature_patch
+    # or
+    taylored --offset my_feature_patch.taylored # (also valid)
+    ```
+
+## How it Works
+
+* **Saving:** When you use `taylored --save <branch_name>`, it runs `git diff HEAD <branch_name>`. The output is parsed. If all changes are additions OR all changes are deletions (of lines), the diff is saved to `.taylored/<sanitized_branch_name>.taylored`. Otherwise, no file is created, and an error is reported.
+* **Applying/Removing:** `taylored --add <file>` uses `git apply .taylored/<file>`. `taylored --remove <file>` uses `git apply -R .taylored/<file>`.
+* **Verifying:** `taylored --verify-add <file>` uses `git apply --check .taylored/<file>`. `taylored --verify-remove <file>` uses `git apply --check -R .taylored/<file>`.
+* **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
+* **Upgrading:** `taylored --upgrade` iterates through each file in `.taylored/`. For a file like `feature-x.taylored`, it assumes `'feature-x'` is the branch name. It then effectively re-runs the `--save` logic for that assumed branch name: `git diff HEAD feature-x`. If the new diff is "pure" (all additions or all deletions), `feature-x.taylored` is overwritten with this new diff. If the new diff is mixed, the file is reported as obsolete/conflicted and is not modified.
+* **Offsetting:** `taylored --offset <file>` uses a more sophisticated approach (`lib/git-patch-offset-updater.js`). It attempts to apply the patch to a temporary branch, generate a new patch from the applied state, and then replace the original `.taylored/<file>` with this new, offset-adjusted patch. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit pull requests or open issues on the [GitHub repository](https://github.com/tailot/taylored).
+
+1.  Fork the repository.
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your changes (`git commit -m '\''Add some AmazingFeature'\''`).
+4.  Push to the branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details (assuming a LICENSE file exists, if not, state "MIT Licensed").

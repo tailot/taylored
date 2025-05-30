@@ -16,16 +16,24 @@ TAYLORED_DIR_NAME=".taylored"
 TEST_SUBDIR_NAME="taylored_test_repo_space"
 TEST_DIR_FULL_PATH="$PROJECT_ROOT_PATH/$TEST_SUBDIR_NAME"
 
+# Variabile per tracciare la posizione del link simbolico per la pulizia
+SYMLINK_LIB_PATH_FOR_TS_NODE=""
 
 cleanup() {
   echo -e "${YELLOW}Cleaning up...${NC}"
+
+  # Rimuovi il link simbolico se è stato creato e il percorso è noto
+  if [ -n "$SYMLINK_LIB_PATH_FOR_TS_NODE" ] && [ -L "$SYMLINK_LIB_PATH_FOR_TS_NODE" ]; then
+    echo -e "${YELLOW}Removing symlink $SYMLINK_LIB_PATH_FOR_TS_NODE...${NC}"
+    rm -f "$SYMLINK_LIB_PATH_FOR_TS_NODE"
+  fi
+
   # shellcheck disable=SC2164 # Non vogliamo uscire se cd fallisce qui, proviamo comunque a pulire
   cd "$PROJECT_ROOT_PATH"
   echo -e "${YELLOW}Removing $TEST_DIR_FULL_PATH...${NC}"
   rm -rf "$TEST_DIR_FULL_PATH"
   echo -e "${GREEN}Cleanup complete.${NC}"
 }
-
 trap cleanup EXIT
 
 echo -e "${YELLOW}Starting Taylored functionality tests...${NC}"
@@ -37,6 +45,36 @@ if [ -d "$TEST_DIR_FULL_PATH" ]; then
 fi
 mkdir -p "$TEST_DIR_FULL_PATH"
 cd "$TEST_DIR_FULL_PATH" || { echo -e "${RED}ERROR: Could not access $TEST_DIR_FULL_PATH${NC}"; exit 1; }
+
+# --- Inizio Setup Link Simbolico per ts-node ---
+# PROJECT_ROOT_PATH è la directory che contiene index.ts e la directory lib/
+# Esempio: /home/runner/work/taylored/taylored
+# index.ts si aspetta di trovare 'lib' in $(dirname $PROJECT_ROOT_PATH)/lib
+
+ACTUAL_LIB_DIR_IN_PROJECT="$PROJECT_ROOT_PATH/lib"
+SYMLINK_LIB_PATH_FOR_TS_NODE="$(dirname "$PROJECT_ROOT_PATH")/lib"
+
+echo -e "${YELLOW}Setting up 'lib' directory symlink for ts-node execution...${NC}"
+if [ "$PROJECT_ROOT_PATH" = "/" ] || [ "$(dirname "$PROJECT_ROOT_PATH")" = "." ] || [ "$(dirname "$PROJECT_ROOT_PATH")" = "/" ]; then
+  echo -e "${RED}ERROR: PROJECT_ROOT_PATH ('$PROJECT_ROOT_PATH') is too shallow. Symlink target '$(dirname "$PROJECT_ROOT_PATH")' is problematic.${NC}"
+  exit 1
+fi
+if [ ! -d "$ACTUAL_LIB_DIR_IN_PROJECT" ]; then
+    echo -e "${RED}ERROR: Source lib directory for symlink '$ACTUAL_LIB_DIR_IN_PROJECT' does not exist!${NC}"
+    exit 1
+fi
+
+if [ -L "$SYMLINK_LIB_PATH_FOR_TS_NODE" ]; then
+    echo -e "${YELLOW}Removing pre-existing symlink: $SYMLINK_LIB_PATH_FOR_TS_NODE${NC}"
+    rm -f "$SYMLINK_LIB_PATH_FOR_TS_NODE"
+elif [ -e "$SYMLINK_LIB_PATH_FOR_TS_NODE" ]; then
+    echo -e "${RED}ERROR: A file/directory already exists at the symlink target location '$SYMLINK_LIB_PATH_FOR_TS_NODE' and is not a symlink. Cannot proceed.${NC}"
+    exit 1
+fi
+echo -e "${YELLOW}Creating symlink: ln -s \"$ACTUAL_LIB_DIR_IN_PROJECT\" \"$SYMLINK_LIB_PATH_FOR_TS_NODE\"${NC}"
+ln -s "$ACTUAL_LIB_DIR_IN_PROJECT" "$SYMLINK_LIB_PATH_FOR_TS_NODE"
+echo -e "${GREEN}Symlink created.${NC}"
+# --- Fine Setup Link Simbolico ---
 
 git init -b main
 git config user.email "test@example.com" # Git richiede la configurazione dell'utente
@@ -319,6 +357,190 @@ else
   echo -e "${YELLOW}Warning: 'taylored --remove' on a non-applied plugin completed successfully (0). This is OK if the tool handles idempotency, but verify files remained unchanged.${NC}"
   exit 1
 fi
+echo "----------------------------------------"
+
+echo -e "${YELLOW}Step 12: Testing 'taylored --offset' for a DELETIONS patch...${NC}"
+git checkout main
+git reset --hard HEAD # Assicura uno stato pulito di main
+
+# 12a. Setup per il test di offset su rimozioni
+OFFSET_DEL_FILE="offset_deletions_test_file.txt"
+OFFSET_DEL_BRANCH="deletions-offset-branch"
+OFFSET_DEL_PLUGIN_NAME="${OFFSET_DEL_BRANCH}.taylored"
+
+cat << EOF > "$OFFSET_DEL_FILE"
+Line 1 for deletion offset test
+Line 2 to be deleted
+Line 3 to be deleted
+Line 4 for deletion offset test
+Line 5 for deletion offset test
+EOF
+git add "$OFFSET_DEL_FILE"
+git commit -m "Initial content for deletions offset test"
+MAIN_STATE_OFFSET_DEL_CONTENT=$(cat "$OFFSET_DEL_FILE")
+
+git checkout -b "$OFFSET_DEL_BRANCH"
+cat << EOF > "$OFFSET_DEL_FILE"
+Line 1 for deletion offset test
+Line 4 for deletion offset test
+Line 5 for deletion offset test
+EOF
+git add "$OFFSET_DEL_FILE"
+git commit -m "Deletions on $OFFSET_DEL_BRANCH"
+BRANCH_STATE_OFFSET_DEL_CONTENT=$(cat "$OFFSET_DEL_FILE")
+
+git checkout main
+$TAYLORED_CMD_BASE --save "$OFFSET_DEL_BRANCH"
+if [ ! -f "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME" ]; then
+  echo -e "${RED}Error: Failed to create $OFFSET_DEL_PLUGIN_NAME for offset test.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}Deletion patch $OFFSET_DEL_PLUGIN_NAME created for offset test.${NC}"
+
+# 12b. Modifica main per rompere gli offset originali
+cat << EOF > "$OFFSET_DEL_FILE"
+ADDED PREPEND LINE 1
+ADDED PREPEND LINE 2
+Line 1 for deletion offset test
+Line 2 to be deleted
+Line 3 to be deleted
+Line 4 for deletion offset test
+Line 5 for deletion offset test
+EOF
+git add "$OFFSET_DEL_FILE"
+git commit -m "Shift context on main for deletions offset test"
+MAIN_MODIFIED_FOR_OFFSET_DEL_CONTENT=$(cat "$OFFSET_DEL_FILE")
+
+echo -e "${YELLOW}Attempting to apply $OFFSET_DEL_PLUGIN_NAME (before offset update) - expecting failure or incorrect application...${NC}"
+if $TAYLORED_CMD_BASE --verify-add "$OFFSET_DEL_PLUGIN_NAME" > /dev/null 2>&1 ; then
+    echo -e "${YELLOW}Warning: --verify-add for $OFFSET_DEL_PLUGIN_NAME passed unexpectedly before offset update. Patch might still apply fuzzily.${NC}"
+else
+    echo -e "${GREEN}--verify-add for $OFFSET_DEL_PLUGIN_NAME failed as expected before offset update.${NC}"
+fi
+
+# 12c. Esegui taylored --offset
+echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME...${NC}"
+if $TAYLORED_CMD_BASE --offset "$OFFSET_DEL_PLUGIN_NAME"; then
+  echo -e "${GREEN}'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME failed.${NC}"
+  exit 1
+fi
+
+# 12d. Verifica l'applicazione della patch aggiornata
+echo -e "${YELLOW}Verifying and applying $OFFSET_DEL_PLUGIN_NAME after offset update...${NC}"
+if ! $TAYLORED_CMD_BASE --verify-add "$OFFSET_DEL_PLUGIN_NAME"; then
+  echo -e "${RED}Error: --verify-add for $OFFSET_DEL_PLUGIN_NAME failed after offset update.${NC}"
+  exit 1
+fi
+$TAYLORED_CMD_BASE --add "$OFFSET_DEL_PLUGIN_NAME"
+
+EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY=$(cat << EOF
+ADDED PREPEND LINE 1
+ADDED PREPEND LINE 2
+Line 1 for deletion offset test
+Line 4 for deletion offset test
+Line 5 for deletion offset test
+EOF
+)
+
+if [ "$(cat "$OFFSET_DEL_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY" ]; then
+  echo -e "${RED}Error: Content of $OFFSET_DEL_FILE is not as expected after applying offset-updated deletions patch.${NC}"
+  echo "Expected:"
+  echo "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY"
+  echo "Got:"
+  cat "$OFFSET_DEL_FILE"
+  exit 1
+fi
+echo -e "${GREEN}Offset-updated deletions patch $OFFSET_DEL_PLUGIN_NAME applied correctly.${NC}"
+$TAYLORED_CMD_BASE --remove "$OFFSET_DEL_PLUGIN_NAME" # Cleanup
+git branch -D "$OFFSET_DEL_BRANCH" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME"
+echo "----------------------------------------"
+
+echo -e "${YELLOW}Step 13: Testing 'taylored --offset' for an ADDITIONS patch...${NC}"
+git checkout main
+git reset --hard HEAD # Assicura uno stato pulito di main
+
+# 13a. Setup per il test di offset su aggiunte
+OFFSET_ADD_FILE="offset_additions_test_file.txt"
+OFFSET_ADD_BRANCH="additions-offset-branch"
+OFFSET_ADD_PLUGIN_NAME="${OFFSET_ADD_BRANCH}.taylored"
+
+cat << EOF > "$OFFSET_ADD_FILE"
+Base line 1 for additions offset test
+Base line 2 for additions offset test
+EOF
+git add "$OFFSET_ADD_FILE"
+git commit -m "Initial content for additions offset test"
+
+git checkout -b "$OFFSET_ADD_BRANCH"
+cat << EOF > "$OFFSET_ADD_FILE"
+Base line 1 for additions offset test
+NEWLY ADDED LINE A
+NEWLY ADDED LINE B
+Base line 2 for additions offset test
+EOF
+git add "$OFFSET_ADD_FILE"
+git commit -m "Additions on $OFFSET_ADD_BRANCH"
+
+git checkout main
+$TAYLORED_CMD_BASE --save "$OFFSET_ADD_BRANCH"
+if [ ! -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME" ]; then
+  echo -e "${RED}Error: Failed to create $OFFSET_ADD_PLUGIN_NAME for offset test.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}Addition patch $OFFSET_ADD_PLUGIN_NAME created for offset test.${NC}"
+
+# 13b. Modifica main per rompere gli offset originali
+cat << EOF > "$OFFSET_ADD_FILE"
+EXTRA PREPEND LINE X
+EXTRA PREPEND LINE Y
+Base line 1 for additions offset test
+Base line 2 for additions offset test
+EOF
+git add "$OFFSET_ADD_FILE"
+git commit -m "Shift context on main for additions offset test"
+
+# 13c. Esegui taylored --offset
+echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME...${NC}"
+if $TAYLORED_CMD_BASE --offset "$OFFSET_ADD_PLUGIN_NAME"; then
+  echo -e "${GREEN}'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME failed.${NC}"
+  exit 1
+fi
+
+# 13d. Verifica l'applicazione della patch aggiornata
+echo -e "${YELLOW}Verifying and applying $OFFSET_ADD_PLUGIN_NAME after offset update...${NC}"
+if ! $TAYLORED_CMD_BASE --verify-add "$OFFSET_ADD_PLUGIN_NAME"; then
+  echo -e "${RED}Error: --verify-add for $OFFSET_ADD_PLUGIN_NAME failed after offset update.${NC}"
+  exit 1
+fi
+$TAYLORED_CMD_BASE --add "$OFFSET_ADD_PLUGIN_NAME"
+
+EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY=$(cat << EOF
+EXTRA PREPEND LINE X
+EXTRA PREPEND LINE Y
+Base line 1 for additions offset test
+NEWLY ADDED LINE A
+NEWLY ADDED LINE B
+Base line 2 for additions offset test
+EOF
+)
+
+if [ "$(cat "$OFFSET_ADD_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY" ]; then
+  echo -e "${RED}Error: Content of $OFFSET_ADD_FILE is not as expected after applying offset-updated additions patch.${NC}"
+  echo "Expected:"
+  echo "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY"
+  echo "Got:"
+  cat "$OFFSET_ADD_FILE"
+  exit 1
+fi
+echo -e "${GREEN}Offset-updated additions patch $OFFSET_ADD_PLUGIN_NAME applied correctly.${NC}"
+$TAYLORED_CMD_BASE --remove "$OFFSET_ADD_PLUGIN_NAME" # Cleanup
+git branch -D "$OFFSET_ADD_BRANCH" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME"
 echo "----------------------------------------"
 
 echo -e "${GREEN}All Taylored tests passed successfully!${NC}"

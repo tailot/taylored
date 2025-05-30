@@ -101,8 +101,7 @@ import * as parseDiffModule from 'parse-diff';
 // Import the library for updating patch offsets
 // Path adjusted to be relative to the current file (index.ts).
 // This works for direct execution (e.g., with ts-node).
-const { updatePatchOffsets } = require('./lib/git-patch-offset-updater.js');
-
+const { updatePatchOffsets } = require(path.join(__dirname, '../lib/git-patch-offset-updater.js'));
 const TAYLORED_DIR_NAME = '.taylored';
 const TAYLORED_FILE_EXTENSION = '.taylored';
 

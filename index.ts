@@ -29,7 +29,8 @@ Usage:
     (Re-generates each .taylored file against HEAD, checking for continued purity. Reports conflicts.)
 
 Arguments:
-  <taylored_file_name>      : Name of the taylored file (e.g., my_patch.taylored).
+  <taylored_file_name>      : Name of the taylored file (e.g., 'my_patch' or 'my_patch.taylored').
+                              If the '.taylored' extension is omitted, it will be automatically appended.
                               This file is assumed to be located in the '.taylored/' directory.
                               Used by --add, --remove, --verify-add, --verify-remove.
   <branch_name>             : Name of the branch to diff against HEAD for --save.
@@ -51,7 +52,8 @@ Note:
   All operations must be run from the root directory of a Git repository (i.e., a directory containing a '.git' folder).
 
 Example (apply changes):
-  taylored --add my_changes.taylored
+  taylored --add my_changes
+  taylored --add my_changes.taylored (also valid)
 
 Example (generate a taylored file - conditional):
   taylored --save feature-branch
@@ -99,7 +101,8 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
 
     if (detailed || errorMessage) { // Show details if error or explicitly requested
         console.error("\nArguments:");
-        console.error(`  <taylored_file_name>      : Name of the ${TAYLORED_FILE_EXTENSION} file (e.g., 'my_patch${TAYLORED_FILE_EXTENSION}').`);
+        console.error(`  <taylored_file_name>      : Name of the taylored file (e.g., 'my_patch' or 'my_patch${TAYLORED_FILE_EXTENSION}').`);
+        console.error(`                            If the '${TAYLORED_FILE_EXTENSION}' extension is omitted, it will be automatically appended.`);
         console.error(`                            Assumed to be in the '${TAYLORED_DIR_NAME}/' directory. Used by apply/remove/verify modes.`);
         console.error(`  <branch_name>             : Branch name for 'git diff <branch_name> HEAD' (for --save).`);
         console.error(`                            Output: ${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}`);
@@ -115,7 +118,8 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error("\nNote:");
         console.error(`  All commands must be run from the root of a Git repository.`);
         console.error("\nExamples:");
-        console.error(`  taylored --add changes${TAYLORED_FILE_EXTENSION}`);
+        console.error(`  taylored --add my_changes`);
+        console.error(`  taylored --add my_changes${TAYLORED_FILE_EXTENSION} (also valid)`);
         console.error(`  taylored --save feature/new-design`);
         console.error(`  taylored --list`);
         console.error(`  taylored --upgrade`);
@@ -202,17 +206,17 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
 }
 
 async function handleApplyOperation(
-    tayloredFileName: string,
+    tayloredFileNameWithExt: string, // This will always have the extension
     isVerify: boolean,
     isReverse: boolean,
     modeName: string,
     CWD: string
 ): Promise<void> {
     const tayloredDir = path.join(CWD, TAYLORED_DIR_NAME);
-    const actualTayloredFilePath = path.join(tayloredDir, tayloredFileName);
+    const actualTayloredFilePath = path.join(tayloredDir, tayloredFileNameWithExt);
 
     console.log(`INFO: Initiating ${modeName} operation.`);
-    console.log(`  Taylored File:     ${actualTayloredFilePath} (from ${TAYLORED_DIR_NAME}/${tayloredFileName})`);
+    console.log(`  Taylored File:     ${actualTayloredFilePath} (from ${TAYLORED_DIR_NAME}/${tayloredFileNameWithExt})`);
     console.log(`  Project Directory: ${CWD} (current working directory)`);
 
     if (isVerify) {
@@ -376,7 +380,7 @@ async function handleUpgradeOperation(CWD: string): Promise<void> {
                 if (error.message && !error.stderr && !(error.stdout && (error.status ===1 || error.status ===0)) ) console.error("    Error message:", error.message);
                 console.error(`    Attempted command: ${diffCommand}`);
                 errorCount++;
-                continue; 
+                continue;
             }
         }
         
@@ -449,7 +453,6 @@ async function main(): Promise<void> {
     }
 
     const mode = rawArgs[0];
-    let tayloredFileName: string | undefined;
     let branchName: string | undefined;
 
     const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--upgrade'];
@@ -497,13 +500,16 @@ async function main(): Promise<void> {
                 if (rawArgs.length !== 2) {
                     printUsageAndExit(`CRITICAL ERROR: ${mode} requires a <taylored_file_name> argument.`);
                 }
-                tayloredFileName = rawArgs[1];
+                const userInputFileName = rawArgs[1];
 
-                if (tayloredFileName.includes(path.sep) || tayloredFileName.includes('/') || tayloredFileName.includes('\\')) {
-                    printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${tayloredFileName}') must be a simple filename without path separators (e.g., 'my_changes${TAYLORED_FILE_EXTENSION}'). It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
+                if (userInputFileName.includes(path.sep) || userInputFileName.includes('/') || userInputFileName.includes('\\')) {
+                    printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${userInputFileName}') must be a simple filename without path separators (e.g., 'my_patch'). It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
                 }
-                if (!tayloredFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
-                     printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${tayloredFileName}') must end with '${TAYLORED_FILE_EXTENSION}'.`);
+
+                let resolvedTayloredFileName = userInputFileName;
+                if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
+                    resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
+                    console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
                 }
 
                 let isVerify = false;
@@ -514,7 +520,7 @@ async function main(): Promise<void> {
                     case '--verify-add': isVerify = true; break;
                     case '--verify-remove': isVerify = true; isReverse = true; break;
                 }
-                await handleApplyOperation(tayloredFileName, isVerify, isReverse, mode, CWD);
+                await handleApplyOperation(resolvedTayloredFileName, isVerify, isReverse, mode, CWD);
             } else {
                 printUsageAndExit(`CRITICAL ERROR: Unknown option or command '${mode}'.`, true);
             }

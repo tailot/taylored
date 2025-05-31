@@ -1,6 +1,6 @@
 # taylored
 
-Make changes to a branch a plugin. A command-line tool to manage and apply '\'''.taylored'\''' plugins. It supports applying, removing, verifying plugins, and generating them from a branch (GIT).
+Make changes to a branch a plugin. A command-line tool to manage and apply '''.taylored''' plugins. It supports applying, removing, verifying plugins, and generating them from a branch (GIT).
 
 ## What is Taylored?
 
@@ -8,7 +8,9 @@ Taylored is a tool that helps you manage source code changes in the form of "plu
 
 A distinctive feature of Taylored is its ability to generate these `.taylored` files conditionally: a plugin is created using the `--save` command only if the changes between the specified branch and HEAD consist *exclusively* of line additions or *exclusively* of line deletions. This ensures that plugins represent atomic and well-defined changes, making them easier to apply and manage.
 
-The tool also provides an `--upgrade` command that attempts to update existing `.taylored` files. It re-calculates the diff for each file (assuming the filename corresponds to a branch name) against the current HEAD. If the new diff remains "pure" (all additions or all deletions), the file is updated. Otherwise, it'\''s flagged as potentially obsolete or conflicted, indicating that the relationship between the original branch and HEAD has changed in a way that no longer produces a simple, atomic patch.
+The tool also provides an `--upgrade` command that attempts to update existing `.taylored` files. It re-calculates the diff for each file (assuming the filename corresponds to a branch name) against the current HEAD. If the new diff remains "pure" (all additions or all deletions), the file is updated. Otherwise, it's flagged as potentially obsolete or conflicted, indicating that the relationship between the original branch and HEAD has changed in a way that no longer produces a simple, atomic patch.
+
+Furthermore, the `--offset` command allows updating patch offsets and can now utilize a custom commit message via the `--message` option for its temporary operations, or it will attempt to recycle a message from the input patch. The `--data` command allows extracting this stored commit message.
 
 ## Installation
 
@@ -24,7 +26,7 @@ Make sure you have Node.js and npm installed. After installation, you can run `t
 
 ### For Developers and Contributors
 
-If you want to contribute to Taylored'\''s development, modify its code, or run it from a local copy:
+If you want to contribute to Taylored's development, modify its code, or run it from a local copy:
 
 1.  Clone the repository:
     ```bash
@@ -46,7 +48,7 @@ If you want to contribute to Taylored'\''s development, modify its code, or run 
 
 After these steps, you can run your local version of Taylored:
 
-* Directly with Node.js (if you'\''ve run `npm run build`):
+* Directly with Node.js (if you've run `npm run build`):
     ```bash
     node dist/index.js <command>
     ```
@@ -155,15 +157,30 @@ Here are the commands you can use with Taylored:
 
 * #### Update offsets of an existing `.taylored` file
     ```bash
-    taylored --offset <taylored_file_name>
+    taylored --offset <taylored_file_name> [--message "Custom commit message"]
     ```
-    Updates the line number offsets within the specified `.taylored` file (located in the `.taylored/` directory) so that it can be applied cleanly to the current state of the repository. This is useful if the underlying code has changed since the patch was originally created, causing the original line numbers in the patch to no longer match. The command uses the `lib/git-patch-offset-updater.js` logic to achieve this. The file is updated in place.
+    Updates the line number offsets within the specified `.taylored` file (located in the `.taylored/` directory) so that it can be applied cleanly to the current state of the repository. This is useful if the underlying code has changed since the patch was originally created, causing the original line numbers in the patch to no longer match.
+    If `--message` is provided, its value is used for temporary commits during the update process. Otherwise, the tool attempts to extract a message from the input patch file; if unsuccessful, a default message is used.
+    The file is updated in place.
 
     *Example:*
     ```bash
     taylored --offset my_feature_patch
     # or
-    taylored --offset my_feature_patch.taylored # (also valid)
+    taylored --offset my_feature_patch.taylored --message "Refactor: Adjust patch for latest changes"
+    ```
+
+* #### Extract commit message data from a `.taylored` file
+    ```bash
+    taylored --data <taylored_file_name>
+    ```
+    Reads the specified `.taylored` file and prints the extracted commit message to standard output. If no message is found in the patch (e.g., it wasn't saved with one or the format is unexpected), it prints an empty string. This is useful for scripting or inspecting the intended purpose of a patch.
+
+    *Example:*
+    ```bash
+    taylored --data my_feature_patch
+    # Output might be: Refactor: Adjust patch for latest changes
+    # Or empty if no message was found.
     ```
 
 ## How it Works
@@ -172,8 +189,9 @@ Here are the commands you can use with Taylored:
 * **Applying/Removing:** `taylored --add <file>` uses `git apply .taylored/<file>`. `taylored --remove <file>` uses `git apply -R .taylored/<file>`.
 * **Verifying:** `taylored --verify-add <file>` uses `git apply --check .taylored/<file>`. `taylored --verify-remove <file>` uses `git apply --check -R .taylored/<file>`.
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
-* **Upgrading:** `taylored --upgrade` iterates through each file in `.taylored/`. For a file like `feature-x.taylored`, it assumes `'feature-x'` is the branch name. It then effectively re-runs the `--save` logic for that assumed branch name: `git diff HEAD feature-x`. If the new diff is "pure" (all additions or all deletions), `feature-x.taylored` is overwritten with this new diff. If the new diff is mixed, the file is reported as obsolete/conflicted and is not modified.
-* **Offsetting:** `taylored --offset <file>` uses a more sophisticated approach (`lib/git-patch-offset-updater.js`). It attempts to apply the patch to a temporary branch, generate a new patch from the applied state, and then replace the original `.taylored/<file>` with this new, offset-adjusted patch. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
+* **Upgrading:** `taylored --upgrade` iterates through each file in `.taylored/`. For a file like `feature-x.taylored`, it assumes 'feature-x' is the branch name. It then effectively re-runs the `--save` logic for that assumed branch name: `git diff HEAD feature-x`. If the new diff is "pure" (all additions or all deletions), `feature-x.taylored` is overwritten with this new diff. If the new diff is mixed, the file is reported as obsolete/conflicted and is not modified.
+* **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a more sophisticated approach (`lib/git-patch-offset-updater.js`). It attempts to apply the patch to a temporary branch, generate a new patch from the applied state (using the provided or extracted commit message for temporary commits), and then replace the original `.taylored/<file>` with this new, offset-adjusted patch. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
+* **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
 
 ## Contributing
 
@@ -181,10 +199,10 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 
 1.  Fork the repository.
 2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m '\''Add some AmazingFeature'\''`).
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
 4.  Push to the branch (`git push origin feature/AmazingFeature`).
 5.  Open a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details (assuming a LICENSE file exists, if not, state "MIT Licensed").
+This project is licensed under the MIT License - see the LICENSE file for details (assuming a LICENSE file exists, if not, state "MIT Licensed").

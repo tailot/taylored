@@ -872,6 +872,19 @@ git branch -D "$OFFSET_MSG_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME"
 echo "----------------------------------------"
 
+# Source the new offset and data tests
+# Ensure it's sourced relative to the main script's directory if needed,
+# or assumes test_offset_data.sh is in the $SCRIPT_DIR_PATH
+echo -e "${YELLOW}Sourcing additional tests from test_offset_data.sh...${NC}"
+# shellcheck source=test/test_offset_data.sh
+source "$SCRIPT_DIR_PATH/test_offset_data.sh"
+
+echo -e "${YELLOW}Sourcing error condition tests...${NC}"
+# shellcheck source=test/test_error_conditions.sh
+source "$SCRIPT_DIR_PATH/test_error_conditions.sh"
+echo "----------------------------------------"
+
+
 echo -e "${GREEN}All Taylored tests passed successfully!${NC}"
 
 exit 0

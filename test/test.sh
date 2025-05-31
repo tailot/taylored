@@ -543,6 +543,81 @@ git branch -D "$OFFSET_ADD_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME"
 echo "----------------------------------------"
 
+echo -e "${YELLOW}Step 14: Testing 'taylored --offset NAME --message \"CUSTOM\"' and 'taylored --data NAME'...${NC}"
+git checkout main
+git reset --hard HEAD # Assicura uno stato pulito di main
+
+# 14a. Setup per il test di offset con messaggio custom
+OFFSET_MSG_FILE="offset_message_test_file.txt"
+OFFSET_MSG_BRANCH="message-offset-branch"
+OFFSET_MSG_PLUGIN_NAME="${OFFSET_MSG_BRANCH}.taylored"
+CUSTOM_MESSAGE="match random" # Messaggio da testare
+
+# Creazione file base
+cat << EOF > "$OFFSET_MSG_FILE"
+Line 1 for custom message offset test
+Line 2 for custom message offset test
+EOF
+git add "$OFFSET_MSG_FILE"
+git commit -m "Initial content for custom message offset test file on main"
+
+# Creazione branch e modifica per generare il plugin
+git checkout -b "$OFFSET_MSG_BRANCH"
+cat << EOF > "$OFFSET_MSG_FILE"
+Line 1 for custom message offset test
+ADDED LINE for custom message
+Line 2 for custom message offset test
+EOF
+git add "$OFFSET_MSG_FILE"
+git commit -m "Modifications on $OFFSET_MSG_BRANCH for custom message test"
+
+# Creazione del plugin .taylored
+git checkout main
+$TAYLORED_CMD_BASE --save "$OFFSET_MSG_BRANCH"
+if [ ! -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME" ]; then
+  echo -e "${RED}Error: Failed to create $OFFSET_MSG_PLUGIN_NAME for custom message offset test.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}Plugin $OFFSET_MSG_PLUGIN_NAME created for custom message offset test.${NC}"
+
+# 14b. Modifica main per rompere gli offset originali
+cat << EOF > "$OFFSET_MSG_FILE"
+PREPENDED LINE 1 on main
+PREPENDED LINE 2 on main
+Line 1 for custom message offset test
+Line 2 for custom message offset test
+EOF
+git add "$OFFSET_MSG_FILE"
+git commit -m "Shift context on main for custom message offset test"
+
+# 14c. Esegui taylored --offset con --message
+echo -e "${YELLOW}Running 'taylored --offset $OFFSET_MSG_PLUGIN_NAME --message \"$CUSTOM_MESSAGE\"'...${NC}"
+if $TAYLORED_CMD_BASE --offset "$OFFSET_MSG_PLUGIN_NAME" --message "$CUSTOM_MESSAGE"; then
+  echo -e "${GREEN}'taylored --offset' with custom message completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' with custom message failed.${NC}"
+  exit 1
+fi
+
+# 14d. Verifica il messaggio con taylored --data
+echo -e "${YELLOW}Running 'taylored --data $OFFSET_MSG_PLUGIN_NAME' to verify message...${NC}"
+EXTRACTED_MESSAGE=$($TAYLORED_CMD_BASE --data "$OFFSET_MSG_PLUGIN_NAME")
+
+if [ "$EXTRACTED_MESSAGE" = "$CUSTOM_MESSAGE" ]; then
+  echo -e "${GREEN}'taylored --data' extracted the correct message: \"$EXTRACTED_MESSAGE\".${NC}"
+else
+  echo -e "${RED}Error: 'taylored --data' extracted an incorrect message.${NC}"
+  echo -e "  Expected: \"$CUSTOM_MESSAGE\""
+  echo -e "  Got:      \"$EXTRACTED_MESSAGE\""
+  exit 1
+fi
+
+# 14e. Cleanup (opzionale: verifica applicazione, ma il focus è sul messaggio)
+$TAYLORED_CMD_BASE --remove "$OFFSET_MSG_PLUGIN_NAME" &>/dev/null # Rimuovi se applicato, ignora errore se non applicato
+git branch -D "$OFFSET_MSG_BRANCH" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME"
+echo "----------------------------------------"
+
 echo -e "${GREEN}All Taylored tests passed successfully!${NC}"
 
 exit 0

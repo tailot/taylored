@@ -2,6 +2,21 @@
 
 set -euo pipefail
 
+# Ensure Node.js type definitions are available for ts-node
+echo -e "\033[0;33mEnsuring @types/node is installed...\033[0m"
+if npm list --depth=0 --global @types/node >/dev/null 2>&1 || npm list --depth=0 @types/node >/dev/null 2>&1; then
+  echo -e "\033[0;32m@types/node is already installed.\033[0m"
+else
+  if npm i --save-dev @types/node; then
+    echo -e "\033[0;32m@types/node installed successfully.\033[0m"
+  else
+    echo -e "\033[0;31mERROR: Failed to install @types/node. Exiting.\033[0m"
+    exit 1
+  fi
+fi
+echo "----------------------------------------"
+
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
@@ -89,28 +104,44 @@ else
 fi
 echo "----------------------------------------"
 
-echo -e "${YELLOW}Step 3: Testing 'taylored --verify-add' for $PLUGIN_DELETIONS_NAME...${NC}"
+echo -e "${YELLOW}Step 3: Testing 'taylored --verify-add' for $PLUGIN_DELETIONS_NAME (with extension)...${NC}"
 if $TAYLORED_CMD_BASE --verify-add "$PLUGIN_DELETIONS_NAME"; then
-  echo -e "${GREEN}'taylored --verify-add' for $PLUGIN_DELETIONS_NAME completed successfully.${NC}"
+  echo -e "${GREEN}'taylored --verify-add' for $PLUGIN_DELETIONS_NAME (with extension) completed successfully.${NC}"
 else
-  echo -e "${RED}Error: 'taylored --verify-add' for $PLUGIN_DELETIONS_NAME failed.${NC}"
+  echo -e "${RED}Error: 'taylored --verify-add' for $PLUGIN_DELETIONS_NAME (with extension) failed.${NC}"
   exit 1
 fi
 if [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ]; then
-    echo -e "${RED}Error: file1.txt modified after --verify-add.${NC}"
+    echo -e "${RED}Error: file1.txt modified after --verify-add (with extension).${NC}"
     exit 1
 fi
 if [ ! -f "file_to_delete.txt" ]; then
-    echo -e "${RED}Error: file_to_delete.txt removed after --verify-add.${NC}"
+    echo -e "${RED}Error: file_to_delete.txt removed after --verify-add (with extension).${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Step 3b: Testing 'taylored --verify-add' for ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)...${NC}"
+if $TAYLORED_CMD_BASE --verify-add "${PLUGIN_DELETIONS_NAME%.taylored}"; then
+  echo -e "${GREEN}'taylored --verify-add' for ${PLUGIN_DELETIONS_NAME%.taylored} (without extension) completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --verify-add' for ${PLUGIN_DELETIONS_NAME%.taylored} (without extension) failed.${NC}"
+  exit 1
+fi
+if [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ]; then
+    echo -e "${RED}Error: file1.txt modified after --verify-add (without extension).${NC}"
+    exit 1
+fi
+if [ ! -f "file_to_delete.txt" ]; then
+    echo -e "${RED}Error: file_to_delete.txt removed after --verify-add (without extension).${NC}"
     exit 1
 fi
 echo "----------------------------------------"
 
-echo -e "${YELLOW}Step 4: Testing 'taylored --add' with $PLUGIN_DELETIONS_NAME...${NC}"
+echo -e "${YELLOW}Step 4: Testing 'taylored --add' with $PLUGIN_DELETIONS_NAME (with extension)...${NC}"
 $TAYLORED_CMD_BASE --add "$PLUGIN_DELETIONS_NAME"
 
 if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$MODIFIED_FILE1_DELETIONS_CONTENT" ]; then
-  echo -e "${RED}Error: content of file1.txt is not as expected after 'taylored --add $PLUGIN_DELETIONS_NAME'.${NC}"
+  echo -e "${RED}Error: content of file1.txt is not as expected after 'taylored --add $PLUGIN_DELETIONS_NAME (with extension)'.${NC}"
   echo "Expected:"
   echo "$MODIFIED_FILE1_DELETIONS_CONTENT"
   echo "Got:"
@@ -119,34 +150,80 @@ if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$MODIFIED_FILE1_DELETIONS_CO
 fi
 
 if [ -f "file_to_delete.txt" ]; then
-  echo -e "${RED}Error: file_to_delete.txt was not removed after 'taylored --add $PLUGIN_DELETIONS_NAME'.${NC}"
+  echo -e "${RED}Error: file_to_delete.txt was not removed after 'taylored --add $PLUGIN_DELETIONS_NAME (with extension)'.${NC}"
   exit 1
 fi
-echo -e "${GREEN}'taylored --add $PLUGIN_DELETIONS_NAME' seems to have worked correctly.${NC}"
+echo -e "${GREEN}'taylored --add $PLUGIN_DELETIONS_NAME (with extension)' seems to have worked correctly.${NC}"
 echo "----------------------------------------"
 
-echo -e "${YELLOW}Step 5: Testing 'taylored --verify-remove' for applied $PLUGIN_DELETIONS_NAME...${NC}"
+echo -e "${YELLOW}Step 4b: Undoing add for next test: 'taylored --remove' with $PLUGIN_DELETIONS_NAME (with extension)...${NC}"
+$TAYLORED_CMD_BASE --remove "$PLUGIN_DELETIONS_NAME"
+if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ]; then
+  echo -e "${RED}Error: content of file1.txt was not restored after 'taylored --remove $PLUGIN_DELETIONS_NAME (with extension)'.${NC}"; exit 1;
+fi
+if [ ! -f "file_to_delete.txt" ] || [ "$(cat file_to_delete.txt)" != "$INITIAL_FILE_TO_DELETE_CONTENT" ]; then
+  echo -e "${RED}Error: file_to_delete.txt was not restored correctly after 'taylored --remove $PLUGIN_DELETIONS_NAME (with extension)'.${NC}"; exit 1;
+fi
+echo -e "${GREEN}Undo successful.${NC}"
+echo "----------------------------------------"
+
+echo -e "${YELLOW}Step 4c: Testing 'taylored --add' with ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)...${NC}"
+$TAYLORED_CMD_BASE --add "${PLUGIN_DELETIONS_NAME%.taylored}"
+
+if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$MODIFIED_FILE1_DELETIONS_CONTENT" ]; then
+  echo -e "${RED}Error: content of file1.txt is not as expected after 'taylored --add ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)'.${NC}"
+  echo "Expected:"
+  echo "$MODIFIED_FILE1_DELETIONS_CONTENT"
+  cat file1.txt || echo "file1.txt non trovato"
+  exit 1
+fi
+
+if [ -f "file_to_delete.txt" ]; then
+  echo -e "${RED}Error: file_to_delete.txt was not removed after 'taylored --add ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)'.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}'taylored --add ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)' seems to have worked correctly.${NC}"
+echo "----------------------------------------"
+
+echo -e "${YELLOW}Step 5: Testing 'taylored --verify-remove' for applied $PLUGIN_DELETIONS_NAME (with extension)...${NC}"
 if $TAYLORED_CMD_BASE --verify-remove "$PLUGIN_DELETIONS_NAME"; then
-  echo -e "${GREEN}'taylored --verify-remove' for $PLUGIN_DELETIONS_NAME completed successfully.${NC}"
+  echo -e "${GREEN}'taylored --verify-remove' for $PLUGIN_DELETIONS_NAME (with extension) completed successfully.${NC}"
 else
-  echo -e "${RED}Error: 'taylored --verify-remove' for $PLUGIN_DELETIONS_NAME failed.${NC}"
+  echo -e "${RED}Error: 'taylored --verify-remove' for $PLUGIN_DELETIONS_NAME (with extension) failed.${NC}"
   exit 1
 fi
 if [ "$(cat file1.txt)" != "$MODIFIED_FILE1_DELETIONS_CONTENT" ]; then
-    echo -e "${RED}Error: file1.txt modified after --verify-remove.${NC}"
+    echo -e "${RED}Error: file1.txt modified after --verify-remove (with extension).${NC}"
     exit 1
 fi
 if [ -f "file_to_delete.txt" ]; then
-    echo -e "${RED}Error: file_to_delete.txt reappeared after --verify-remove.${NC}"
+    echo -e "${RED}Error: file_to_delete.txt reappeared after --verify-remove (with extension).${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Step 5b: Testing 'taylored --verify-remove' for applied ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)...${NC}"
+# Note: The plugin is currently applied, so verify-remove should also work with the name without extension
+if $TAYLORED_CMD_BASE --verify-remove "${PLUGIN_DELETIONS_NAME%.taylored}"; then
+  echo -e "${GREEN}'taylored --verify-remove' for ${PLUGIN_DELETIONS_NAME%.taylored} (without extension) completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --verify-remove' for ${PLUGIN_DELETIONS_NAME%.taylored} (without extension) failed.${NC}"
+  exit 1
+fi
+if [ "$(cat file1.txt)" != "$MODIFIED_FILE1_DELETIONS_CONTENT" ]; then
+    echo -e "${RED}Error: file1.txt modified after --verify-remove (without extension).${NC}"
+    exit 1
+fi
+if [ -f "file_to_delete.txt" ]; then
+    echo -e "${RED}Error: file_to_delete.txt reappeared after --verify-remove (without extension).${NC}"
     exit 1
 fi
 echo "----------------------------------------"
 
-echo -e "${YELLOW}Step 6: Testing 'taylored --remove' with $PLUGIN_DELETIONS_NAME...${NC}"
+echo -e "${YELLOW}Step 6: Testing 'taylored --remove' with $PLUGIN_DELETIONS_NAME (with extension)...${NC}"
 $TAYLORED_CMD_BASE --remove "$PLUGIN_DELETIONS_NAME"
 
 if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ]; then
-  echo -e "${RED}Error: content of file1.txt was not restored after 'taylored --remove'.${NC}"
+  echo -e "${RED}Error: content of file1.txt was not restored after 'taylored --remove $PLUGIN_DELETIONS_NAME (with extension)'.${NC}"
   echo "Expected:"
   echo "$INITIAL_FILE1_CONTENT"
   echo "Got:"
@@ -155,10 +232,40 @@ if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ]; t
 fi
 
 if [ ! -f "file_to_delete.txt" ] || [ "$(cat file_to_delete.txt)" != "$INITIAL_FILE_TO_DELETE_CONTENT" ]; then
-  echo -e "${RED}Error: file_to_delete.txt was not restored or content is incorrect after 'taylored --remove'.${NC}"
+  echo -e "${RED}Error: file_to_delete.txt was not restored or content is incorrect after 'taylored --remove $PLUGIN_DELETIONS_NAME (with extension)'.${NC}"
   exit 1
 fi
-echo -e "${GREEN}'taylored --remove $PLUGIN_DELETIONS_NAME' seems to have worked correctly.${NC}"
+echo -e "${GREEN}'taylored --remove $PLUGIN_DELETIONS_NAME (with extension)' seems to have worked correctly.${NC}"
+echo "----------------------------------------"
+
+echo -e "${YELLOW}Step 6b: Re-applying for next test: 'taylored --add' with ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)...${NC}"
+$TAYLORED_CMD_BASE --add "${PLUGIN_DELETIONS_NAME%.taylored}"
+if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$MODIFIED_FILE1_DELETIONS_CONTENT" ]; then
+ echo -e "${RED}Error: content of file1.txt is not as expected after re-applying 'taylored --add ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)'.${NC}"; exit 1;
+fi
+if [ -f "file_to_delete.txt" ]; then
+ echo -e "${RED}Error: file_to_delete.txt was not removed after re-applying 'taylored --add ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)'.${NC}"; exit 1;
+fi
+echo -e "${GREEN}Re-apply successful.${NC}"
+echo "----------------------------------------"
+
+echo -e "${YELLOW}Step 6c: Testing 'taylored --remove' with ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)...${NC}"
+$TAYLORED_CMD_BASE --remove "${PLUGIN_DELETIONS_NAME%.taylored}"
+
+if [ ! -f "file1.txt" ] || [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ]; then
+  echo -e "${RED}Error: content of file1.txt was not restored after 'taylored --remove ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)'.${NC}"
+  echo "Expected:"
+  echo "$INITIAL_FILE1_CONTENT"
+  echo "Got:"
+  cat file1.txt || echo "file1.txt non trovato"
+  exit 1
+fi
+
+if [ ! -f "file_to_delete.txt" ] || [ "$(cat file_to_delete.txt)" != "$INITIAL_FILE_TO_DELETE_CONTENT" ]; then
+  echo -e "${RED}Error: file_to_delete.txt was not restored or content is incorrect after 'taylored --remove ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)'.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}'taylored --remove ${PLUGIN_DELETIONS_NAME%.taylored} (without extension)' seems to have worked correctly.${NC}"
 echo "----------------------------------------"
 
 BRANCH_ADDITIONS="additions-branch"
@@ -182,22 +289,39 @@ else
   exit 1
 fi
 
-echo -e "${YELLOW}Step 7a: Testing 'taylored --add' with $PLUGIN_ADDITIONS_NAME...${NC}"
+echo -e "${YELLOW}Step 7a: Testing 'taylored --add' with $PLUGIN_ADDITIONS_NAME (with extension)...${NC}"
 $TAYLORED_CMD_BASE --add "$PLUGIN_ADDITIONS_NAME"
 if [ "$(cat file1.txt)" != "$MODIFIED_FILE1_ADDITIONS_CONTENT" ] || \
    [ ! -f "new_file.txt" ] || [ "$(cat new_file.txt)" != "$NEW_FILE_CONTENT" ]; then
-  echo -e "${RED}Error: 'taylored --add $PLUGIN_ADDITIONS_NAME' did not apply changes correctly.${NC}"
+  echo -e "${RED}Error: 'taylored --add $PLUGIN_ADDITIONS_NAME (with extension)' did not apply changes correctly.${NC}"
   exit 1
 fi
-echo -e "${GREEN}'taylored --add $PLUGIN_ADDITIONS_NAME' applied successfully.${NC}"
+echo -e "${GREEN}'taylored --add $PLUGIN_ADDITIONS_NAME (with extension)' applied successfully.${NC}"
 
-echo -e "${YELLOW}Step 7b: Testing 'taylored --remove' with $PLUGIN_ADDITIONS_NAME...${NC}"
+echo -e "${YELLOW}Step 7b: Testing 'taylored --remove' with $PLUGIN_ADDITIONS_NAME (with extension)...${NC}"
 $TAYLORED_CMD_BASE --remove "$PLUGIN_ADDITIONS_NAME"
 if [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ] || [ -f "new_file.txt" ]; then
-  echo -e "${RED}Error: 'taylored --remove $PLUGIN_ADDITIONS_NAME' did not restore state correctly.${NC}"
+  echo -e "${RED}Error: 'taylored --remove $PLUGIN_ADDITIONS_NAME (with extension)' did not restore state correctly.${NC}"
   exit 1
 fi
-echo -e "${GREEN}'taylored --remove $PLUGIN_ADDITIONS_NAME' removed successfully.${NC}"
+echo -e "${GREEN}'taylored --remove $PLUGIN_ADDITIONS_NAME (with extension)' removed successfully.${NC}"
+
+echo -e "${YELLOW}Step 7c: Testing 'taylored --add' with ${PLUGIN_ADDITIONS_NAME%.taylored} (without extension)...${NC}"
+$TAYLORED_CMD_BASE --add "${PLUGIN_ADDITIONS_NAME%.taylored}"
+if [ "$(cat file1.txt)" != "$MODIFIED_FILE1_ADDITIONS_CONTENT" ] || \
+   [ ! -f "new_file.txt" ] || [ "$(cat new_file.txt)" != "$NEW_FILE_CONTENT" ]; then
+  echo -e "${RED}Error: 'taylored --add ${PLUGIN_ADDITIONS_NAME%.taylored} (without extension)' did not apply changes correctly.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}'taylored --add ${PLUGIN_ADDITIONS_NAME%.taylored} (without extension)' applied successfully.${NC}"
+
+echo -e "${YELLOW}Step 7d: Testing 'taylored --remove' with ${PLUGIN_ADDITIONS_NAME%.taylored} (without extension)...${NC}"
+$TAYLORED_CMD_BASE --remove "${PLUGIN_ADDITIONS_NAME%.taylored}"
+if [ "$(cat file1.txt)" != "$INITIAL_FILE1_CONTENT" ] || [ -f "new_file.txt" ]; then
+  echo -e "${RED}Error: 'taylored --remove ${PLUGIN_ADDITIONS_NAME%.taylored} (without extension)' did not restore state correctly.${NC}"
+  exit 1
+fi
+echo -e "${GREEN}'taylored --remove ${PLUGIN_ADDITIONS_NAME%.taylored} (without extension)' removed successfully.${NC}"
 echo "----------------------------------------"
 
 BRANCH_MIXED="mixed-changes-branch"
@@ -395,18 +519,18 @@ else
 fi
 
 # 12c. Esegui taylored --offset
-echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME...${NC}"
+echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME (with extension)...${NC}"
 if $TAYLORED_CMD_BASE --offset "$OFFSET_DEL_PLUGIN_NAME"; then
-  echo -e "${GREEN}'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME completed successfully.${NC}"
+  echo -e "${GREEN}'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME (with extension) completed successfully.${NC}"
 else
-  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME failed.${NC}"
+  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME (with extension) failed.${NC}"
   exit 1
 fi
 
-# 12d. Verifica l'applicazione della patch aggiornata
-echo -e "${YELLOW}Verifying and applying $OFFSET_DEL_PLUGIN_NAME after offset update...${NC}"
+# 12d. Verifica l'applicazione della patch aggiornata (with extension)
+echo -e "${YELLOW}Verifying and applying $OFFSET_DEL_PLUGIN_NAME (with extension) after offset update...${NC}"
 if ! $TAYLORED_CMD_BASE --verify-add "$OFFSET_DEL_PLUGIN_NAME"; then
-  echo -e "${RED}Error: --verify-add for $OFFSET_DEL_PLUGIN_NAME failed after offset update.${NC}"
+  echo -e "${RED}Error: --verify-add for $OFFSET_DEL_PLUGIN_NAME (with extension) failed after offset update.${NC}"
   exit 1
 fi
 $TAYLORED_CMD_BASE --add "$OFFSET_DEL_PLUGIN_NAME"
@@ -421,15 +545,72 @@ EOF
 )
 
 if [ "$(cat "$OFFSET_DEL_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY" ]; then
-  echo -e "${RED}Error: Content of $OFFSET_DEL_FILE is not as expected after applying offset-updated deletions patch.${NC}"
+  echo -e "${RED}Error: Content of $OFFSET_DEL_FILE is not as expected after applying offset-updated deletions patch (with extension).${NC}"
   echo "Expected:"
   echo "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY"
   echo "Got:"
   cat "$OFFSET_DEL_FILE"
   exit 1
 fi
-echo -e "${GREEN}Offset-updated deletions patch $OFFSET_DEL_PLUGIN_NAME applied correctly.${NC}"
-$TAYLORED_CMD_BASE --remove "$OFFSET_DEL_PLUGIN_NAME" &>/dev/null || true # Cleanup, ignore errors
+echo -e "${GREEN}Offset-updated deletions patch $OFFSET_DEL_PLUGIN_NAME (with extension) applied correctly.${NC}"
+$TAYLORED_CMD_BASE --remove "$OFFSET_DEL_PLUGIN_NAME" &>/dev/null # Cleanup
+
+# Reset state for testing without extension
+git checkout main
+git reset --hard HEAD # Assicura uno stato pulito di main
+# Recreate the original file state before the branch was created
+cat << EOF > "$OFFSET_DEL_FILE"
+Line 1 for deletion offset test
+Line 2 to be deleted
+Line 3 to be deleted
+Line 4 for deletion offset test
+Line 5 for deletion offset test
+EOF
+git add "$OFFSET_DEL_FILE"
+git commit -m "Re-Initial content for deletions offset test"
+# Recreate the plugin as --offset modifies it
+$TAYLORED_CMD_BASE --save "$OFFSET_DEL_BRANCH"
+# Modifica main per rompere gli offset originali (again)
+cat << EOF > "$OFFSET_DEL_FILE"
+ADDED PREPEND LINE 1
+ADDED PREPEND LINE 2
+Line 1 for deletion offset test
+Line 2 to be deleted
+Line 3 to be deleted
+Line 4 for deletion offset test
+Line 5 for deletion offset test
+EOF
+git add "$OFFSET_DEL_FILE"
+git commit -m "Shift context again on main for deletions offset test (no ext)"
+
+# 12e. Esegui taylored --offset (without extension)
+echo -e "${YELLOW}Running 'taylored --offset' for ${OFFSET_DEL_PLUGIN_NAME%.taylored} (without extension)...${NC}"
+if $TAYLORED_CMD_BASE --offset "${OFFSET_DEL_PLUGIN_NAME%.taylored}"; then
+  echo -e "${GREEN}'taylored --offset' for ${OFFSET_DEL_PLUGIN_NAME%.taylored} (without extension) completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' for ${OFFSET_DEL_PLUGIN_NAME%.taylored} (without extension) failed.${NC}"
+  exit 1
+fi
+
+# 12f. Verifica l'applicazione della patch aggiornata (without extension)
+echo -e "${YELLOW}Verifying and applying ${OFFSET_DEL_PLUGIN_NAME%.taylored} (without extension) after offset update...${NC}"
+if ! $TAYLORED_CMD_BASE --verify-add "${OFFSET_DEL_PLUGIN_NAME%.taylored}"; then
+  echo -e "${RED}Error: --verify-add for ${OFFSET_DEL_PLUGIN_NAME%.taylored} (without extension) failed after offset update.${NC}"
+  exit 1
+fi
+$TAYLORED_CMD_BASE --add "${OFFSET_DEL_PLUGIN_NAME%.taylored}"
+
+if [ "$(cat "$OFFSET_DEL_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY" ]; then
+  echo -e "${RED}Error: Content of $OFFSET_DEL_FILE is not as expected after applying offset-updated deletions patch (without extension).${NC}"
+  echo "Expected:"
+  echo "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY"
+  echo "Got:"
+  cat "$OFFSET_DEL_FILE"
+  exit 1
+fi
+echo -e "${GREEN}Offset-updated deletions patch ${OFFSET_DEL_PLUGIN_NAME%.taylored} (without extension) applied correctly.${NC}"
+
+$TAYLORED_CMD_BASE --remove "${OFFSET_DEL_PLUGIN_NAME%.taylored}" &>/dev/null || true # Cleanup, ignore errors
 git branch -D "$OFFSET_DEL_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME"
 echo "----------------------------------------"
@@ -478,19 +659,19 @@ EOF
 git add "$OFFSET_ADD_FILE"
 git commit -m "Shift context on main for additions offset test"
 
-# 13c. Esegui taylored --offset
-echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME...${NC}"
+# 13c. Esegui taylored --offset (with extension)
+echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME (with extension)...${NC}"
 if $TAYLORED_CMD_BASE --offset "$OFFSET_ADD_PLUGIN_NAME"; then
-  echo -e "${GREEN}'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME completed successfully.${NC}"
+  echo -e "${GREEN}'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME (with extension) completed successfully.${NC}"
 else
-  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME failed.${NC}"
+  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME (with extension) failed.${NC}"
   exit 1
 fi
 
-# 13d. Verifica l'applicazione della patch aggiornata
-echo -e "${YELLOW}Verifying and applying $OFFSET_ADD_PLUGIN_NAME after offset update...${NC}"
+# 13d. Verifica l'applicazione della patch aggiornata (with extension)
+echo -e "${YELLOW}Verifying and applying $OFFSET_ADD_PLUGIN_NAME (with extension) after offset update...${NC}"
 if ! $TAYLORED_CMD_BASE --verify-add "$OFFSET_ADD_PLUGIN_NAME"; then
-  echo -e "${RED}Error: --verify-add for $OFFSET_ADD_PLUGIN_NAME failed after offset update.${NC}"
+  echo -e "${RED}Error: --verify-add for $OFFSET_ADD_PLUGIN_NAME (with extension) failed after offset update.${NC}"
   exit 1
 fi
 $TAYLORED_CMD_BASE --add "$OFFSET_ADD_PLUGIN_NAME"
@@ -506,15 +687,66 @@ EOF
 )
 
 if [ "$(cat "$OFFSET_ADD_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY" ]; then
-  echo -e "${RED}Error: Content of $OFFSET_ADD_FILE is not as expected after applying offset-updated additions patch.${NC}"
+  echo -e "${RED}Error: Content of $OFFSET_ADD_FILE is not as expected after applying offset-updated additions patch (with extension).${NC}"
   echo "Expected:"
   echo "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY"
   echo "Got:"
   cat "$OFFSET_ADD_FILE"
   exit 1
 fi
-echo -e "${GREEN}Offset-updated additions patch $OFFSET_ADD_PLUGIN_NAME applied correctly.${NC}"
-$TAYLORED_CMD_BASE --remove "$OFFSET_ADD_PLUGIN_NAME" &>/dev/null || true # Cleanup, ignore errors
+echo -e "${GREEN}Offset-updated additions patch $OFFSET_ADD_PLUGIN_NAME (with extension) applied correctly.${NC}"
+$TAYLORED_CMD_BASE --remove "$OFFSET_ADD_PLUGIN_NAME" &>/dev/null # Cleanup
+
+# Reset state for testing without extension
+git checkout main
+git reset --hard HEAD # Assicura uno stato pulito di main
+# Recreate the original file state before the branch was created
+cat << EOF > "$OFFSET_ADD_FILE"
+Base line 1 for additions offset test
+Base line 2 for additions offset test
+EOF
+git add "$OFFSET_ADD_FILE"
+git commit -m "Re-Initial content for additions offset test"
+# Recreate the plugin as --offset modifies it
+$TAYLORED_CMD_BASE --save "$OFFSET_ADD_BRANCH"
+# Modifica main per rompere gli offset originali (again)
+cat << EOF > "$OFFSET_ADD_FILE"
+EXTRA PREPEND LINE X
+EXTRA PREPEND LINE Y
+Base line 1 for additions offset test
+Base line 2 for additions offset test
+EOF
+git add "$OFFSET_ADD_FILE"
+git commit -m "Shift context again on main for additions offset test (no ext)"
+
+# 13e. Esegui taylored --offset (without extension)
+echo -e "${YELLOW}Running 'taylored --offset' for ${OFFSET_ADD_PLUGIN_NAME%.taylored} (without extension)...${NC}"
+if $TAYLORED_CMD_BASE --offset "${OFFSET_ADD_PLUGIN_NAME%.taylored}"; then
+  echo -e "${GREEN}'taylored --offset' for ${OFFSET_ADD_PLUGIN_NAME%.taylored} (without extension) completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' for ${OFFSET_ADD_PLUGIN_NAME%.taylored} (without extension) failed.${NC}"
+  exit 1
+fi
+
+# 13f. Verifica l'applicazione della patch aggiornata (without extension)
+echo -e "${YELLOW}Verifying and applying ${OFFSET_ADD_PLUGIN_NAME%.taylored} (without extension) after offset update...${NC}"
+if ! $TAYLORED_CMD_BASE --verify-add "${OFFSET_ADD_PLUGIN_NAME%.taylored}"; then
+  echo -e "${RED}Error: --verify-add for ${OFFSET_ADD_PLUGIN_NAME%.taylored} (without extension) failed after offset update.${NC}"
+  exit 1
+fi
+$TAYLORED_CMD_BASE --add "${OFFSET_ADD_PLUGIN_NAME%.taylored}"
+
+if [ "$(cat "$OFFSET_ADD_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY" ]; then
+  echo -e "${RED}Error: Content of $OFFSET_ADD_FILE is not as expected after applying offset-updated additions patch (without extension).${NC}"
+  echo "Expected:"
+  echo "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY"
+  echo "Got:"
+  cat "$OFFSET_ADD_FILE"
+  exit 1
+fi
+echo -e "${GREEN}Offset-updated additions patch ${OFFSET_ADD_PLUGIN_NAME%.taylored} (without extension) applied correctly.${NC}"
+
+$TAYLORED_CMD_BASE --remove "${OFFSET_ADD_PLUGIN_NAME%.taylored}" &>/dev/null || true # Cleanup, ignore errors
 git branch -D "$OFFSET_ADD_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME"
 echo "----------------------------------------"
@@ -566,30 +798,76 @@ EOF
 git add "$OFFSET_MSG_FILE"
 git commit -m "Shift context on main for custom message offset test"
 
-# 14c. Esegui taylored --offset con --message
-echo -e "${YELLOW}Running 'taylored --offset $OFFSET_MSG_PLUGIN_NAME --message \"$CUSTOM_MESSAGE\"'...${NC}"
+# 14c. Esegui taylored --offset con --message (with extension)
+echo -e "${YELLOW}Running 'taylored --offset $OFFSET_MSG_PLUGIN_NAME --message \"$CUSTOM_MESSAGE\" (with extension)'...${NC}"
 if $TAYLORED_CMD_BASE --offset "$OFFSET_MSG_PLUGIN_NAME" --message "$CUSTOM_MESSAGE"; then
-  echo -e "${GREEN}'taylored --offset' with custom message completed successfully.${NC}"
+  echo -e "${GREEN}'taylored --offset' with custom message (with extension) completed successfully.${NC}"
 else
-  echo -e "${RED}Error: 'taylored --offset' with custom message failed.${NC}"
+  echo -e "${RED}Error: 'taylored --offset' with custom message (with extension) failed.${NC}"
   exit 1
 fi
 
-# 14d. Verifica il messaggio con taylored --data
-echo -e "${YELLOW}Running 'taylored --data $OFFSET_MSG_PLUGIN_NAME' to verify message...${NC}"
+# 14d. Verifica il messaggio con taylored --data (with extension)
+echo -e "${YELLOW}Running 'taylored --data $OFFSET_MSG_PLUGIN_NAME (with extension)' to verify message...${NC}"
 EXTRACTED_MESSAGE=$($TAYLORED_CMD_BASE --data "$OFFSET_MSG_PLUGIN_NAME")
 
 if [ "$EXTRACTED_MESSAGE" = "$CUSTOM_MESSAGE" ]; then
-  echo -e "${GREEN}'taylored --data' extracted the correct message: \"$EXTRACTED_MESSAGE\".${NC}"
+  echo -e "${GREEN}'taylored --data' (with extension) extracted the correct message: \"$EXTRACTED_MESSAGE\".${NC}"
 else
-  echo -e "${RED}Error: 'taylored --data' extracted an incorrect message.${NC}"
+  echo -e "${RED}Error: 'taylored --data' (with extension) extracted an incorrect message.${NC}"
   echo -e "  Expected: \"$CUSTOM_MESSAGE\""
   echo -e "  Got:      \"$EXTRACTED_MESSAGE\""
   exit 1
 fi
 
-# 14e. Cleanup (opzionale: verifica applicazione, ma il focus è sul messaggio)
-$TAYLORED_CMD_BASE --remove "$OFFSET_MSG_PLUGIN_NAME" &>/dev/null || true # Rimuovi se applicato, ignora errore se non applicato
+# Cleanup for the next test part
+$TAYLORED_CMD_BASE --remove "$OFFSET_MSG_PLUGIN_NAME" &>/dev/null || true
+# Reset state for testing without extension
+git checkout main
+git reset --hard HEAD # Assicura uno stato pulito di main
+# Recreate the original file state before the branch was created
+cat << EOF > "$OFFSET_MSG_FILE"
+Line 1 for custom message offset test
+Line 2 for custom message offset test
+EOF
+git add "$OFFSET_MSG_FILE"
+git commit -m "Re-Initial content for message offset test"
+# Recreate the plugin as --offset modifies it
+$TAYLORED_CMD_BASE --save "$OFFSET_MSG_BRANCH"
+# Modifica main per rompere gli offset originali (again)
+cat << EOF > "$OFFSET_MSG_FILE"
+PREPENDED LINE 1 on main
+PREPENDED LINE 2 on main
+Line 1 for custom message offset test
+Line 2 for custom message offset test
+EOF
+git add "$OFFSET_MSG_FILE"
+git commit -m "Shift context again on main for message offset test (no ext)"
+
+# 14e. Esegui taylored --offset con --message (without extension)
+echo -e "${YELLOW}Running 'taylored --offset ${OFFSET_MSG_PLUGIN_NAME%.taylored} --message \"$CUSTOM_MESSAGE\" (without extension)'...${NC}"
+if $TAYLORED_CMD_BASE --offset "${OFFSET_MSG_PLUGIN_NAME%.taylored}" --message "$CUSTOM_MESSAGE"; then
+  echo -e "${GREEN}'taylored --offset' with custom message (without extension) completed successfully.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' with custom message (without extension) failed.${NC}"
+  exit 1
+fi
+
+# 14f. Verifica il messaggio con taylored --data (without extension)
+echo -e "${YELLOW}Running 'taylored --data ${OFFSET_MSG_PLUGIN_NAME%.taylored} (without extension)' to verify message...${NC}"
+EXTRACTED_MESSAGE_NOEXT=$($TAYLORED_CMD_BASE --data "${OFFSET_MSG_PLUGIN_NAME%.taylored}")
+
+if [ "$EXTRACTED_MESSAGE_NOEXT" = "$CUSTOM_MESSAGE" ]; then
+  echo -e "${GREEN}'taylored --data' (without extension) extracted the correct message: \"$EXTRACTED_MESSAGE_NOEXT\".${NC}"
+else
+  echo -e "${RED}Error: 'taylored --data' (without extension) extracted an incorrect message.${NC}"
+  echo -e "  Expected: \"$CUSTOM_MESSAGE\""
+  echo -e "  Got:      \"$EXTRACTED_MESSAGE_NOEXT\""
+  exit 1
+fi
+
+# 14g. Cleanup
+$TAYLORED_CMD_BASE --remove "${OFFSET_MSG_PLUGIN_NAME%.taylored}" &>/dev/null || true # Rimuovi se applicato, ignora errore se non applicato
 git branch -D "$OFFSET_MSG_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME"
 echo "----------------------------------------"

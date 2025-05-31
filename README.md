@@ -8,9 +8,7 @@ Taylored is a tool that helps you manage source code changes in the form of "plu
 
 A distinctive feature of Taylored is its ability to generate these `.taylored` files conditionally: a plugin is created using the `--save` command only if the changes between the specified branch and HEAD consist *exclusively* of line additions or *exclusively* of line deletions. This ensures that plugins represent atomic and well-defined changes, making them easier to apply and manage.
 
-The tool also provides an `--upgrade` command that attempts to update existing `.taylored` files. It re-calculates the diff for each file (assuming the filename corresponds to a branch name) against the current HEAD. If the new diff remains "pure" (all additions or all deletions), the file is updated. Otherwise, it's flagged as potentially obsolete or conflicted, indicating that the relationship between the original branch and HEAD has changed in a way that no longer produces a simple, atomic patch.
-
-Furthermore, the `--offset` command allows updating patch offsets and can now utilize a custom commit message via the `--message` option for its temporary operations, or it will attempt to recycle a message from the input patch. The `--data` command allows extracting this stored commit message.
+Furthermore, the `--offset` command allows updating patch offsets. It can use the `--message` option to embed a custom `Subject:` line in the resulting `.taylored` file. If `--message` is not provided, Taylored attempts to preserve or extract a message from the input patch for this purpose. Note that temporary commits made by `--offset` during its internal processing use a default message. The `--data` command allows extracting this stored commit message.
 
 ## Installation
 
@@ -144,23 +142,13 @@ Here are the commands you can use with Taylored:
     taylored --list
     ```
 
-* #### Upgrade existing `.taylored` files
-    ```bash
-    taylored --upgrade
-    ```
-    Attempts to upgrade all existing `.taylored` files in the `.taylored/` directory. For each file, it assumes the filename (minus the `.taylored` extension) is the name of a branch. It then re-calculates the diff against HEAD. If the new diff is still "pure" (all additions, all deletions, or no textual line changes), the file is updated. Otherwise, it is marked as obsolete/conflicted and not changed.
-
-    *Example:*
-    ```bash
-    taylored --upgrade
-    ```
-
 * #### Update offsets of an existing `.taylored` file
     ```bash
     taylored --offset <taylored_file_name> [--message "Custom commit message"]
     ```
     Updates the line number offsets within the specified `.taylored` file (located in the `.taylored/` directory) so that it can be applied cleanly to the current state of the repository. This is useful if the underlying code has changed since the patch was originally created, causing the original line numbers in the patch to no longer match.
-    If `--message` is provided, its value is used for temporary commits during the update process. Otherwise, the tool attempts to extract a message from the input patch file; if unsuccessful, a default message is used.
+    **Prerequisite:** This command will not run if there are uncommitted changes in your Git working directory. Please commit or stash your changes first.
+    If `--message` is provided, its value is used to embed a `Subject: [PATCH] Your Custom Message` line in the *output* `.taylored` file, assuming the file is updated and the new diff content is not empty. This does *not* affect the commit messages of temporary commits made by the offset process itself, which use a default message. If no `--message` is given, Taylored attempts to carry over an existing message from the input patch for the `Subject:` line.
     The file is updated in place.
 
     *Example:*
@@ -174,7 +162,7 @@ Here are the commands you can use with Taylored:
     ```bash
     taylored --data <taylored_file_name>
     ```
-    Reads the specified `.taylored` file and prints the extracted commit message to standard output. If no message is found in the patch (e.g., it wasn't saved with one or the format is unexpected), it prints an empty string. This is useful for scripting or inspecting the intended purpose of a patch.
+    Reads the specified `.taylored` file and prints the extracted commit message (typically from a `Subject:` line) to standard output. If no message is found in the patch (e.g., it wasn't saved with one or the format is unexpected), it prints an empty string. This is useful for scripting or inspecting the intended purpose of a patch.
 
     *Example:*
     ```bash
@@ -189,8 +177,7 @@ Here are the commands you can use with Taylored:
 * **Applying/Removing:** `taylored --add <file>` uses `git apply .taylored/<file>`. `taylored --remove <file>` uses `git apply -R .taylored/<file>`.
 * **Verifying:** `taylored --verify-add <file>` uses `git apply --check .taylored/<file>`. `taylored --verify-remove <file>` uses `git apply --check -R .taylored/<file>`.
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
-* **Upgrading:** `taylored --upgrade` iterates through each file in `.taylored/`. For a file like `feature-x.taylored`, it assumes 'feature-x' is the branch name. It then effectively re-runs the `--save` logic for that assumed branch name: `git diff HEAD feature-x`. If the new diff is "pure" (all additions, all deletions, or no textual line changes), `feature-x.taylored` is overwritten with this new diff. If the new diff is mixed, the file is reported as obsolete/conflicted and is not modified.
-* **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a more sophisticated approach (`lib/git-patch-offset-updater.js`). It attempts to apply the patch to a temporary branch, generate a new patch from the applied state (using the provided or extracted commit message for temporary commits), and then replace the original `.taylored/<file>` with this new, offset-adjusted patch. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
+* **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a sophisticated approach (`lib/git-patch-offset-updater.js`). **It first checks for uncommitted changes in the repository; if any exist, the command will exit.** Otherwise, it attempts to apply/revert the patch on a temporary branch, generates a new patch from this state against the `main` branch, and then replaces the original `.taylored/<file>` with this new, offset-adjusted patch. If the `--message` option is used, this message is intended for the `Subject:` line of the *output* `.taylored` file. Temporary commits made during the process use a default internal message. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
 * **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
 
 ## Contributing

@@ -29,8 +29,9 @@ Usage:
     (Re-generates each .taylored file against HEAD, checking for continued purity. Reports conflicts.)
 
   For updating offsets of an existing taylored file:
-    taylored --offset <taylored_file_name>
-    (Updates the specified .taylored file in place using the lib/git-patch-offset-updater.js logic)
+    taylored --offset <taylored_file_name> [--message "Custom commit message"]
+    (Updates the specified .taylored file in place. If --message is provided, it's used for temporary commits.
+     Otherwise, a message is extracted from the patch if possible, or a default is used.)
 
 
 Arguments:
@@ -54,7 +55,9 @@ Options:
                               Updates if still pure, otherwise reports as obsolete/conflicted.
   --offset                  : Update offsets for a given patch file in .taylored/
                               (e.g., my-feature or my-feature.taylored)
-
+  --message "Custom Text"   : Optional. Used with --offset. Specifies a custom commit message for the
+                              temporary commits created during the offset update process. If omitted,
+                              a message is attempted to be extracted from the input patch file.
 
 Note:
   All operations must be run from the root directory of a Git repository (i.e., a directory containing a '.git' folder).
@@ -74,7 +77,7 @@ Example (upgrade taylored files):
 
 Example (update patch offsets):
   taylored --offset my_changes
-  taylored --offset my_changes.taylored
+  taylored --offset my_changes.taylored --message "Refactor: Adjust patch for latest changes"
 
 Description:
   This script has several modes:
@@ -90,6 +93,7 @@ Description:
   5. Updating Patch Offsets: Uses the 'git-patch-offset-updater' library to attempt to update the line
      numbers (offsets) within a specified .taylored file so it can apply cleanly to the current
      repository state. This is useful if the underlying code has changed since the patch was created.
+     A custom commit message for temporary operations can be provided with --message.
   The script must be run from the root of a Git repository.
 */
 
@@ -97,11 +101,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
-
-// Import the library for updating patch offsets
-// Path adjusted to be relative to the current file (index.ts).
-// This works for direct execution (e.g., with ts-node).
-const { updatePatchOffsets } = require(path.join(__dirname, '../lib/git-patch-offset-updater.js'));
+const { updatePatchOffsets } = require(path.join(__dirname, 'lib/git-patch-offset-updater.js'));
 const TAYLORED_DIR_NAME = '.taylored';
 const TAYLORED_FILE_EXTENSION = '.taylored';
 
@@ -117,9 +117,9 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
     console.error(`  taylored --upgrade`);
-    console.error(`  taylored --offset <taylored_file_name>`); // Added offset command
+    console.error(`  taylored --offset <taylored_file_name> [--message "Custom commit message"]`);
 
-    if (detailed || errorMessage) { // Show details if error or explicitly requested
+    if (detailed || errorMessage) {
         console.error("\nArguments:");
         console.error(`  <taylored_file_name>      : Name of the taylored file (e.g., 'my_patch' or 'my_patch${TAYLORED_FILE_EXTENSION}').`);
         console.error(`                            If the '${TAYLORED_FILE_EXTENSION}' extension is omitted, it will be automatically appended.`);
@@ -135,7 +135,9 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
         console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
         console.error(`  --upgrade                 : Attempt to upgrade all ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/'.`);
-        console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`); // Added offset description
+        console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
+        console.error(`  --message "Custom Text"   : Optional. Used with --offset. Specifies a custom commit message for temporary commits.`);
+        console.error(`                            If omitted, a message is extracted from the input patch, or a default is used.`);
         console.error("\nNote:");
         console.error(`  All commands must be run from the root of a Git repository.`);
         console.error("\nExamples:");
@@ -144,7 +146,8 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error(`  taylored --save feature/new-design`);
         console.error(`  taylored --list`);
         console.error(`  taylored --upgrade`);
-        console.error(`  taylored --offset my_feature_patch`); // Added offset example
+        console.error(`  taylored --offset my_feature_patch`);
+        console.error(`  taylored --offset my_feature_patch --message "Update offsets for my_feature_patch"`);
     }
     process.exit(1);
 }
@@ -171,9 +174,9 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
     try {
         diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
     } catch (error: any) {
-        if (error.status === 1 && typeof error.stdout === 'string') { // status 1: differences found
+        if (error.status === 1 && typeof error.stdout === 'string') {
             diffOutput = error.stdout;
-        } else if (error.status === 0 && typeof error.stdout === 'string') { // status 0: no differences
+        } else if (error.status === 0 && typeof error.stdout === 'string') {
              diffOutput = error.stdout;
         }else {
             console.error(`CRITICAL ERROR: 'git diff' command failed or encountered an unexpected issue.`);
@@ -228,7 +231,7 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
 }
 
 async function handleApplyOperation(
-    tayloredFileNameWithExt: string, // This will always have the extension
+    tayloredFileNameWithExt: string,
     isVerify: boolean,
     isReverse: boolean,
     modeName: string,
@@ -285,7 +288,7 @@ async function handleApplyOperation(
             console.error("  Execution failed. The current directory might be in an inconsistent or partially modified state.");
             console.error("  Please check git status.");
         }
-        throw error; // Re-throw to be caught by main error handler
+        throw error;
     }
 }
 
@@ -386,10 +389,10 @@ async function handleUpgradeOperation(CWD: string): Promise<void> {
         try {
             diffOutput = execSync(diffCommand, { encoding: 'utf8', cwd: CWD });
         } catch (error: any) {
-            if (error.status === 1 && typeof error.stdout === 'string') { // status 1: differences found
+            if (error.status === 1 && typeof error.stdout === 'string') {
                 diffOutput = error.stdout;
-            } else if (error.status === 0 && typeof error.stdout === 'string') { // status 0: no differences
-                diffOutput = error.stdout; // Empty string
+            } else if (error.status === 0 && typeof error.stdout === 'string') {
+                diffOutput = error.stdout;
             } else {
                 console.error(`  ERROR: Failed to generate diff for branch '${assumedBranchName}'. Git command issue.`);
                 if (error.status) console.error(`    Exit status: ${error.status}`);
@@ -399,7 +402,7 @@ async function handleUpgradeOperation(CWD: string): Promise<void> {
                 if (error.stdout && typeof error.stdout === 'string' && error.stdout.trim() !== '' && error.status !==1 && error.status !==0) {
                     console.error("    Git stdout:\n", error.stdout.toString().trim());
                 }
-                if (error.message && !error.stderr && !(error.stdout && (error.status ===1 || error.status ===0)) ) console.error("    Error message:", error.message);
+                if (error.message && !error.stderr && !(error.stdout && (error.status ===1 || error.status === 0)) ) console.error("    Error message:", error.message);
                 console.error(`    Attempted command: ${diffCommand}`);
                 errorCount++;
                 continue;
@@ -456,23 +459,22 @@ async function handleUpgradeOperation(CWD: string): Promise<void> {
 
     if (obsoleteCount > 0 || errorCount > 0) {
         console.log("\nINFO: For obsolete or error files, manual review is recommended.");
-        console.log("      An 'obsolete' file means its corresponding assumed branch, when diffed against HEAD, no longer produces a 'pure' diff.");
-        console.log("      This can happen if the branch has been merged, rebased, or changed significantly relative to HEAD.");
-        console.log("      Consider regenerating these files with 'taylored --save <original_branch_name>' if the assumed branch name was incorrect.");
-        console.log("\n      Limitation reminder: The 'assumed branch for diff' is derived directly from the .taylored filename (e.g., 'my-feat.taylored' -> assumed branch 'my-feat').");
-        console.log("      If the original branch name used to create the file contained '/' (e.g., 'feature/my-feat'), this automatic upgrade might fail or use an incorrect branch name if a branch matching the sanitized filename does not reflect the original intent.");
     }
 }
 
-// --- START: New function to handle --offset command ---
+
 /**
  * Handles the '--offset' command.
  * Updates the offsets of a specified patch file in the .taylored directory.
  * @param userInputFileName The name of the taylored file provided by the user.
  * @param CWD The current working directory (expected to be the Git repository root).
+ * @param customCommitMessage Optional custom commit message for temporary commits.
  */
-async function handleOffsetCommand(userInputFileName: string, CWD: string): Promise<void> {
+async function handleOffsetCommand(userInputFileName: string, CWD: string, customCommitMessage?: string): Promise<void> {
     console.log(`INFO: Initiating --offset operation for taylored file: '${userInputFileName}'.`);
+    if (customCommitMessage) {
+        console.log(`  Using custom commit message: "${customCommitMessage}"`);
+    }
 
     let resolvedTayloredFileName = userInputFileName;
     if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
@@ -480,8 +482,6 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string): Prom
         console.log(`INFO: Using actual file name '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
     }
 
-    // The patch file is expected to be inside the .taylored directory.
-    // The updatePatchOffsets library expects the path to the patch file relative to CWD or absolute.
     const patchPathInTayloredDir = path.join(TAYLORED_DIR_NAME, resolvedTayloredFileName);
     const absolutePatchPath = path.join(CWD, patchPathInTayloredDir);
 
@@ -489,13 +489,8 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string): Prom
     console.log(`  Repository Root (assumed): ${CWD}`);
 
     try {
-        // Call the imported library function.
-        // The library itself handles finding the repo root if not explicitly passed,
-        // but since we are already in CWD (repo root), passing it explicitly or not
-        // should yield the same result for patchPath resolution within the library.
-        // For simplicity, we pass the patch path relative to CWD (which is repo root).
-        // The library will make it absolute and find the repo root again.
-        const result = await updatePatchOffsets(patchPathInTayloredDir, CWD);
+        // Pass the customCommitMessage to updatePatchOffsets
+        const result = await updatePatchOffsets(patchPathInTayloredDir, CWD, customCommitMessage);
 
         console.log(`\nSUCCESS: Offset update process for '${resolvedTayloredFileName}' completed.`);
         console.log(`  Output Path (should be same as input): ${result.outputPath}`);
@@ -514,10 +509,8 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string): Prom
 
     } catch (error: any) {
         console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
-        // The updatePatchOffsets library should provide a detailed error message.
         let message = error.message || 'An unknown error occurred during offset update.';
         
-        // Log additional details if available from the library's error object
         const detailsToLog = [];
         if (error.stdout) detailsToLog.push(`Git STDOUT from library: ${error.stdout}`);
         if (error.stderr) detailsToLog.push(`Git STDERR from library: ${error.stderr}`);
@@ -529,11 +522,9 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string): Prom
         if (detailsToLog.length > 0) {
             console.error("  Details from offset update library:\n" + detailsToLog.join("\n"));
         }
-        // Re-throw to be caught by the main error handler in main()
         throw error;
     }
 }
-// --- END: New function to handle --offset command ---
 
 
 async function main(): Promise<void> {
@@ -546,9 +537,9 @@ async function main(): Promise<void> {
     }
 
     const mode = rawArgs[0];
-    let argument: string | undefined; // General argument for modes that take one
+    let argument: string | undefined;
+    let customMessage: string | undefined;
 
-    // Updated list of modes that require Git check
     const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--upgrade', '--offset'];
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
@@ -588,21 +579,37 @@ async function main(): Promise<void> {
             }
             await handleUpgradeOperation(CWD);
         }
-        // --- START: Integrate --offset command handling ---
         else if (mode === '--offset') {
-            if (rawArgs.length !== 2) {
-                printUsageAndExit("CRITICAL ERROR: --offset option requires exactly one <taylored_file_name> argument.");
+            if (rawArgs.length < 2) { // Must have at least --offset <file>
+                printUsageAndExit("CRITICAL ERROR: --offset option requires at least one <taylored_file_name> argument.");
             }
-            argument = rawArgs[1];
+            argument = rawArgs[1]; // <taylored_file_name>
             if (argument.startsWith('--')) {
                 printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${argument}' after --offset. It cannot start with '--'.`);
             }
             if (argument.includes(path.sep) || argument.includes('/') || argument.includes('\\')) {
                 printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${argument}') must be a simple filename without path separators. It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
             }
-            await handleOffsetCommand(argument, CWD);
+
+            // Check for --message
+            if (rawArgs.length > 2) {
+                if (rawArgs[2] === '--message') {
+                    if (rawArgs.length > 3 && rawArgs[3] && !rawArgs[3].startsWith('--')) {
+                        customMessage = rawArgs[3];
+                    } else {
+                        printUsageAndExit("CRITICAL ERROR: --message option for --offset requires a message string argument.");
+                    }
+                } else {
+                     // If there are more than 2 args, and the 3rd is not --message, it's an error
+                     printUsageAndExit(`CRITICAL ERROR: Unknown argument or incorrect usage after --offset <file_name>. Expected optional --message "text", got '${rawArgs[2]}'.`);
+                }
+            }
+             if (rawArgs.length > 4) { // --offset <file> --message <text> (4 args). Anything more is an error.
+                printUsageAndExit("CRITICAL ERROR: Too many arguments for --offset command.");
+            }
+
+            await handleOffsetCommand(argument, CWD, customMessage);
         }
-        // --- END: Integrate --offset command handling ---
         else {
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];
             if (applyModes.includes(mode)) {
@@ -639,12 +646,10 @@ async function main(): Promise<void> {
         }
     } catch (error: any) {
         console.error("\nOperation terminated due to an error.");
-        // Specific messages should have been logged by the handlers.
-        // If the error object has a message and it hasn't been marked as alreadyLogged (a convention you might add in handlers)
         if (error && error.message && !error.alreadyLogged) {
-           // console.error(`  Error details: ${error.message}`); // Usually redundant if handlers log well and re-throw
+           // console.error(`  Error details: ${error.message}`);
         }
-        process.exit(1); // Ensure exit code is set for errors
+        process.exit(1);
     }
 }
 

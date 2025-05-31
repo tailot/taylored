@@ -90,18 +90,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
+import { updatePatchOffsets, extractMessageFromPatch } from './lib/git-patch-offset-updater';
 
-// Import specific functions from the library
-let libPath;
-// path.sep ensures OS-agnostic path segment separation
-if (__dirname.endsWith(path.sep + 'dist') || __dirname.endsWith(path.sep + 'out')) { // Added 'out' as another common build dir
-    // Running from compiled 'dist' or 'out' directory
-    libPath = path.join(__dirname, '../lib/git-patch-offset-updater.js');
-} else {
-    // Running from source (e.g., with ts-node from project root, where __dirname is the project root)
-    libPath = path.join(__dirname, './lib/git-patch-offset-updater.js');
-}
-const { updatePatchOffsets, extractMessageFromPatch } = require(libPath);
 const TAYLORED_DIR_NAME = '.taylored';
 const TAYLORED_FILE_EXTENSION = '.taylored';
 

@@ -16,17 +16,8 @@ TAYLORED_DIR_NAME=".taylored"
 TEST_SUBDIR_NAME="taylored_test_repo_space"
 TEST_DIR_FULL_PATH="$PROJECT_ROOT_PATH/$TEST_SUBDIR_NAME"
 
-# Variabile per tracciare la posizione del link simbolico per la pulizia
-SYMLINK_LIB_PATH_FOR_TS_NODE=""
-
 cleanup() {
   echo -e "${YELLOW}Cleaning up...${NC}"
-
-  # Rimuovi il link simbolico se è stato creato e il percorso è noto
-  if [ -n "$SYMLINK_LIB_PATH_FOR_TS_NODE" ] && [ -L "$SYMLINK_LIB_PATH_FOR_TS_NODE" ]; then
-    echo -e "${YELLOW}Removing symlink $SYMLINK_LIB_PATH_FOR_TS_NODE...${NC}"
-    rm -f "$SYMLINK_LIB_PATH_FOR_TS_NODE"
-  fi
 
   # shellcheck disable=SC2164 # Non vogliamo uscire se cd fallisce qui, proviamo comunque a pulire
   cd "$PROJECT_ROOT_PATH"
@@ -45,36 +36,6 @@ if [ -d "$TEST_DIR_FULL_PATH" ]; then
 fi
 mkdir -p "$TEST_DIR_FULL_PATH"
 cd "$TEST_DIR_FULL_PATH" || { echo -e "${RED}ERROR: Could not access $TEST_DIR_FULL_PATH${NC}"; exit 1; }
-
-# --- Inizio Setup Link Simbolico per ts-node ---
-# PROJECT_ROOT_PATH è la directory che contiene index.ts e la directory lib/
-# Esempio: /home/runner/work/taylored/taylored
-# index.ts si aspetta di trovare 'lib' in $(dirname $PROJECT_ROOT_PATH)/lib
-
-ACTUAL_LIB_DIR_IN_PROJECT="$PROJECT_ROOT_PATH/lib"
-SYMLINK_LIB_PATH_FOR_TS_NODE="$(dirname "$PROJECT_ROOT_PATH")/lib"
-
-echo -e "${YELLOW}Setting up 'lib' directory symlink for ts-node execution...${NC}"
-if [ "$PROJECT_ROOT_PATH" = "/" ] || [ "$(dirname "$PROJECT_ROOT_PATH")" = "." ] || [ "$(dirname "$PROJECT_ROOT_PATH")" = "/" ]; then
-  echo -e "${RED}ERROR: PROJECT_ROOT_PATH ('$PROJECT_ROOT_PATH') is too shallow. Symlink target '$(dirname "$PROJECT_ROOT_PATH")' is problematic.${NC}"
-  exit 1
-fi
-if [ ! -d "$ACTUAL_LIB_DIR_IN_PROJECT" ]; then
-    echo -e "${RED}ERROR: Source lib directory for symlink '$ACTUAL_LIB_DIR_IN_PROJECT' does not exist!${NC}"
-    exit 1
-fi
-
-if [ -L "$SYMLINK_LIB_PATH_FOR_TS_NODE" ]; then
-    echo -e "${YELLOW}Removing pre-existing symlink: $SYMLINK_LIB_PATH_FOR_TS_NODE${NC}"
-    rm -f "$SYMLINK_LIB_PATH_FOR_TS_NODE"
-elif [ -e "$SYMLINK_LIB_PATH_FOR_TS_NODE" ]; then
-    echo -e "${RED}ERROR: A file/directory already exists at the symlink target location '$SYMLINK_LIB_PATH_FOR_TS_NODE' and is not a symlink. Cannot proceed.${NC}"
-    exit 1
-fi
-echo -e "${YELLOW}Creating symlink: ln -s \"$ACTUAL_LIB_DIR_IN_PROJECT\" \"$SYMLINK_LIB_PATH_FOR_TS_NODE\"${NC}"
-ln -s "$ACTUAL_LIB_DIR_IN_PROJECT" "$SYMLINK_LIB_PATH_FOR_TS_NODE"
-echo -e "${GREEN}Symlink created.${NC}"
-# --- Fine Setup Link Simbolico ---
 
 git init -b main
 git config user.email "test@example.com" # Git richiede la configurazione dell'utente

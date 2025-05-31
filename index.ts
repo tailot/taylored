@@ -92,7 +92,16 @@ import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
 
 // Import specific functions from the library
-const { updatePatchOffsets, extractMessageFromPatch } = require(path.join(__dirname, '../lib/git-patch-offset-updater.js'));
+let libPath;
+// path.sep ensures OS-agnostic path segment separation
+if (__dirname.endsWith(path.sep + 'dist') || __dirname.endsWith(path.sep + 'out')) { // Added 'out' as another common build dir
+    // Running from compiled 'dist' or 'out' directory
+    libPath = path.join(__dirname, '../lib/git-patch-offset-updater.js');
+} else {
+    // Running from source (e.g., with ts-node from project root, where __dirname is the project root)
+    libPath = path.join(__dirname, './lib/git-patch-offset-updater.js');
+}
+const { updatePatchOffsets, extractMessageFromPatch } = require(libPath);
 const TAYLORED_DIR_NAME = '.taylored';
 const TAYLORED_FILE_EXTENSION = '.taylored';
 
@@ -142,6 +151,70 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
     process.exit(1);
 }
 
+function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput?: string; additions: number; deletions: number; isPure: boolean; errorMessage?: string; success: boolean } {
+    const command = `git diff HEAD "${branchName}"`;
+    let diffOutput: string | undefined;
+    let errorMessage: string | undefined;
+    let success = false;
+    let additions = 0;
+    let deletions = 0;
+    let isPure = false;
+
+    try {
+        diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
+        success = true; // Command succeeded
+    } catch (error: any) {
+        if ((error.status === 1 || error.status === 0) && typeof error.stdout === 'string') {
+            // status 1 can occur for diffs with warnings (e.g. "no common ancestor") but still valid output
+            // status 0 is also possible if git diff itself has some non-fatal issue but outputs to stdout
+            diffOutput = error.stdout;
+            success = true;
+            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
+                 // Log git stderr for context, but proceed as success if stdout has content
+                 // console.warn(`Git stderr (non-fatal) while diffing branch '${branchName}':\n${error.stderr.toString().trim()}`);
+            }
+        } else {
+            // More severe error
+            errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
+            if (error.status) errorMessage += ` Exit status: ${error.status}.`;
+            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
+                errorMessage += ` Git stderr: ${error.stderr.toString().trim()}.`;
+            } else if (error.message) {
+                errorMessage += ` Error message: ${error.message}.`;
+            }
+            errorMessage += ` Attempted command: ${command}.`;
+            success = false;
+        }
+    }
+
+    if (success && typeof diffOutput === 'string') {
+        try {
+            const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
+            for (const file of parsedDiffFiles) {
+                additions += file.additions;
+                deletions += file.deletions;
+            }
+            isPure = (additions > 0 && deletions === 0) || (deletions > 0 && additions === 0) || (additions === 0 && deletions === 0);
+        } catch (parseError: any) {
+            errorMessage = `CRITICAL ERROR: Failed to parse diff output for branch '${branchName}'. Error: ${parseError.message}`;
+            success = false; // Mark as not successful if parsing fails
+            // diffOutput might be kept for debugging if needed, or cleared
+        }
+    } else if (success && typeof diffOutput !== 'string') {
+        // This case should ideally not be reached if logic above is correct,
+        // but as a safeguard:
+        errorMessage = `CRITICAL ERROR: Diff output for branch '${branchName}' was unexpectedly undefined despite initial success.`;
+        success = false;
+    }
+
+    // If the command failed initially and produced no diffOutput, success is already false.
+    // If parsing failed, success was set to false.
+    // If diffOutput is undefined and success is still true, it means execSync returned successfully but with no output (e.g. empty diff)
+    // which is a valid scenario. Additions/Deletions will be 0, isPure will be true.
+
+    return { diffOutput, additions, deletions, isPure, errorMessage, success };
+}
+
 async function handleSaveOperation(branchName: string, CWD: string): Promise<void> {
     const outputFileName = `${branchName.replace(/[/\\]/g, '-')}${TAYLORED_FILE_EXTENSION}`;
     const targetDirectoryPath = path.join(CWD, TAYLORED_DIR_NAME);
@@ -159,70 +232,46 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
         throw mkdirError;
     }
 
-    const command = `git diff HEAD "${branchName}"`;
-    let diffOutput: string | undefined; // Initialize as undefined
-    try {
-        diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
-    } catch (error: any) {
-        if (error.status === 1 && typeof error.stdout === 'string') {
-            diffOutput = error.stdout;
-        } else if (error.status === 0 && typeof error.stdout === 'string') {
-             diffOutput = error.stdout;
-        }else {
-            console.error(`CRITICAL ERROR: 'git diff' command failed or encountered an unexpected issue.`);
-            if (error.status) console.error(`  Exit status: ${error.status}`);
-            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-                console.error("  Git stderr:\n", error.stderr.toString());
+    const diffResult = getAndAnalyzeDiff(branchName, CWD);
+
+    if (diffResult.success && diffResult.isPure) {
+        if (typeof diffResult.diffOutput === 'string') {
+            try {
+                await fs.writeFile(resolvedOutputFileName, diffResult.diffOutput);
+                console.log(`SUCCESS: Diff file '${resolvedOutputFileName}' created.`);
+                if (diffResult.additions === 0 && diffResult.deletions === 0) {
+                    console.log(`INFO: The diff ${diffResult.diffOutput.trim() === '' ? 'is empty' : 'contains no textual line changes'}. Additions: 0, Deletions: 0.`);
+                } else if (diffResult.additions > 0) {
+                    console.log(`INFO: The diff contains only additions (${diffResult.additions} line(s)).`);
+                } else if (diffResult.deletions > 0) {
+                    console.log(`INFO: The diff contains only deletions (${diffResult.deletions} line(s)).`);
+                }
+            } catch (writeError: any) {
+                console.error(`CRITICAL ERROR: Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`);
+                throw writeError;
             }
-            if (error.stdout && typeof error.stdout === 'string' && error.stdout.trim() !== '' && error.status !==1 && error.status !==0) {
-                 console.error("  Git stdout:\n", error.stdout.toString());
-            }
-            if (error.message && !error.stderr && !(error.stdout && (error.status ===1 || error.status === 0)) ) console.error("  Error message:", error.message);
-            console.error(`  Attempted command: ${command}`);
-            throw error;
-        }
-    }
-
-    // Check if diffOutput is a string after the try-catch block
-    if (typeof diffOutput !== 'string') {
-        console.error(`CRITICAL ERROR: Diff output for branch '${branchName}' is undefined after git command execution. This might be due to an invalid branch name or other git error.`);
-        throw new Error(`Failed to obtain diff output for branch '${branchName}'.`);
-    }
-
-    const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
-    let cumulativeAdditions = 0;
-    let cumulativeDeletions = 0;
-    for (const file of parsedDiffFiles) {
-        cumulativeAdditions += file.additions;
-        cumulativeDeletions += file.deletions;
-    }
-
-    const isAllAdditions = cumulativeAdditions > 0 && cumulativeDeletions === 0;
-    const isAllDeletions = cumulativeDeletions > 0 && cumulativeAdditions === 0;
-    const isEmptyTextualChanges = cumulativeAdditions === 0 && cumulativeDeletions === 0;
-
-    if (isAllAdditions || isAllDeletions || isEmptyTextualChanges) {
-        try {
-            await fs.writeFile(resolvedOutputFileName, diffOutput);
-            console.log(`SUCCESS: Diff file '${resolvedOutputFileName}' created.`);
-            if (isEmptyTextualChanges) {
-                console.log(`INFO: The diff ${diffOutput.trim() === '' ? 'is empty' : 'contains no textual line changes'}. Additions: 0, Deletions: 0.`);
-            } else if (isAllAdditions) {
-                console.log(`INFO: The diff contains only additions (${cumulativeAdditions} line(s)).`);
-            } else if (isAllDeletions) {
-                console.log(`INFO: The diff contains only deletions (${cumulativeDeletions} line(s)).`);
-            }
-        } catch (writeError: any) {
-            console.error(`CRITICAL ERROR: Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`);
-            throw writeError;
+        } else {
+             // This case should ideally not be reached if success is true and diffOutput is expected for pure diffs.
+            console.error(`CRITICAL ERROR: Diff output is unexpectedly undefined for branch '${branchName}' despite successful analysis.`);
+            throw new Error(`Undefined diff output for pure diff on branch '${branchName}'.`);
         }
     } else {
-        console.error(`ERROR: Taylored file '${resolvedOutputFileName}' was NOT generated.`);
-        console.error(`Reason: The diff between "${branchName}" and HEAD contains a mix of content line additions and deletions.`);
-        console.error(`  Total lines added: ${cumulativeAdditions}`);
-        console.error(`  Total lines deleted: ${cumulativeDeletions}`);
-        console.error("This script, for the --save operation, requires the diff to consist exclusively of additions or exclusively of deletions (of lines).");
-        throw new Error(`Mixed diff content (Additions: ${cumulativeAdditions}, Deletions: ${cumulativeDeletions}) is not allowed for --save.`);
+        if (!diffResult.success && diffResult.errorMessage) {
+            console.error(diffResult.errorMessage);
+        } else {
+            console.error(`ERROR: Taylored file '${resolvedOutputFileName}' was NOT generated.`);
+            if (!diffResult.isPure) {
+                console.error(`Reason: The diff between "${branchName}" and HEAD contains a mix of content line additions and deletions.`);
+                console.error(`  Total lines added: ${diffResult.additions}`);
+                console.error(`  Total lines deleted: ${diffResult.deletions}`);
+                console.error("This script, for the --save operation, requires the diff to consist exclusively of additions or exclusively of deletions (of lines).");
+            } else if (typeof diffResult.diffOutput === 'undefined') {
+                 console.error(`Reason: Failed to obtain diff output for branch '${branchName}'. This may be due to an invalid branch name or other git error not caught by the diff analyzer's primary error path.`);
+            } else {
+                console.error(`Reason: An unspecified error occurred during diff generation or analysis for branch '${branchName}'.`);
+            }
+        }
+        throw new Error(diffResult.errorMessage || `Failed to save taylored file for branch '${branchName}' due to purity or diff generation issues.`);
     }
 }
 
@@ -379,71 +428,43 @@ async function handleUpgradeOperation(CWD: string): Promise<void> {
         const filePath = path.join(tayloredDirPath, fileName);
         console.log(`\nINFO: Processing '${fileName}' (assumed branch for diff: '${assumedBranchName}')...`);
 
-        const diffCommand = `git diff HEAD "${assumedBranchName}"`;
-        let diffOutput: string | undefined = undefined;
+        const diffResult = getAndAnalyzeDiff(assumedBranchName, CWD);
 
-        try {
-            diffOutput = execSync(diffCommand, { encoding: 'utf8', cwd: CWD });
-        } catch (error: any) {
-            if (error.status === 1 && typeof error.stdout === 'string') {
-                diffOutput = error.stdout;
-            } else if (error.status === 0 && typeof error.stdout === 'string') {
-                diffOutput = error.stdout;
+        if (diffResult.success && diffResult.isPure) {
+            if (typeof diffResult.diffOutput === 'string') {
+                try {
+                    await fs.writeFile(filePath, diffResult.diffOutput);
+                    console.log(`  SUCCESS: '${fileName}' upgraded successfully.`);
+                    if (diffResult.additions === 0 && diffResult.deletions === 0) {
+                        console.log(`    INFO: The new diff for '${assumedBranchName}' ${diffResult.diffOutput.trim() === '' ? 'is empty' : 'contains no textual line changes'}.`);
+                    } else if (diffResult.additions > 0) {
+                        console.log(`    INFO: The new diff contains only additions (${diffResult.additions} line(s)).`);
+                    } else if (diffResult.deletions > 0) {
+                        console.log(`    INFO: The new diff contains only deletions (${diffResult.deletions} line(s)).`);
+                    }
+                    upgradedCount++;
+                } catch (writeError: any) {
+                    console.error(`  ERROR: Failed to write updated taylored file '${filePath}'. Details: ${writeError.message}`);
+                    errorCount++;
+                }
             } else {
-                console.error(`  ERROR: Failed to generate diff for branch '${assumedBranchName}'. Git command issue.`);
-                if (error.status) console.error(`    Exit status: ${error.status}`);
-                if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-                     console.error("    Git stderr:\n", error.stderr.toString().trim());
-                }
-                if (error.stdout && typeof error.stdout === 'string' && error.stdout.trim() !== '' && error.status !==1 && error.status !==0) {
-                    console.error("    Git stdout:\n", error.stdout.toString().trim());
-                }
-                if (error.message && !error.stderr && !(error.stdout && (error.status ===1 || error.status ===0)) ) console.error("    Error message:", error.message);
-                console.error(`    Attempted command: ${diffCommand}`);
-                errorCount++;
-                continue;
-            }
-        }
-        
-        if (typeof diffOutput !== 'string') {
-             console.error(`  ERROR: Diff output for branch '${assumedBranchName}' was unexpectedly undefined after git command execution.`);
-             errorCount++;
-             continue;
-        }
-
-        const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
-        let cumulativeAdditions = 0;
-        let cumulativeDeletions = 0;
-        for (const file of parsedDiffFiles) {
-            cumulativeAdditions += file.additions;
-            cumulativeDeletions += file.deletions;
-        }
-
-        const isAllAdditions = cumulativeAdditions > 0 && cumulativeDeletions === 0;
-        const isAllDeletions = cumulativeDeletions > 0 && cumulativeAdditions === 0;
-        const isEmptyTextualChanges = cumulativeAdditions === 0 && cumulativeDeletions === 0;
-
-        if (isAllAdditions || isAllDeletions || isEmptyTextualChanges) {
-            try {
-                await fs.writeFile(filePath, diffOutput);
-                console.log(`  SUCCESS: '${fileName}' upgraded successfully.`);
-                if (isEmptyTextualChanges) {
-                     console.log(`    INFO: The new diff for '${assumedBranchName}' ${diffOutput.trim() === '' ? 'is empty' : 'contains no textual line changes'}.`);
-                } else if (isAllAdditions) {
-                    console.log(`    INFO: The new diff contains only additions (${cumulativeAdditions} line(s)).`);
-                } else if (isAllDeletions) {
-                    console.log(`    INFO: The new diff contains only deletions (${cumulativeDeletions} line(s)).`);
-                }
-                upgradedCount++;
-            } catch (writeError: any) {
-                console.error(`  ERROR: Failed to write updated taylored file '${filePath}'. Details: ${writeError.message}`);
+                // This case should ideally not be reached if success is true and diffOutput is expected for pure diffs.
+                console.error(`  ERROR: Diff output is unexpectedly undefined for branch '${assumedBranchName}' during upgrade of '${fileName}' despite successful analysis.`);
                 errorCount++;
             }
-        } else {
+        } else if (diffResult.success && !diffResult.isPure) {
             console.warn(`  WARNING: '${fileName}' is now obsolete (conflicted). The file was NOT modified.`);
             console.warn(`    Reason: The diff between assumed branch '${assumedBranchName}' and HEAD now contains a mix of line additions and deletions.`);
-            console.warn(`    New diff details - Total lines added: ${cumulativeAdditions}, Total lines deleted: ${cumulativeDeletions}.`);
+            console.warn(`    New diff details - Total lines added: ${diffResult.additions}, Total lines deleted: ${diffResult.deletions}.`);
             obsoleteCount++;
+        } else { // !diffResult.success
+            console.error(`  ERROR: Failed to generate or parse diff for branch '${assumedBranchName}' during upgrade of '${fileName}'.`);
+            if (diffResult.errorMessage) {
+                // Indent errorMessage for better readability under the main error message.
+                const indentedErrorMessage = diffResult.errorMessage.split('\n').map(line => `    ${line}`).join('\n');
+                console.error(indentedErrorMessage);
+            }
+            errorCount++;
         }
     }
 

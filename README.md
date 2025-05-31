@@ -74,7 +74,7 @@ Here are the commands you can use with Taylored:
     taylored --save <branch_name>
     ```
     This command creates a diff file between the specified `<branch_name>` and HEAD. The `.taylored` file is saved in `.taylored/<sanitized_branch_name>.taylored`.
-    **Note:** The file is created *only if* the diff contains exclusively line additions or exclusively line deletions. Mixed changes will not generate a file.
+    **Note:** The file is created *only if* the diff contains exclusively line additions, exclusively line deletions, or no textual line changes at all (i.e., an empty diff). Mixed changes (both additions and deletions of lines) will not generate a file.
 
     *Example:*
     ```bash
@@ -148,7 +148,7 @@ Here are the commands you can use with Taylored:
     ```bash
     taylored --upgrade
     ```
-    Attempts to upgrade all existing `.taylored` files in the `.taylored/` directory. For each file, it assumes the filename (minus the `.taylored` extension) is the name of a branch. It then re-calculates the diff against HEAD. If the new diff is still "pure" (all additions or all deletions), the file is updated. Otherwise, it is marked as obsolete/conflicted and not changed.
+    Attempts to upgrade all existing `.taylored` files in the `.taylored/` directory. For each file, it assumes the filename (minus the `.taylored` extension) is the name of a branch. It then re-calculates the diff against HEAD. If the new diff is still "pure" (all additions, all deletions, or no textual line changes), the file is updated. Otherwise, it is marked as obsolete/conflicted and not changed.
 
     *Example:*
     ```bash
@@ -185,11 +185,11 @@ Here are the commands you can use with Taylored:
 
 ## How it Works
 
-* **Saving:** When you use `taylored --save <branch_name>`, it runs `git diff HEAD <branch_name>`. The output is parsed. If all changes are additions OR all changes are deletions (of lines), the diff is saved to `.taylored/<sanitized_branch_name>.taylored`. Otherwise, no file is created, and an error is reported.
+* **Saving:** When you use `taylored --save <branch_name>`, it runs `git diff HEAD <branch_name>`. The output is parsed. If all changes are additions, all changes are deletions (of lines), or there are no textual line changes, the diff is saved to `.taylored/<sanitized_branch_name>.taylored`. Otherwise (mixed changes), no file is created, and an error is reported.
 * **Applying/Removing:** `taylored --add <file>` uses `git apply .taylored/<file>`. `taylored --remove <file>` uses `git apply -R .taylored/<file>`.
 * **Verifying:** `taylored --verify-add <file>` uses `git apply --check .taylored/<file>`. `taylored --verify-remove <file>` uses `git apply --check -R .taylored/<file>`.
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
-* **Upgrading:** `taylored --upgrade` iterates through each file in `.taylored/`. For a file like `feature-x.taylored`, it assumes 'feature-x' is the branch name. It then effectively re-runs the `--save` logic for that assumed branch name: `git diff HEAD feature-x`. If the new diff is "pure" (all additions or all deletions), `feature-x.taylored` is overwritten with this new diff. If the new diff is mixed, the file is reported as obsolete/conflicted and is not modified.
+* **Upgrading:** `taylored --upgrade` iterates through each file in `.taylored/`. For a file like `feature-x.taylored`, it assumes 'feature-x' is the branch name. It then effectively re-runs the `--save` logic for that assumed branch name: `git diff HEAD feature-x`. If the new diff is "pure" (all additions, all deletions, or no textual line changes), `feature-x.taylored` is overwritten with this new diff. If the new diff is mixed, the file is reported as obsolete/conflicted and is not modified.
 * **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a more sophisticated approach (`lib/git-patch-offset-updater.js`). It attempts to apply the patch to a temporary branch, generate a new patch from the applied state (using the provided or extracted commit message for temporary commits), and then replace the original `.taylored/<file>` with this new, offset-adjusted patch. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
 * **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
 

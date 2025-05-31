@@ -160,7 +160,7 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
     }
 
     const command = `git diff HEAD "${branchName}"`;
-    let diffOutput: string;
+    let diffOutput: string | undefined; // Initialize as undefined
     try {
         diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
     } catch (error: any) {
@@ -181,6 +181,12 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
             console.error(`  Attempted command: ${command}`);
             throw error;
         }
+    }
+
+    // Check if diffOutput is a string after the try-catch block
+    if (typeof diffOutput !== 'string') {
+        console.error(`CRITICAL ERROR: Diff output for branch '${branchName}' is undefined after git command execution. This might be due to an invalid branch name or other git error.`);
+        throw new Error(`Failed to obtain diff output for branch '${branchName}'.`);
     }
 
     const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
@@ -656,10 +662,8 @@ async function main(): Promise<void> {
                 let resolvedTayloredFileName = userInputFileName;
                 if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
                     resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
-                    // Suppress "INFO: Using actual file..." for --data to keep stdout clean
-                    if (mode !== '--data') { // This check is actually not needed here as --data is handled above
-                       console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
-                    }
+                    // The console.log is fine here, as --data mode is handled in a separate branch.
+                    console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
                 }
 
                 let isVerify = false;

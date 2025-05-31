@@ -92,7 +92,7 @@ import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
 
 // Import specific functions from the library
-const { updatePatchOffsets, extractMessageFromPatch } = require(path.join(__dirname, 'lib/git-patch-offset-updater.js'));
+const { updatePatchOffsets, extractMessageFromPatch } = require(path.join(__dirname, '../lib/git-patch-offset-updater.js'));
 const TAYLORED_DIR_NAME = '.taylored';
 const TAYLORED_FILE_EXTENSION = '.taylored';
 

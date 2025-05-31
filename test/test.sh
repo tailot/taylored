@@ -305,12 +305,27 @@ git commit -m "Modifiche miste su $BRANCH_UPGRADE_TARGET"
 git checkout main
 
 echo -e "${YELLOW}Step 9b: Testing --upgrade (obsolete scenario)...${NC}"
-UPGRADE_OUTPUT_OBSOLETE=$($TAYLORED_CMD_BASE --upgrade)
-if echo "$UPGRADE_OUTPUT_OBSOLETE" | grep -q "is now obsolete" && echo "$UPGRADE_OUTPUT_OBSOLETE" | grep -q "$PLUGIN_UPGRADE_TARGET_NAME"; then
+UPGRADE_OUTPUT_OBSOLETE=$($TAYLORED_CMD_BASE --upgrade 2>&1)
+
+output_contains_obsolete_keyword=false
+output_mentions_target_plugin=false
+
+if echo "$UPGRADE_OUTPUT_OBSOLETE" | grep -q "is now obsolete"; then
+    output_contains_obsolete_keyword=true
+fi
+if echo "$UPGRADE_OUTPUT_OBSOLETE" | grep -q "$PLUGIN_UPGRADE_TARGET_NAME"; then
+    output_mentions_target_plugin=true
+fi
+
+if $output_contains_obsolete_keyword && $output_mentions_target_plugin; then
   echo -e "${GREEN}'taylored --upgrade' correctly identified $PLUGIN_UPGRADE_TARGET_NAME as obsolete.${NC}"
 else
   echo -e "${RED}Error: 'taylored --upgrade' (obsolete scenario) failed or unexpected output.${NC}"
+  echo "DEBUG: output_contains_obsolete_keyword = $output_contains_obsolete_keyword"
+  echo "DEBUG: output_mentions_target_plugin = $output_mentions_target_plugin"
+  echo "Full output was:"
   echo "$UPGRADE_OUTPUT_OBSOLETE"
+  exit 1
 fi
 echo "----------------------------------------"
 
@@ -453,7 +468,7 @@ if [ "$(cat "$OFFSET_DEL_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_DEL_APPLY" ]
   exit 1
 fi
 echo -e "${GREEN}Offset-updated deletions patch $OFFSET_DEL_PLUGIN_NAME applied correctly.${NC}"
-$TAYLORED_CMD_BASE --remove "$OFFSET_DEL_PLUGIN_NAME" # Cleanup
+$TAYLORED_CMD_BASE --remove "$OFFSET_DEL_PLUGIN_NAME" &>/dev/null || true # Cleanup, ignore errors
 git branch -D "$OFFSET_DEL_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME"
 echo "----------------------------------------"
@@ -538,7 +553,7 @@ if [ "$(cat "$OFFSET_ADD_FILE")" != "$EXPECTED_CONTENT_AFTER_OFFSET_ADD_APPLY" ]
   exit 1
 fi
 echo -e "${GREEN}Offset-updated additions patch $OFFSET_ADD_PLUGIN_NAME applied correctly.${NC}"
-$TAYLORED_CMD_BASE --remove "$OFFSET_ADD_PLUGIN_NAME" # Cleanup
+$TAYLORED_CMD_BASE --remove "$OFFSET_ADD_PLUGIN_NAME" &>/dev/null || true # Cleanup, ignore errors
 git branch -D "$OFFSET_ADD_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME"
 echo "----------------------------------------"
@@ -613,7 +628,7 @@ else
 fi
 
 # 14e. Cleanup (opzionale: verifica applicazione, ma il focus è sul messaggio)
-$TAYLORED_CMD_BASE --remove "$OFFSET_MSG_PLUGIN_NAME" &>/dev/null # Rimuovi se applicato, ignora errore se non applicato
+$TAYLORED_CMD_BASE --remove "$OFFSET_MSG_PLUGIN_NAME" &>/dev/null || true # Rimuovi se applicato, ignora errore se non applicato
 git branch -D "$OFFSET_MSG_BRANCH" &>/dev/null || true
 rm -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME"
 echo "----------------------------------------"

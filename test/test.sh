@@ -379,67 +379,6 @@ else
 fi
 echo "----------------------------------------"
 
-# Step 9: Test 'taylored --upgrade'
-echo -e "${YELLOW}Step 9: Testing 'taylored --upgrade'...${NC}"
-BRANCH_UPGRADE_TARGET="upgrade-target-branch"
-PLUGIN_UPGRADE_TARGET_NAME="${BRANCH_UPGRADE_TARGET}.taylored"
-
-# Create initial plugin for upgrade
-git checkout -b "$BRANCH_UPGRADE_TARGET"
-echo "Contenuto iniziale per upgrade_file.txt" > upgrade_file.txt
-git add upgrade_file.txt
-git commit -m "Commit iniziale per $BRANCH_UPGRADE_TARGET"
-git checkout main
-$TAYLORED_CMD_BASE --save "$BRANCH_UPGRADE_TARGET" # Save it
-
-# Modify the source branch for a clean upgrade
-git checkout "$BRANCH_UPGRADE_TARGET"
-echo "Riga aggiunta in upgrade_file.txt" >> upgrade_file.txt
-git add upgrade_file.txt
-git commit -m "Aggiunte su $BRANCH_UPGRADE_TARGET per upgrade pulito"
-git checkout main
-
-echo -e "${YELLOW}Step 9a: Testing --upgrade (clean scenario)...${NC}"
-UPGRADE_OUTPUT_CLEAN=$($TAYLORED_CMD_BASE --upgrade)
-if echo "$UPGRADE_OUTPUT_CLEAN" | grep -q "upgraded successfully" && echo "$UPGRADE_OUTPUT_CLEAN" | grep -q "$PLUGIN_UPGRADE_TARGET_NAME"; then
-  echo -e "${GREEN}'taylored --upgrade' successfully upgraded $PLUGIN_UPGRADE_TARGET_NAME.${NC}"
-else
-  echo -e "${RED}Error: 'taylored --upgrade' (clean scenario) failed or unexpected output.${NC}"
-  echo "$UPGRADE_OUTPUT_CLEAN"
-  # exit 1 # Temporarily allow to continue for other tests
-fi
-
-# Modify main to make the plugin obsolete for upgrade
-echo "Contenuto originale di upgrade_file.txt su main" > upgrade_file.txt
-git add upgrade_file.txt
-git commit -m "Aggiunto upgrade_file.txt a main per test obsolescenza upgrade"
-
-# Modify the source branch to create a mixed diff against new main
-git checkout "$BRANCH_UPGRADE_TARGET"
-echo "Riga aggiunta da upgrade-target-branch che causa conflitto" >> upgrade_file.txt
-if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
-  sed -i '1s/.*/Linea modificata da upgrade-target-branch./' upgrade_file.txt
-else # macOS sed
-  sed -i.bak '1s/.*/Linea modificata da upgrade-target-branch./' upgrade_file.txt && rm upgrade_file.txt.bak
-fi
-git add upgrade_file.txt
-git commit -m "Modifiche miste su $BRANCH_UPGRADE_TARGET per test obsolescenza"
-git checkout main
-
-echo -e "${YELLOW}Step 9b: Testing --upgrade (obsolete scenario)...${NC}"
-# Capture stdout and stderr, check exit code
-UPGRADE_OUTPUT_OBSOLETE=$($TAYLORED_CMD_BASE --upgrade 2>&1) # Capture stderr too
-# Upgrade itself might exit 0 even if some files are obsolete, check output
-if echo "$UPGRADE_OUTPUT_OBSOLETE" | grep -q "is now obsolete" && echo "$UPGRADE_OUTPUT_OBSOLETE" | grep -q "$PLUGIN_UPGRADE_TARGET_NAME"; then
-  echo -e "${GREEN}'taylored --upgrade' correctly identified $PLUGIN_UPGRADE_TARGET_NAME as obsolete.${NC}"
-else
-  echo -e "${RED}Error: 'taylored --upgrade' (obsolete scenario) failed or unexpected output.${NC}"
-  echo "Full output was:"
-  echo "$UPGRADE_OUTPUT_OBSOLETE"
-  # exit 1 # Temporarily allow
-fi
-echo "----------------------------------------"
-
 # Step 10: Test 'taylored --add' on a slightly modified state (fuzzy patching or failure)
 echo -e "${YELLOW}Step 10: Testing 'taylored --add' on a slightly modified state...${NC}"
 git checkout main # Ensure on main
@@ -931,4 +870,3 @@ echo "----------------------------------------"
 echo -e "${GREEN}All Taylored tests passed successfully!${NC}"
 
 exit 0
-

@@ -5,19 +5,17 @@
 
 /*
 Usage:
-  (Same usage information as before)
+  (Same usage information as before, but --upgrade will be removed)
 */
 
 import * as fs from 'fs/promises'; // Using fs/promises for async file operations
 import * as fsExtra from 'fs-extra'; // For ensureDir
 import * as path from 'path';
-import { execSync } from 'child_process'; // Retained for simple git apply in some handlers (now moved)
+import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
 import { updatePatchOffsets, extractMessageFromPatch } from './lib/git-patch-offset-updater';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './lib/constants'; // MODIFIED: Import constants
-import { handleApplyOperation } from './lib/apply-logic'; // MODIFIED: Import handleApplyOperation
-
-// Constants TAYLORED_DIR_NAME and TAYLORED_FILE_EXTENSION are now imported.
+import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './lib/constants';
+import { handleApplyOperation } from './lib/apply-logic';
 
 function printUsageAndExit(errorMessage?: string, detailed: boolean = false): void {
     if (errorMessage) {
@@ -30,7 +28,7 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
     console.error(`  taylored --verify-remove <taylored_file_name>`);
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
-    console.error(`  taylored --upgrade`);
+    // console.error(`  taylored --upgrade`); // REMOVED
     console.error(`  taylored --offset <taylored_file_name> [--message "Custom commit message"]`);
     console.error(`  taylored --data <taylored_file_name>`);
 
@@ -49,7 +47,7 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error(`  --save                    : Generate diff file into '${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}'.`);
         console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
         console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
-        console.error(`  --upgrade                 : Attempt to upgrade all ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/'.`);
+        // console.error(`  --upgrade                 : Attempt to upgrade all ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/'.`); // REMOVED
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);
         console.error(`  --data                    : Extract and print message from a taylored file. Prints empty string if not found.`);
@@ -186,8 +184,6 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
     }
 }
 
-// MODIFIED: handleApplyOperation is now imported from './lib/apply-logic.ts'
-// The original function definition has been removed from here.
 
 /**
  * Handles the --list operation: lists all .taylored files.
@@ -243,97 +239,7 @@ async function handleListOperation(CWD: string): Promise<void> {
     }
 }
 
-/**
- * Handles the --upgrade operation: attempts to update all .taylored files.
- * @param CWD The current working directory (Git repository root).
- */
-async function handleUpgradeOperation(CWD: string): Promise<void> {
-    console.log("INFO: Starting --upgrade operation.");
-    const tayloredDirPath = path.join(CWD, TAYLORED_DIR_NAME);
-
-    let filesInDir: string[];
-    try {
-        const stats = await fs.stat(tayloredDirPath);
-        if (!stats.isDirectory()) {
-            console.log(`INFO: Expected '${TAYLORED_DIR_NAME}' to be a directory, but it's not. No files to upgrade.`);
-            return;
-        }
-        filesInDir = await fs.readdir(tayloredDirPath);
-    } catch (error: any) {
-        if (error.code === 'ENOENT') {
-            console.log(`INFO: Directory '${TAYLORED_DIR_NAME}' not found. No files to upgrade.`);
-            return;
-        }
-        console.error(`CRITICAL ERROR: Could not read directory '${tayloredDirPath}'. Details: ${error.message}`);
-        throw error;
-    }
-
-    const tayloredFilesToUpgrade = filesInDir.filter(f => f.endsWith(TAYLORED_FILE_EXTENSION));
-
-    if (tayloredFilesToUpgrade.length === 0) {
-        console.log(`INFO: No ${TAYLORED_FILE_EXTENSION} files found in '${tayloredDirPath}' to upgrade.`);
-        return;
-    }
-
-    console.log(`INFO: Found ${tayloredFilesToUpgrade.length} ${TAYLORED_FILE_EXTENSION} file(s) to process for upgrade.`);
-
-    let upgradedCount = 0;
-    let obsoleteCount = 0;
-    let errorCount = 0;
-
-    for (const fileName of tayloredFilesToUpgrade) {
-        const assumedBranchName = fileName.replace(new RegExp(`\\${TAYLORED_FILE_EXTENSION}$`), '');
-        const filePath = path.join(tayloredDirPath, fileName);
-        console.log(`\nINFO: Processing '${fileName}' (assumed branch for diff: '${assumedBranchName}')...`);
-
-        const diffResult = getAndAnalyzeDiff(assumedBranchName, CWD);
-
-        if (diffResult.success && diffResult.isPure) {
-            if (typeof diffResult.diffOutput === 'string') {
-                try {
-                    await fs.writeFile(filePath, diffResult.diffOutput);
-                    console.log(`  SUCCESS: '${fileName}' upgraded successfully.`);
-                    if (diffResult.additions === 0 && diffResult.deletions === 0) {
-                        console.log(`    INFO: The new diff for '${assumedBranchName}' ${diffResult.diffOutput.trim() === '' ? 'is empty' : 'contains no textual line changes'}.`);
-                    } else if (diffResult.additions > 0) {
-                        console.log(`    INFO: The new diff contains only additions (${diffResult.additions} line(s)).`);
-                    } else if (diffResult.deletions > 0) {
-                        console.log(`    INFO: The new diff contains only deletions (${diffResult.deletions} line(s)).`);
-                    }
-                    upgradedCount++;
-                } catch (writeError: any) {
-                    console.error(`  ERROR: Failed to write updated taylored file '${filePath}'. Details: ${writeError.message}`);
-                    errorCount++;
-                }
-            } else {
-                console.error(`  ERROR: Diff output is unexpectedly undefined for branch '${assumedBranchName}' during upgrade of '${fileName}' despite successful analysis.`);
-                errorCount++;
-            }
-        } else if (diffResult.success && !diffResult.isPure) {
-            console.warn(`  WARNING: '${fileName}' is now obsolete (conflicted). The file was NOT modified.`);
-            console.warn(`    Reason: The diff between assumed branch '${assumedBranchName}' and HEAD now contains a mix of line additions and deletions.`);
-            console.warn(`    New diff details - Total lines added: ${diffResult.additions}, Total lines deleted: ${diffResult.deletions}.`);
-            obsoleteCount++;
-        } else {
-            console.error(`  ERROR: Failed to generate or parse diff for branch '${assumedBranchName}' during upgrade of '${fileName}'.`);
-            if (diffResult.errorMessage) {
-                const indentedErrorMessage = diffResult.errorMessage.split('\n').map(line => `    ${line}`).join('\n');
-                console.error(indentedErrorMessage);
-            }
-            errorCount++;
-        }
-    }
-
-    console.log("\n--- Upgrade Summary ---");
-    console.log(`Successfully upgraded: ${upgradedCount} file(s).`);
-    console.log(`Found obsolete (conflicted): ${obsoleteCount} file(s).`);
-    console.log(`Encountered errors during diff generation: ${errorCount} file(s).`);
-    console.log("-----------------------");
-
-    if (obsoleteCount > 0 || errorCount > 0) {
-        console.log("\nINFO: For obsolete or error files, manual review is recommended.");
-    }
-}
+// REMOVED handleUpgradeOperation function
 
 /**
  * Handles the --offset command: updates patch offsets using the new logic.
@@ -353,8 +259,6 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string, custo
     console.log(`  Target Patch File: ${resolvedTayloredFileName} (located in '${TAYLORED_DIR_NAME}/' directory)`);
     console.log(`  Repository Root: ${CWD}`);
 
-    // Warn if --message is provided, as the new offset logic in git-patch-offset-updater might not use it
-    // or uses it differently. The updatePatchOffsets function itself handles its own logic with this message.
     if (customCommitMessage) {
         console.warn(`WARN: The --message option was provided ("${customCommitMessage}") for --offset. The underlying offset update logic may or may not use this directly for commit messages during its process. Refer to specific messages from the offset updater.`);
     }
@@ -420,7 +324,8 @@ async function main(): Promise<void> {
     let argument: string | undefined;
     let customMessage: string | undefined;
 
-    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--upgrade', '--offset', '--data'];
+    // REMOVED '--upgrade' from this list
+    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--data'];
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
         try {
@@ -455,12 +360,8 @@ async function main(): Promise<void> {
                 printUsageAndExit("CRITICAL ERROR: --list option does not take any arguments.");
             }
             await handleListOperation(CWD);
-        } else if (mode === '--upgrade') {
-            if (rawArgs.length !== 1) {
-                printUsageAndExit("CRITICAL ERROR: --upgrade option does not take any arguments.");
-            }
-            await handleUpgradeOperation(CWD);
-        }
+        } 
+        // REMOVED else if (mode === '--upgrade') block
         else if (mode === '--offset') {
             if (rawArgs.length < 2) {
                 printUsageAndExit("CRITICAL ERROR: --offset option requires at least one <taylored_file_name> argument.");
@@ -487,7 +388,6 @@ async function main(): Promise<void> {
              if (rawArgs.length > 4) {
                 printUsageAndExit("CRITICAL ERROR: Too many arguments for --offset command.");
             }
-            // `argument` here is userInputFileName for handleOffsetCommand
             await handleOffsetCommand(argument, CWD, customMessage);
         }
         else if (mode === '--data') {
@@ -521,7 +421,7 @@ async function main(): Promise<void> {
                 let resolvedTayloredFileName = userInputFileName;
                 if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
                     resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
-                    if (mode !== '--data') { // --data handles its own resolution if needed
+                    if (mode !== '--data') { 
                          console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
                     }
                 }
@@ -534,7 +434,6 @@ async function main(): Promise<void> {
                     case '--verify-add': isVerify = true; break;
                     case '--verify-remove': isVerify = true; isReverse = true; break;
                 }
-                // MODIFIED: Calls the imported handleApplyOperation
                 await handleApplyOperation(resolvedTayloredFileName, isVerify, isReverse, mode, CWD);
             } else {
                 printUsageAndExit(`CRITICAL ERROR: Unknown option or command '${mode}'.`, true);

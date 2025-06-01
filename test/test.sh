@@ -366,8 +366,6 @@ if $TAYLORED_CMD_BASE --save "$BRANCH_MIXED"; then
     exit 1
   else
     echo -e "${YELLOW}Warning: 'taylored --save' for mixed changes completed successfully (exit 0) but did not create the file. This is acceptable if the tool just prints an error message and exits 0.${NC}"
-    # This path might indicate the script should exit non-zero even if it just prints an error.
-    # For now, we accept this if the file is not created.
   fi
 else
   # If command failed (non-zero exit code) - this is the more robust expected behavior
@@ -379,15 +377,15 @@ else
 fi
 echo "----------------------------------------"
 
-# Step 10: Test 'taylored --add' on a slightly modified state (fuzzy patching or failure)
-echo -e "${YELLOW}Step 10: Testing 'taylored --add' on a slightly modified state...${NC}"
+# Step 9 (was 10): Test 'taylored --add' on a slightly modified state (fuzzy patching or failure)
+echo -e "${YELLOW}Step 9: Testing 'taylored --add' on a slightly modified state...${NC}"
 git checkout main # Ensure on main
 git reset --hard "$FIRST_MAIN_COMMIT_HASH" # Reset main to the VERY FIRST commit state
 
 # Explicitly remove files that might interfere from later tests, ensuring main is pristine
-echo -e "${YELLOW}Explicitly removing potentially interfering files from main for Step 10...${NC}"
-INTERFERING_FILES_S10=("new_file.txt" "upgrade_file.txt" "offset_del_test_file_s12.txt" "offset_additions_test_file_s13.txt" "offset_message_test_file_s14.txt" "offset_success_test_file.txt")
-for FILE_TO_RM in "${INTERFERING_FILES_S10[@]}"; do
+echo -e "${YELLOW}Explicitly removing potentially interfering files from main for Step 9...${NC}"
+INTERFERING_FILES_S9=("new_file.txt" "offset_del_test_file_s11.txt" "offset_additions_test_file_s12.txt" "offset_message_test_file_s13.txt" "offset_success_test_file.txt")
+for FILE_TO_RM in "${INTERFERING_FILES_S9[@]}"; do
   if [ -f "$FILE_TO_RM" ]; then
     if git ls-files --error-unmatch "$FILE_TO_RM" >/dev/null 2>&1; then
       git rm --cached "$FILE_TO_RM" >/dev/null # Remove from index if tracked
@@ -399,15 +397,15 @@ done
 git checkout "$FIRST_MAIN_COMMIT_HASH" -- file1.txt file_to_delete.txt
 git add file1.txt file_to_delete.txt # Re-add them if they were modified by checkout
 
-git commit -m "Reset main to pristine initial state for Step 10" --allow-empty
+git commit -m "Reset main to pristine initial state for Step 9" --allow-empty
 # Now HEAD on main should *only* have file1.txt and file_to_delete.txt as in the first commit.
 
 # Re-generate the deletions plugin based on the current state of main and BRANCH_DELETIONS
-echo -e "${YELLOW}Re-generating $PLUGIN_DELETIONS_NAME for Step 10 based on current main...${NC}"
+echo -e "${YELLOW}Re-generating $PLUGIN_DELETIONS_NAME for Step 9 based on current main...${NC}"
 if $TAYLORED_CMD_BASE --save "$BRANCH_DELETIONS"; then
-  echo -e "${GREEN}Successfully re-generated $PLUGIN_DELETIONS_NAME for Step 10.${NC}"
+  echo -e "${GREEN}Successfully re-generated $PLUGIN_DELETIONS_NAME for Step 9.${NC}"
 else
-  echo -e "${RED}Error: Failed to re-generate $PLUGIN_DELETIONS_NAME for Step 10.${NC}"
+  echo -e "${RED}Error: Failed to re-generate $PLUGIN_DELETIONS_NAME for Step 9.${NC}"
   echo -e "${YELLOW}Diff between HEAD (main) and $BRANCH_DELETIONS that --save used:${NC}"
   git diff HEAD "$BRANCH_DELETIONS" -- . ":(exclude)$TAYLORED_DIR_NAME/" || echo "git diff failed"
   exit 1
@@ -427,8 +425,8 @@ fi
 git checkout HEAD -- file1.txt # Undoes the "Modifica leggera"
 echo "----------------------------------------"
 
-# Step 11: Test 'taylored --remove' when plugin is not applied
-echo -e "${YELLOW}Step 11: Testing 'taylored --remove' when plugin ($PLUGIN_DELETIONS_NAME) is not applied...${NC}"
+# Step 10 (was 11): Test 'taylored --remove' when plugin is not applied
+echo -e "${YELLOW}Step 10: Testing 'taylored --remove' when plugin ($PLUGIN_DELETIONS_NAME) is not applied...${NC}"
 # At this point, main is in its pristine initial state, and $PLUGIN_DELETIONS_NAME (just re-generated) is not applied.
 if ! $TAYLORED_CMD_BASE --remove "$PLUGIN_DELETIONS_NAME" >/dev/null 2>&1; then
   echo -e "${GREEN}'taylored --remove' on a non-applied plugin failed as expected.${NC}"
@@ -450,420 +448,410 @@ else
 fi
 echo "----------------------------------------"
 
-# Step 12: Test 'taylored --offset' for a DELETIONS patch when main has diverged
-echo -e "${YELLOW}Step 12: Testing 'taylored --offset' for a DELETIONS patch (expecting obsolescence)...${NC}"
+# Step 11 (was 12): Test 'taylored --offset' for a DELETIONS patch when main has diverged (expecting obsolescence)
+echo -e "${YELLOW}Step 11: Testing 'taylored --offset' for a DELETIONS patch (expecting obsolescence)...${NC}"
 git checkout main
 git reset --hard "$FIRST_MAIN_COMMIT_HASH" # Reset main to pristine initial state
 
-# 12a. Setup: Create a patch file.
-OFFSET_DEL_FILE="offset_del_test_file_s12.txt" 
-OFFSET_DEL_BRANCH_S12="deletions-offset-branch-s12" 
-OFFSET_DEL_PLUGIN_NAME_S12="${OFFSET_DEL_BRANCH_S12}.taylored"
+OFFSET_DEL_FILE="offset_del_test_file_s11.txt" 
+OFFSET_DEL_BRANCH_S11="deletions-offset-branch-s11" 
+OFFSET_DEL_PLUGIN_NAME_S11="${OFFSET_DEL_BRANCH_S11}.taylored"
 
-# Create base content on main (which is at FIRST_MAIN_COMMIT_HASH)
-echo "$INITIAL_FILE1_CONTENT" > file1.txt # Ensure file1 is also pristine for this new context
+echo "$INITIAL_FILE1_CONTENT" > file1.txt
 echo "$INITIAL_FILE_TO_DELETE_CONTENT" > file_to_delete.txt
 git add file1.txt file_to_delete.txt
 cat << EOF > "$OFFSET_DEL_FILE"
-Line 1 for S12 deletion offset test
-Line 2 to be deleted in S12
-Line 3 to be deleted in S12
-Line 4 for S12 deletion offset test
-Line 5 for S12 deletion offset test
+Line 1 for S11 deletion offset test
+Line 2 to be deleted in S11
+Line 3 to be deleted in S11
+Line 4 for S11 deletion offset test
+Line 5 for S11 deletion offset test
 EOF
 git add "$OFFSET_DEL_FILE"
-git commit -m "Setup S12: Base content for offset_del_file on main"
-MAIN_COMMIT_FOR_S12_PATCH=$(git rev-parse HEAD) 
+git commit -m "Setup S11: Base content for offset_del_file on main"
+MAIN_COMMIT_FOR_S11_PATCH=$(git rev-parse HEAD) 
 
-# Create branch and apply deletions
-git checkout -b "$OFFSET_DEL_BRANCH_S12" "$MAIN_COMMIT_FOR_S12_PATCH"
+git checkout -b "$OFFSET_DEL_BRANCH_S11" "$MAIN_COMMIT_FOR_S11_PATCH"
 cat << EOF > "$OFFSET_DEL_FILE" 
-Line 1 for S12 deletion offset test
-Line 4 for S12 deletion offset test
-Line 5 for S12 deletion offset test
+Line 1 for S11 deletion offset test
+Line 4 for S11 deletion offset test
+Line 5 for S11 deletion offset test
 EOF
 git add "$OFFSET_DEL_FILE"
-git commit -m "Deletions on $OFFSET_DEL_BRANCH_S12"
+git commit -m "Deletions on $OFFSET_DEL_BRANCH_S11"
 
-# Go back to main (at MAIN_COMMIT_FOR_S12_PATCH state) and save the patch
 git checkout main 
-git reset --hard "$MAIN_COMMIT_FOR_S12_PATCH" 
-$TAYLORED_CMD_BASE --save "$OFFSET_DEL_BRANCH_S12" 
-STORED_OFFSET_DEL_PLUGIN_S12_CONTENT=$(cat "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S12") 
+git reset --hard "$MAIN_COMMIT_FOR_S11_PATCH" 
+$TAYLORED_CMD_BASE --save "$OFFSET_DEL_BRANCH_S11" 
+STORED_OFFSET_DEL_PLUGIN_S11_CONTENT=$(cat "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S11") 
 
-# 12b. Modify main branch (from MAIN_COMMIT_FOR_S12_PATCH)
 git checkout main 
-git reset --hard "$MAIN_COMMIT_FOR_S12_PATCH" 
+git reset --hard "$MAIN_COMMIT_FOR_S11_PATCH" 
 cat << EOF > "$OFFSET_DEL_FILE" 
-ADDED PREPEND LINE 1 - S12 MAIN MODIFIED
-ADDED PREPEND LINE 2 - S12 MAIN MODIFIED
-Line 1 for S12 deletion offset test
-Line 2 to be deleted in S12
-Line 3 to be deleted in S12
-Line 4 for S12 deletion offset test
-Line 5 for S12 deletion offset test
+ADDED PREPEND LINE 1 - S11 MAIN MODIFIED
+ADDED PREPEND LINE 2 - S11 MAIN MODIFIED
+Line 1 for S11 deletion offset test
+Line 2 to be deleted in S11
+Line 3 to be deleted in S11
+Line 4 for S11 deletion offset test
+Line 5 for S11 deletion offset test
 EOF
 git add "$OFFSET_DEL_FILE"
-git commit -m "Shift context ON MAIN BRANCH for S12 deletions offset test"
-MAIN_MODIFIED_CONTENT_S12=$(cat "$OFFSET_DEL_FILE") 
+git commit -m "Shift context ON MAIN BRANCH for S11 deletions offset test"
+MAIN_MODIFIED_CONTENT_S11=$(cat "$OFFSET_DEL_FILE") 
 
-# 12c. Run 'taylored --offset' - expecting it to fail and report obsolescence
-echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S12 (with extension) - expecting obsolescence error...${NC}"
-set +e # Temporarily disable exit on error for this command
-OFFSET_OUTPUT_DEL_EXT=$($TAYLORED_CMD_BASE --offset "$OFFSET_DEL_PLUGIN_NAME_S12" 2>&1)
+echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S11 - expecting obsolescence error...${NC}"
+set +e 
+OFFSET_OUTPUT_DEL_EXT=$($TAYLORED_CMD_BASE --offset "$OFFSET_DEL_PLUGIN_NAME_S11" 2>&1)
 OFFSET_EXIT_CODE_DEL_EXT=$?
-set -e # Re-enable exit on error
+set -e 
 
 if [ $OFFSET_EXIT_CODE_DEL_EXT -ne 0 ]; then
-  echo -e "${GREEN}'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S12 (with extension) failed as expected.${NC}"
-  if echo "$OFFSET_OUTPUT_DEL_EXT" | grep -q -E "obsoleto|obsolete|Failed to update offsets"; then 
-    echo -e "${GREEN}Obsolescence/Failure message found: $(echo "$OFFSET_OUTPUT_DEL_EXT" | grep -E "obsoleto|obsolete|Failed to update offsets") ${NC}"
+  echo -e "${GREEN}'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S11 failed as expected.${NC}"
+  if echo "$OFFSET_OUTPUT_DEL_EXT" | grep -q -E "obsolete|could not be processed"; then 
+    echo -e "${GREEN}Obsolescence/Failure message found: $(echo "$OFFSET_OUTPUT_DEL_EXT" | grep -E "obsolete|could not be processed") ${NC}"
   else
-    echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S12 (with extension) failed, but expected message not found.${NC}"
+    echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S11 failed, but expected message not found.${NC}"
     echo "Full Output was: $OFFSET_OUTPUT_DEL_EXT"
     exit 1
   fi
 else
-  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S12 (with extension) succeeded unexpectedly.${NC}"
+  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_DEL_PLUGIN_NAME_S11 succeeded unexpectedly.${NC}"
   echo "Output was: $OFFSET_OUTPUT_DEL_EXT"
   exit 1
 fi
 
-# 12d. Verify that the patch file and the source file in workspace are unchanged by the failed offset attempt
-if [ "$(cat "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S12")" != "$STORED_OFFSET_DEL_PLUGIN_S12_CONTENT" ]; then
-  echo -e "${RED}Error: Patch file $TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S12 was modified by failed --offset.${NC}"
+if [ "$(cat "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S11")" != "$STORED_OFFSET_DEL_PLUGIN_S11_CONTENT" ]; then
+  echo -e "${RED}Error: Patch file $TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S11 was modified by failed --offset.${NC}"
   exit 1
 fi
-echo -e "${GREEN}Patch file $TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S12 remains unchanged after failed --offset, as expected.${NC}"
+echo -e "${GREEN}Patch file $TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S11 remains unchanged after failed --offset, as expected.${NC}"
 
-if [ "$(cat "$OFFSET_DEL_FILE")" != "$MAIN_MODIFIED_CONTENT_S12" ]; then
+if [ "$(cat "$OFFSET_DEL_FILE")" != "$MAIN_MODIFIED_CONTENT_S11" ]; then
   echo -e "${RED}Error: Source file $OFFSET_DEL_FILE in workspace was modified by failed --offset.${NC}"
   exit 1
 fi
 echo -e "${GREEN}Source file $OFFSET_DEL_FILE in workspace remains unchanged after failed --offset, as expected.${NC}"
 
-# Cleanup for Step 12
-git branch -D "$OFFSET_DEL_BRANCH_S12" &>/dev/null || true
-rm -f "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S12"
+git branch -D "$OFFSET_DEL_BRANCH_S11" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_DEL_PLUGIN_NAME_S11"
 git checkout main 
-git reset --hard "$MAIN_COMMIT_FOR_S12_PATCH" 
-git commit --amend -m "Setup S12: Base content for offset_del_file on main (Reset)" --no-edit 
+git reset --hard "$MAIN_COMMIT_FOR_S11_PATCH" 
+git commit --amend -m "Setup S11: Base content for offset_del_file on main (Reset)" --no-edit 
 echo "----------------------------------------"
 
 
-# Step 13: Test 'taylored --offset' for an ADDITIONS patch when main has diverged
-echo -e "${YELLOW}Step 13: Testing 'taylored --offset' for an ADDITIONS patch (expecting obsolescence)...${NC}"
+# Step 12 (was 13): Test 'taylored --offset' for an ADDITIONS patch when main has diverged (expecting obsolescence)
+echo -e "${YELLOW}Step 12: Testing 'taylored --offset' for an ADDITIONS patch (expecting obsolescence)...${NC}"
 git checkout main
 git reset --hard HEAD 
 
-OFFSET_ADD_FILE_S13="offset_additions_test_file_s13.txt"
-OFFSET_ADD_BRANCH_S13="additions-offset-branch-s13" 
-OFFSET_ADD_PLUGIN_NAME_S13="${OFFSET_ADD_BRANCH_S13}.taylored"
+OFFSET_ADD_FILE_S12="offset_additions_test_file_s12.txt"
+OFFSET_ADD_BRANCH_S12="additions-offset-branch-s12" 
+OFFSET_ADD_PLUGIN_NAME_S12="${OFFSET_ADD_BRANCH_S12}.taylored"
 
-cat << EOF > "$OFFSET_ADD_FILE_S13"
-Base line 1 for S13 additions offset test
-Base line 2 for S13 additions offset test
+cat << EOF > "$OFFSET_ADD_FILE_S12"
+Base line 1 for S12 additions offset test
+Base line 2 for S12 additions offset test
 EOF
-git add "$OFFSET_ADD_FILE_S13"
-git commit -m "Initial content for S13 additions offset test"
-MAIN_COMMIT_FOR_S13_PATCH=$(git rev-parse HEAD)
+git add "$OFFSET_ADD_FILE_S12"
+git commit -m "Initial content for S12 additions offset test"
+MAIN_COMMIT_FOR_S12_PATCH=$(git rev-parse HEAD)
 
-git checkout -b "$OFFSET_ADD_BRANCH_S13" "$MAIN_COMMIT_FOR_S13_PATCH"
-cat << EOF > "$OFFSET_ADD_FILE_S13" 
-Base line 1 for S13 additions offset test
-NEWLY ADDED LINE A - S13
-NEWLY ADDED LINE B - S13
-Base line 2 for S13 additions offset test
+git checkout -b "$OFFSET_ADD_BRANCH_S12" "$MAIN_COMMIT_FOR_S12_PATCH"
+cat << EOF > "$OFFSET_ADD_FILE_S12" 
+Base line 1 for S12 additions offset test
+NEWLY ADDED LINE A - S12
+NEWLY ADDED LINE B - S12
+Base line 2 for S12 additions offset test
 EOF
-git add "$OFFSET_ADD_FILE_S13"
-git commit -m "Additions on $OFFSET_ADD_BRANCH_S13"
+git add "$OFFSET_ADD_FILE_S12"
+git commit -m "Additions on $OFFSET_ADD_BRANCH_S12"
 
 git checkout main 
-git reset --hard "$MAIN_COMMIT_FOR_S13_PATCH"
-$TAYLORED_CMD_BASE --save "$OFFSET_ADD_BRANCH_S13" 
-STORED_OFFSET_ADD_PLUGIN_S13_CONTENT=$(cat "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S13")
+git reset --hard "$MAIN_COMMIT_FOR_S12_PATCH"
+$TAYLORED_CMD_BASE --save "$OFFSET_ADD_BRANCH_S12" 
+STORED_OFFSET_ADD_PLUGIN_S12_CONTENT=$(cat "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S12")
 
 git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S13_PATCH"
-cat << EOF > "$OFFSET_ADD_FILE_S13" 
-EXTRA PREPEND LINE X - S13 MAIN MODIFIED
-EXTRA PREPEND LINE Y - S13 MAIN MODIFIED
-Base line 1 for S13 additions offset test
-Base line 2 for S13 additions offset test
+git reset --hard "$MAIN_COMMIT_FOR_S12_PATCH"
+cat << EOF > "$OFFSET_ADD_FILE_S12" 
+EXTRA PREPEND LINE X - S12 MAIN MODIFIED
+EXTRA PREPEND LINE Y - S12 MAIN MODIFIED
+Base line 1 for S12 additions offset test
+Base line 2 for S12 additions offset test
 EOF
-git add "$OFFSET_ADD_FILE_S13"
-git commit -m "Shift context ON MAIN BRANCH for S13 additions offset test"
-MAIN_MODIFIED_CONTENT_S13=$(cat "$OFFSET_ADD_FILE_S13")
+git add "$OFFSET_ADD_FILE_S12"
+git commit -m "Shift context ON MAIN BRANCH for S12 additions offset test"
+MAIN_MODIFIED_CONTENT_S12=$(cat "$OFFSET_ADD_FILE_S12")
 
-echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S13 (with extension) - expecting obsolescence error...${NC}"
-set +e # Temporarily disable exit on error
-OFFSET_OUTPUT_ADD_EXT=$($TAYLORED_CMD_BASE --offset "$OFFSET_ADD_PLUGIN_NAME_S13" 2>&1)
+echo -e "${YELLOW}Running 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S12 - expecting obsolescence error...${NC}"
+set +e 
+OFFSET_OUTPUT_ADD_EXT=$($TAYLORED_CMD_BASE --offset "$OFFSET_ADD_PLUGIN_NAME_S12" 2>&1)
 OFFSET_EXIT_CODE_ADD_EXT=$?
-set -e # Re-enable exit on error
+set -e 
 
 if [ $OFFSET_EXIT_CODE_ADD_EXT -ne 0 ]; then
-  echo -e "${GREEN}'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S13 (with extension) failed as expected.${NC}"
-  if echo "$OFFSET_OUTPUT_ADD_EXT" | grep -q -E "obsoleto|obsolete|Failed to update offsets"; then 
-     echo -e "${GREEN}Obsolescence/Failure message found: $(echo "$OFFSET_OUTPUT_ADD_EXT" | grep -E "obsoleto|obsolete|Failed to update offsets") ${NC}"
+  echo -e "${GREEN}'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S12 failed as expected.${NC}"
+  if echo "$OFFSET_OUTPUT_ADD_EXT" | grep -q -E "obsolete|could not be processed"; then 
+     echo -e "${GREEN}Obsolescence/Failure message found: $(echo "$OFFSET_OUTPUT_ADD_EXT" | grep -E "obsolete|could not be processed") ${NC}"
   else
-    echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S13 (with extension) failed, but expected message not found.${NC}"
+    echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S12 failed, but expected message not found.${NC}"
     echo "Output was: $OFFSET_OUTPUT_ADD_EXT"
     exit 1
   fi
 else
-  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S13 (with extension) succeeded unexpectedly.${NC}"
+  echo -e "${RED}Error: 'taylored --offset' for $OFFSET_ADD_PLUGIN_NAME_S12 succeeded unexpectedly.${NC}"
   echo "Output was: $OFFSET_OUTPUT_ADD_EXT"
   exit 1
 fi
 
-if [ "$(cat "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S13")" != "$STORED_OFFSET_ADD_PLUGIN_S13_CONTENT" ]; then
-  echo -e "${RED}Error: Patch file $TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S13 was modified by failed --offset.${NC}"
+if [ "$(cat "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S12")" != "$STORED_OFFSET_ADD_PLUGIN_S12_CONTENT" ]; then
+  echo -e "${RED}Error: Patch file $TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S12 was modified by failed --offset.${NC}"
   exit 1
 fi
-echo -e "${GREEN}Patch file $TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S13 remains unchanged after failed --offset, as expected.${NC}"
+echo -e "${GREEN}Patch file $TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S12 remains unchanged after failed --offset, as expected.${NC}"
 
-if [ "$(cat "$OFFSET_ADD_FILE_S13")" != "$MAIN_MODIFIED_CONTENT_S13" ]; then
-  echo -e "${RED}Error: Source file $OFFSET_ADD_FILE_S13 in workspace was modified by failed --offset.${NC}"
+if [ "$(cat "$OFFSET_ADD_FILE_S12")" != "$MAIN_MODIFIED_CONTENT_S12" ]; then
+  echo -e "${RED}Error: Source file $OFFSET_ADD_FILE_S12 in workspace was modified by failed --offset.${NC}"
   exit 1
 fi
-echo -e "${GREEN}Source file $OFFSET_ADD_FILE_S13 in workspace remains unchanged after failed --offset, as expected.${NC}"
+echo -e "${GREEN}Source file $OFFSET_ADD_FILE_S12 in workspace remains unchanged after failed --offset, as expected.${NC}"
 
-git branch -D "$OFFSET_ADD_BRANCH_S13" &>/dev/null || true
-rm -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S13"
+git branch -D "$OFFSET_ADD_BRANCH_S12" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_ADD_PLUGIN_NAME_S12"
 git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S13_PATCH"
-git commit --amend -m "Initial content for S13 additions offset test (Reset)" --no-edit
+git reset --hard "$MAIN_COMMIT_FOR_S12_PATCH"
+git commit --amend -m "Initial content for S12 additions offset test (Reset)" --no-edit
 echo "----------------------------------------"
 
 
-# Step 14: Test 'taylored --offset NAME --message "CUSTOM"' and 'taylored --data NAME'
-echo -e "${YELLOW}Step 14: Testing 'taylored --offset' with '--message' and '--data' (expecting offset obsolescence)...${NC}"
+# Step 13 (was 14): Test 'taylored --offset NAME --message "CUSTOM"' and 'taylored --data NAME'
+echo -e "${YELLOW}Step 13: Testing 'taylored --offset' with '--message' and '--data'...${NC}"
 git checkout main
-git reset --hard HEAD 
+git reset --hard "$FIRST_MAIN_COMMIT_HASH"
 
-OFFSET_MSG_FILE_S14="offset_message_test_file_s14.txt"
-OFFSET_MSG_BRANCH_S14="message-offset-branch-s14" 
-OFFSET_MSG_PLUGIN_NAME_S14="${OFFSET_MSG_BRANCH_S14}.taylored"
-CUSTOM_MESSAGE_FOR_OFFSET_OPTION="Custom message for offset option S14" 
+OFFSET_MSG_FILE_S13="offset_message_test_file_s13.txt"
+OFFSET_MSG_BRANCH_S13="message-offset-branch-s13" 
+OFFSET_MSG_PLUGIN_NAME_S13="${OFFSET_MSG_BRANCH_S13}.taylored"
+CUSTOM_MESSAGE_S13="My Custom Subject S13"
+EXPECTED_SUBJECT_LINE_S13="Subject: [PATCH] $CUSTOM_MESSAGE_S13"
 
-cat << EOF > "$OFFSET_MSG_FILE_S14"
-Line 1 for S14 custom message offset test
-Line 2 for S14 custom message offset test
-EOF
-git add "$OFFSET_MSG_FILE_S14"
-git commit -m "Initial content for S14 custom message offset test file on main"
+# 13a. Setup for successful offset update with a custom message
+echo "Linea base per S13." > "$OFFSET_MSG_FILE_S13"
+git add "$OFFSET_MSG_FILE_S13"
+git commit -m "File base per S13 --offset --message"
+MAIN_COMMIT_S13_MSG_TEST=$(git rev-parse HEAD)
+
+git checkout -b "$OFFSET_MSG_BRANCH_S13" "$MAIN_COMMIT_S13_MSG_TEST"
+echo "Aggiunta su branch per S13." >> "$OFFSET_MSG_FILE_S13"
+git add "$OFFSET_MSG_FILE_S13"
+git commit -m "Modifiche su $OFFSET_MSG_BRANCH_S13"
+
+git checkout main
+git reset --hard "$MAIN_COMMIT_S13_MSG_TEST"
+$TAYLORED_CMD_BASE --save "$OFFSET_MSG_BRANCH_S13" # Save initial patch (no subject line from --save)
+
+# 13b. Run --offset with --message (expecting success and message embedding)
+echo -e "${YELLOW}Running 'taylored --offset $OFFSET_MSG_PLUGIN_NAME_S13 --message \"$CUSTOM_MESSAGE_S13\"'...${NC}"
+set +e
+OFFSET_MSG_OUTPUT_S13=$($TAYLORED_CMD_BASE --offset "$OFFSET_MSG_PLUGIN_NAME_S13" --message "$CUSTOM_MESSAGE_S13" 2>&1)
+OFFSET_MSG_EXIT_CODE_S13=$?
+set -e
+
+if [ $OFFSET_MSG_EXIT_CODE_S13 -eq 0 ]; then
+  echo -e "${GREEN}'taylored --offset' with --message succeeded as expected.${NC}"
+  if ! grep -q "$EXPECTED_SUBJECT_LINE_S13" "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S13"; then
+    echo -e "${RED}Error: Expected Subject line not found in $OFFSET_MSG_PLUGIN_NAME_S13.${NC}"
+    echo "Expected to find: $EXPECTED_SUBJECT_LINE_S13"
+    echo "File content:"
+    cat "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S13"
+    exit 1
+  fi
+  echo -e "${GREEN}Subject line '$EXPECTED_SUBJECT_LINE_S13' found in patch file.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --offset' with --message failed unexpectedly. Exit code: $OFFSET_MSG_EXIT_CODE_S13 ${NC}"
+  echo "Output was: $OFFSET_MSG_OUTPUT_S13"
+  exit 1
+fi
+
+# 13c. Test --data
+echo -e "${YELLOW}Running 'taylored --data $OFFSET_MSG_PLUGIN_NAME_S13' to verify custom message...${NC}"
+EXTRACTED_MESSAGE_S13=$($TAYLORED_CMD_BASE --data "$OFFSET_MSG_PLUGIN_NAME_S13")
+if [ "$EXTRACTED_MESSAGE_S13" = "$CUSTOM_MESSAGE_S13" ]; then
+  echo -e "${GREEN}'taylored --data' extracted the custom message '$CUSTOM_MESSAGE_S13' correctly.${NC}"
+else
+  echo -e "${RED}Error: 'taylored --data' extracted an incorrect message.${NC}"
+  echo -e "  Expected: \"$CUSTOM_MESSAGE_S13\""
+  echo -e "  Got:      \"$EXTRACTED_MESSAGE_S13\""
+  exit 1
+fi
+
+# 13d. Test --offset with message when hunks are inverted (message should still be updated)
+echo -e "${YELLOW}Testing --offset with --message when hunks are inverted...${NC}"
+# Create a scenario for inverted hunks.
+# Current state: main is at $MAIN_COMMIT_S13_MSG_TEST.
+# $OFFSET_MSG_PLUGIN_NAME_S13 has the custom message and reflects changes from $OFFSET_MSG_BRANCH_S13 to $MAIN_COMMIT_S13_MSG_TEST.
+# To make it "inverted", we want the state on the temp branch (after applying the patch) to be $OFFSET_MSG_BRANCH_S13.
+# And then `git diff main HEAD` (where main is $MAIN_COMMIT_S13_MSG_TEST and HEAD is $OFFSET_MSG_BRANCH_S13)
+# should be the inverse of the original patch (which was $OFFSET_MSG_BRANCH_S13 vs $MAIN_COMMIT_S13_MSG_TEST).
+# This is tricky to force perfectly for the "inverted hunks" logic without knowing the exact diff.
+# For simplicity, let's assume a case where the diff content itself might not change much, but we want to update the message.
+# We'll re-run offset on the same patch, but with a new message.
+# The "inverted hunks" logic might trigger if the re-calculated diff is identical to the previous one.
+
+NEW_CUSTOM_MESSAGE_S13_INVERTED="Updated Message For Inverted S13"
+EXPECTED_SUBJECT_LINE_S13_INVERTED="Subject: [PATCH] $NEW_CUSTOM_MESSAGE_S13_INVERTED"
+
+echo -e "${YELLOW}Running 'taylored --offset $OFFSET_MSG_PLUGIN_NAME_S13 --message \"$NEW_CUSTOM_MESSAGE_S13_INVERTED\"' (expecting message update even if hunks might be considered inverted/same)...${NC}"
+set +e
+OFFSET_MSG_OUTPUT_S13_INV=$($TAYLORED_CMD_BASE --offset "$OFFSET_MSG_PLUGIN_NAME_S13" --message "$NEW_CUSTOM_MESSAGE_S13_INVERTED" 2>&1)
+OFFSET_MSG_EXIT_CODE_S13_INV=$?
+set -e
+
+if [ $OFFSET_MSG_EXIT_CODE_S13_INV -eq 0 ]; then
+  echo -e "${GREEN}'taylored --offset' with new message (inverted/same hunk scenario) succeeded.${NC}"
+  if ! grep -q "$EXPECTED_SUBJECT_LINE_S13_INVERTED" "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S13"; then
+    echo -e "${RED}Error: Expected new Subject line not found in $OFFSET_MSG_PLUGIN_NAME_S13 after second offset run.${NC}"
+    echo "Expected to find: $EXPECTED_SUBJECT_LINE_S13_INVERTED"
+    echo "File content:"
+    cat "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S13"
+    exit 1
+  fi
+  echo -e "${GREEN}New Subject line '$EXPECTED_SUBJECT_LINE_S13_INVERTED' found in patch file.${NC}"
+  
+  EXTRACTED_MESSAGE_S13_INV=$($TAYLORED_CMD_BASE --data "$OFFSET_MSG_PLUGIN_NAME_S13")
+  if [ "$EXTRACTED_MESSAGE_S13_INV" = "$NEW_CUSTOM_MESSAGE_S13_INVERTED" ]; then
+    echo -e "${GREEN}'taylored --data' extracted the new custom message '$NEW_CUSTOM_MESSAGE_S13_INVERTED' correctly.${NC}"
+  else
+    echo -e "${RED}Error: 'taylored --data' extracted an incorrect message after second offset run.${NC}"
+    echo -e "  Expected: \"$NEW_CUSTOM_MESSAGE_S13_INVERTED\""
+    echo -e "  Got:      \"$EXTRACTED_MESSAGE_S13_INV\""
+    exit 1
+  fi
+else
+  echo -e "${RED}Error: 'taylored --offset' with new message (inverted/same hunk scenario) failed unexpectedly. Exit code: $OFFSET_MSG_EXIT_CODE_S13_INV ${NC}"
+  echo "Output was: $OFFSET_MSG_OUTPUT_S13_INV"
+  exit 1
+fi
+
+
+git branch -D "$OFFSET_MSG_BRANCH_S13" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S13"
+git checkout main
+git reset --hard "$MAIN_COMMIT_S13_MSG_TEST" # Reset to before this test step's specific commits
+git commit --amend -m "File base per S13 --offset --message (Reset)" --no-edit --allow-empty
+echo "----------------------------------------"
+
+# Step 14 (was 15): Test 'taylored --offset' for uncommitted changes and successful update
+echo -e "${YELLOW}Step 14: Testing 'taylored --offset' for uncommitted changes and successful update...${NC}"
+git checkout main
+git reset --hard "$FIRST_MAIN_COMMIT_HASH" 
+
+OFFSET_S14_FILE="offset_s14_test_file.txt"
+OFFSET_S14_BRANCH="offset-s14-branch"
+OFFSET_S14_PLUGIN_NAME="${OFFSET_S14_BRANCH}.taylored"
+OFFSET_S14_MESSAGE="Offset S14 Test Message"
+
+# 14a. Setup patch
+echo "Base content for $OFFSET_S14_FILE." > "$OFFSET_S14_FILE"
+git add "$OFFSET_S14_FILE"
+git commit -m "Setup S14: Add $OFFSET_S14_FILE to main"
 MAIN_COMMIT_FOR_S14_PATCH=$(git rev-parse HEAD)
 
-git checkout -b "$OFFSET_MSG_BRANCH_S14" "$MAIN_COMMIT_FOR_S14_PATCH"
-cat << EOF > "$OFFSET_MSG_FILE_S14"
-Line 1 for S14 custom message offset test
-ADDED LINE for S14 custom message patch
-Line 2 for S14 custom message offset test
-EOF
-git add "$OFFSET_MSG_FILE_S14"
-git commit -m "Modifications on $OFFSET_MSG_BRANCH_S14 for custom message test"
+git checkout -b "$OFFSET_S14_BRANCH" "$MAIN_COMMIT_FOR_S14_PATCH"
+echo "Added line on $OFFSET_S14_BRANCH." >> "$OFFSET_S14_FILE"
+git add "$OFFSET_S14_FILE"
+git commit -m "Modifications on $OFFSET_S14_BRANCH for S14"
 
 git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S14_PATCH"
-$TAYLORED_CMD_BASE --save "$OFFSET_MSG_BRANCH_S14" 
-STORED_OFFSET_MSG_PLUGIN_S14_CONTENT=$(cat "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S14")
+git reset --hard "$MAIN_COMMIT_FOR_S14_PATCH" 
+$TAYLORED_CMD_BASE --save "$OFFSET_S14_BRANCH"
+INITIAL_PATCH_CONTENT_S14=$(cat "$TAYLORED_DIR_NAME/$OFFSET_S14_PLUGIN_NAME")
 
-git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S14_PATCH"
-cat << EOF > "$OFFSET_MSG_FILE_S14"
-PREPENDED LINE 1 on main - S14
-PREPENDED LINE 2 on main - S14
-Line 1 for S14 custom message offset test
-Line 2 for S14 custom message offset test
-EOF
-git add "$OFFSET_MSG_FILE_S14"
-git commit -m "Shift context ON MAIN BRANCH for S14 custom message offset test"
-MAIN_MODIFIED_CONTENT_S14=$(cat "$OFFSET_MSG_FILE_S14")
-
-echo -e "${YELLOW}Running 'taylored --offset $OFFSET_MSG_PLUGIN_NAME_S14 --message \"$CUSTOM_MESSAGE_FOR_OFFSET_OPTION\"' - expecting obsolescence & warning...${NC}"
-set +e # Temporarily disable exit on error
-OFFSET_MSG_OUTPUT=$($TAYLORED_CMD_BASE --offset "$OFFSET_MSG_PLUGIN_NAME_S14" --message "$CUSTOM_MESSAGE_FOR_OFFSET_OPTION" 2>&1)
-OFFSET_MSG_EXIT_CODE=$?
-set -e # Re-enable exit on error
-
-if [ $OFFSET_MSG_EXIT_CODE -ne 0 ]; then
-  echo -e "${GREEN}'taylored --offset' with --message failed as expected.${NC}"
-  if echo "$OFFSET_MSG_OUTPUT" | grep -q -E "obsoleto|obsolete|Failed to update offsets"; then 
-    echo -e "${GREEN}Obsolescence/Failure message found in output.${NC}"
-  else
-    echo -e "${RED}Error: 'taylored --offset' with --message failed, but expected obsolescence/failure message not found.${NC}"
-    echo "Output was: $OFFSET_MSG_OUTPUT"
-    exit 1
-  fi
-  if echo "$OFFSET_MSG_OUTPUT" | grep -q -E "option was provided .* but is not used"; then
-    echo -e "${GREEN}Warning about unused --message option found as expected.${NC}"
-  else
-    echo -e "${RED}Error: Expected warning about unused --message option not found in --offset output.${NC}"
-    echo "Output was: $OFFSET_MSG_OUTPUT"
-  fi
-else
-  echo -e "${RED}Error: 'taylored --offset' with --message succeeded unexpectedly.${NC}"
-  echo "Output was: $OFFSET_MSG_OUTPUT"
-  exit 1
-fi
-
-if [ "$(cat "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S14")" != "$STORED_OFFSET_MSG_PLUGIN_S14_CONTENT" ]; then
-  echo -e "${RED}Error: Patch file $TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S14 was modified by failed --offset with --message.${NC}"
-  exit 1
-fi
-echo -e "${GREEN}Patch file $TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S14 remains unchanged after failed --offset, as expected.${NC}"
-
-if [ "$(cat "$OFFSET_MSG_FILE_S14")" != "$MAIN_MODIFIED_CONTENT_S14" ]; then
-  echo -e "${RED}Error: Source file $OFFSET_MSG_FILE_S14 in workspace was modified by failed --offset with --message.${NC}"
-  exit 1
-fi
-echo -e "${GREEN}Source file $OFFSET_MSG_FILE_S14 in workspace remains unchanged after failed --offset, as expected.${NC}"
-
-echo -e "${YELLOW}Running 'taylored --data $OFFSET_MSG_PLUGIN_NAME_S14' to verify message from original patch...${NC}"
-EXTRACTED_MESSAGE=$($TAYLORED_CMD_BASE --data "$OFFSET_MSG_PLUGIN_NAME_S14")
-
-if [ -z "$EXTRACTED_MESSAGE" ]; then 
-  echo -e "${GREEN}'taylored --data' extracted an empty message from the original patch, as expected (raw 'git diff' from --save).${NC}"
-else
-  echo -e "${RED}Error: 'taylored --data' extracted an unexpected message from the original patch.${NC}"
-  echo -e "  Expected: (empty string)"
-  echo -e "  Got:      \"$EXTRACTED_MESSAGE\""
-  exit 1
-fi
-
-git branch -D "$OFFSET_MSG_BRANCH_S14" &>/dev/null || true
-rm -f "$TAYLORED_DIR_NAME/$OFFSET_MSG_PLUGIN_NAME_S14"
-git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S14_PATCH"
-git commit --amend -m "Initial content for S14 custom message offset test file on main (Reset)" --no-edit
-echo "----------------------------------------"
-
-# Step 15: Test 'taylored --offset' when main is identical (successful update)
-echo -e "${YELLOW}Step 15: Testing 'taylored --offset' when main is identical (successful update)...${NC}"
-git checkout main
-git reset --hard "$FIRST_MAIN_COMMIT_HASH" # Reset main to a very clean, known state
-
-# 15a. Setup: Create a new file and a branch with changes to it
-OFFSET_SUCCESS_FILE="offset_success_test_file.txt"
-OFFSET_SUCCESS_BRANCH="offset-success-branch-s15"
-OFFSET_SUCCESS_PLUGIN_NAME="${OFFSET_SUCCESS_BRANCH}.taylored"
-
-echo "Base content for $OFFSET_SUCCESS_FILE on main." > "$OFFSET_SUCCESS_FILE"
-git add "$OFFSET_SUCCESS_FILE"
-# Ensure file1.txt and file_to_delete.txt are in their initial state for this commit on main
-echo "$INITIAL_FILE1_CONTENT" > file1.txt
-echo "$INITIAL_FILE_TO_DELETE_CONTENT" > file_to_delete.txt
-git add file1.txt file_to_delete.txt
-
-git commit -m "Setup S15: Add $OFFSET_SUCCESS_FILE to main, ensure others pristine"
-MAIN_COMMIT_FOR_S15_PATCH=$(git rev-parse HEAD)
-
-git checkout -b "$OFFSET_SUCCESS_BRANCH" "$MAIN_COMMIT_FOR_S15_PATCH"
-echo "Added line on $OFFSET_SUCCESS_BRANCH." >> "$OFFSET_SUCCESS_FILE"
-git add "$OFFSET_SUCCESS_FILE"
-git commit -m "Modifications on $OFFSET_SUCCESS_BRANCH for S15"
-
-# Save the patch while on main, which is currently identical to the base of OFFSET_SUCCESS_BRANCH
-git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S15_PATCH" # Ensure main is at the exact state the patch is based against
-$TAYLORED_CMD_BASE --save "$OFFSET_SUCCESS_BRANCH"
-INITIAL_PATCH_CONTENT_S15=$(cat "$TAYLORED_DIR_NAME/$OFFSET_SUCCESS_PLUGIN_NAME")
-WORKSPACE_FILE_CONTENT_BEFORE_OFFSET_S15=$(cat "$OFFSET_SUCCESS_FILE")
-
-
-# 15b. Run 'taylored --offset' (no message) - Expecting success
-echo -e "${YELLOW}Running 'taylored --offset $OFFSET_SUCCESS_PLUGIN_NAME' (first run, no message)...${NC}"
+# 14b. Test --offset with uncommitted changes
+echo -e "${YELLOW}Testing 'taylored --offset' with uncommitted changes...${NC}"
+echo "Uncommitted changes in $OFFSET_S14_FILE" >> "$OFFSET_S14_FILE"
 set +e
-OFFSET_S15_RUN1_OUTPUT=$($TAYLORED_CMD_BASE --offset "$OFFSET_SUCCESS_PLUGIN_NAME" 2>&1)
-OFFSET_S15_RUN1_EXIT_CODE=$?
+OFFSET_S14_UNCOMMITTED_OUTPUT=$($TAYLORED_CMD_BASE --offset "$OFFSET_S14_PLUGIN_NAME" 2>&1)
+OFFSET_S14_UNCOMMITTED_EXIT_CODE=$?
 set -e
 
-if [ $OFFSET_S15_RUN1_EXIT_CODE -eq 0 ]; then
-  echo -e "${GREEN}'taylored --offset' (first run) succeeded as expected.${NC}"
-  if ! echo "$OFFSET_S15_RUN1_OUTPUT" | grep -q "SUCCESS: Patch file"; then
-      echo -e "${RED}Error: Success message not found in first --offset run output.${NC}"
-      echo "Output was: $OFFSET_S15_RUN1_OUTPUT"
-      exit 1
-  fi
-  # In this scenario, the re-calculated diff should be identical to the original patch.
-  UPDATED_PATCH_CONTENT_S15_RUN1=$(cat "$TAYLORED_DIR_NAME/$OFFSET_SUCCESS_PLUGIN_NAME")
-  if [ "$UPDATED_PATCH_CONTENT_S15_RUN1" == "$INITIAL_PATCH_CONTENT_S15" ]; then
-    echo -e "${GREEN}Patch content for $OFFSET_SUCCESS_PLUGIN_NAME is identical after first --offset run, as expected in this scenario.${NC}"
-  else
-    echo -e "${RED}Error: Patch file $OFFSET_SUCCESS_PLUGIN_NAME content changed unexpectedly. It should have remained the same.${NC}"
-    echo -e "${YELLOW}This might indicate subtle differences in 'git diff' output generation between 'taylored --save' and the internal 'git diff main' of '--offset'."
-    echo -e "Initial content:\n$INITIAL_PATCH_CONTENT_S15"
-    echo -e "Updated content:\n$UPDATED_PATCH_CONTENT_S15_RUN1"
-    # exit 1 # Relax this check for now, focus on workspace cleanliness
+if [ $OFFSET_S14_UNCOMMITTED_EXIT_CODE -ne 0 ]; then
+  echo -e "${GREEN}'taylored --offset' failed as expected due to uncommitted changes.${NC}"
+  if ! echo "$OFFSET_S14_UNCOMMITTED_OUTPUT" | grep -q "Uncommitted changes detected"; then
+    echo -e "${RED}Error: Expected 'Uncommitted changes detected' message not found.${NC}"
+    echo "Output was: $OFFSET_S14_UNCOMMITTED_OUTPUT"
+    exit 1
   fi
 else
-  echo -e "${RED}Error: 'taylored --offset' (first run) failed unexpectedly with exit code $OFFSET_S15_RUN1_EXIT_CODE.${NC}"
-  echo "Output was: $OFFSET_S15_RUN1_OUTPUT"
+  echo -e "${RED}Error: 'taylored --offset' succeeded unexpectedly with uncommitted changes.${NC}"
   exit 1
 fi
-
-# Verify workspace file on main is NOT changed by --offset
-CURRENT_WORKSPACE_FILE_CONTENT_S15=$(cat "$OFFSET_SUCCESS_FILE")
-if [ "$CURRENT_WORKSPACE_FILE_CONTENT_S15" != "$WORKSPACE_FILE_CONTENT_BEFORE_OFFSET_S15" ]; then
-    echo -e "${RED}Error: Workspace file $OFFSET_SUCCESS_FILE on main was changed by --offset operation.${NC}"
-    echo "Expected content:"
-    echo "$WORKSPACE_FILE_CONTENT_BEFORE_OFFSET_S15"
-    echo "Actual content:"
-    echo "$CURRENT_WORKSPACE_FILE_CONTENT_S15"
-    exit 1
-fi
-echo -e "${GREEN}Workspace file $OFFSET_SUCCESS_FILE on main remains unchanged after --offset, as expected.${NC}"
+# Clean up uncommitted changes
+git checkout -- "$OFFSET_S14_FILE"
+echo -e "${GREEN}Uncommitted changes cleaned up.${NC}"
 
 
-# 15c. Run 'taylored --offset' again, this time with --message
-echo -e "${YELLOW}Running 'taylored --offset $OFFSET_SUCCESS_PLUGIN_NAME --message \"DATA01\"' (second run)...${NC}"
-CUSTOM_MESSAGE_S15="DATA01_S15"
+# 14c. Test successful --offset run (no message)
+echo -e "${YELLOW}Running 'taylored --offset $OFFSET_S14_PLUGIN_NAME' (clean workspace, no message)...${NC}"
 set +e
-OFFSET_S15_RUN2_OUTPUT=$($TAYLORED_CMD_BASE --offset "$OFFSET_SUCCESS_PLUGIN_NAME" --message "$CUSTOM_MESSAGE_S15" 2>&1)
-OFFSET_S15_RUN2_EXIT_CODE=$?
+OFFSET_S14_RUN1_OUTPUT=$($TAYLORED_CMD_BASE --offset "$OFFSET_S14_PLUGIN_NAME" 2>&1)
+OFFSET_S14_RUN1_EXIT_CODE=$?
 set -e
 
-if [ $OFFSET_S15_RUN2_EXIT_CODE -eq 0 ]; then
-  echo -e "${GREEN}'taylored --offset' (second run with --message) succeeded as expected.${NC}"
+if [ $OFFSET_S14_RUN1_EXIT_CODE -eq 0 ]; then
+  echo -e "${GREEN}'taylored --offset' (clean, no message) succeeded.${NC}"
+  EXTRACTED_MSG_S14_RUN1=$($TAYLORED_CMD_BASE --data "$OFFSET_S14_PLUGIN_NAME")
+  if [ -z "$EXTRACTED_MSG_S14_RUN1" ]; then
+    echo -e "${GREEN}--data extracts empty message as expected (original patch from --save had no Subject).${NC}"
+  else
+    echo -e "${RED}Error: --data extracted '$EXTRACTED_MSG_S14_RUN1', expected empty.${NC}"
+    exit 1
+  fi
 else
-  echo -e "${RED}Error: 'taylored --offset' (second run with --message) failed unexpectedly with exit code $OFFSET_S15_RUN2_EXIT_CODE.${NC}"
-  echo "Output was: $OFFSET_S15_RUN2_OUTPUT"
+  echo -e "${RED}Error: 'taylored --offset' (clean, no message) failed. Exit: $OFFSET_S14_RUN1_EXIT_CODE ${NC}"
+  echo "Output: $OFFSET_S14_RUN1_OUTPUT"
   exit 1
 fi
 
-# Check for the warning about --message being unused
-if echo "$OFFSET_S15_RUN2_OUTPUT" | grep -q -E "option was provided .* but is not used"; then
-  echo -e "${GREEN}Warning about unused --message option found in second --offset run, as expected.${NC}"
+# 14d. Test successful --offset run (with message)
+EXPECTED_SUBJECT_S14_MSG="Subject: [PATCH] $OFFSET_S14_MESSAGE"
+echo -e "${YELLOW}Running 'taylored --offset $OFFSET_S14_PLUGIN_NAME --message \"$OFFSET_S14_MESSAGE\"' (clean workspace, with message)...${NC}"
+set +e
+OFFSET_S14_RUN2_OUTPUT=$($TAYLORED_CMD_BASE --offset "$OFFSET_S14_PLUGIN_NAME" --message "$OFFSET_S14_MESSAGE" 2>&1)
+OFFSET_S14_RUN2_EXIT_CODE=$?
+set -e
+if [ $OFFSET_S14_RUN2_EXIT_CODE -eq 0 ]; then
+  echo -e "${GREEN}'taylored --offset' (clean, with message) succeeded.${NC}"
+  if ! grep -q "$EXPECTED_SUBJECT_S14_MSG" "$TAYLORED_DIR_NAME/$OFFSET_S14_PLUGIN_NAME"; then
+    echo -e "${RED}Error: Expected Subject line not found in $OFFSET_S14_PLUGIN_NAME after --message.${NC}"
+    cat "$TAYLORED_DIR_NAME/$OFFSET_S14_PLUGIN_NAME"
+    exit 1
+  fi
+  echo -e "${GREEN}Subject line for '$OFFSET_S14_MESSAGE' found.${NC}"
+  EXTRACTED_MSG_S14_RUN2=$($TAYLORED_CMD_BASE --data "$OFFSET_S14_PLUGIN_NAME")
+  if [ "$EXTRACTED_MSG_S14_RUN2" = "$OFFSET_S14_MESSAGE" ]; then
+    echo -e "${GREEN}--data extracts '$OFFSET_S14_MESSAGE' correctly.${NC}"
+  else
+    echo -e "${RED}Error: --data extracted '$EXTRACTED_MSG_S14_RUN2', expected '$OFFSET_S14_MESSAGE'.${NC}"
+    exit 1
+  fi
 else
-  echo -e "${RED}Error: Expected warning about unused --message option not found in second --offset output.${NC}"
-  echo "Output was: $OFFSET_S15_RUN2_OUTPUT"
-  # exit 1 # This can be too strict
-fi
-# Patch file might be modified again or stay the same if already optimal.
-echo -e "${GREEN}Patch file $OFFSET_SUCCESS_PLUGIN_NAME processed by second --offset run.${NC}"
-
-
-# 15d. Test 'taylored --data' on the (potentially twice) updated patch
-echo -e "${YELLOW}Running 'taylored --data $OFFSET_SUCCESS_PLUGIN_NAME' after successful offset updates...${NC}"
-EXTRACTED_MESSAGE_S15=$($TAYLORED_CMD_BASE --data "$OFFSET_SUCCESS_PLUGIN_NAME")
-
-if [ -z "$EXTRACTED_MESSAGE_S15" ]; then 
-  echo -e "${GREEN}'taylored --data' extracted an empty message from the updated patch, as expected (content from 'git diff main').${NC}"
-else
-  echo -e "${RED}Error: 'taylored --data' extracted an unexpected message: \"$EXTRACTED_MESSAGE_S15\". Expected empty.${NC}"
+  echo -e "${RED}Error: 'taylored --offset' (clean, with message) failed. Exit: $OFFSET_S14_RUN2_EXIT_CODE ${NC}"
+  echo "Output: $OFFSET_S14_RUN2_OUTPUT"
   exit 1
 fi
 
-# 15e. Cleanup for Step 15
-git branch -D "$OFFSET_SUCCESS_BRANCH" &>/dev/null || true
-rm -f "$TAYLORED_DIR_NAME/$OFFSET_SUCCESS_PLUGIN_NAME"
+# 14e. Cleanup for Step 14
+git branch -D "$OFFSET_S14_BRANCH" &>/dev/null || true
+rm -f "$TAYLORED_DIR_NAME/$OFFSET_S14_PLUGIN_NAME"
 git checkout main
-git reset --hard "$MAIN_COMMIT_FOR_S15_PATCH" 
-# Remove the file created in this step and commit the removal
-if [ -f "$OFFSET_SUCCESS_FILE" ]; then
-  git rm "$OFFSET_SUCCESS_FILE" >/dev/null
+git reset --hard "$MAIN_COMMIT_FOR_S14_PATCH" 
+if [ -f "$OFFSET_S14_FILE" ]; then
+  git rm "$OFFSET_S14_FILE" >/dev/null
 fi
-git commit --amend -m "Setup S15: Add $OFFSET_SUCCESS_FILE to main (Reset and cleaned)" --no-edit --allow-empty
+git commit --amend -m "Setup S14: Add $OFFSET_S14_FILE to main (Reset and cleaned)" --no-edit --allow-empty
 echo "----------------------------------------"
 
 

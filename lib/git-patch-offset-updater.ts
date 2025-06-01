@@ -313,7 +313,7 @@ async function updatePatchOffsets(
             }
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
-                console.error(`ERRORE: L'esecuzione del comando 'git diff main HEAD' è fallita con un codice di uscita imprevisto ${diffCmdResult.error.code} sul branch temporaneo.`);
+                console.error(`ERROR: Execution of 'git diff main HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`);
                 if (diffCmdResult.stderr) console.error(`  Stderr: ${diffCmdResult.stderr}`);
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);
@@ -343,29 +343,29 @@ async function updatePatchOffsets(
                 let finalOutputContentToWrite: string;
 
                 if (allHunksAreConsideredInverted) {
-                    console.log("INFO: Gli hunk della patch ricalcolata sono invertiti. Si procede ad aggiornare/inserire il messaggio nel file di patch mantenendo il contenuto diff originale.");
+                    console.log("INFO: The hunks of the recalculated patch are inverted. Proceeding to update/insert the message in the patch file while keeping the original diff content.");
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
                     finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
 
                     if (finalOutputContentToWrite === originalPatchContent) {
-                        console.log(`INFO: Il file taylored è già aggiornato con il messaggio corretto e contenuto diff originale (hunk invertiti). Nessun aggiornamento necessario.`);
+                        console.log(`INFO: The taylored file is already updated with the correct message and original diff content (inverted hunks). No update needed.`);
                     } else {
                         await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
-                        console.log(`SUCCESSO: Il file di patch '${absolutePatchFilePath}' è stato aggiornato con il messaggio (contenuto diff originale mantenuto a seguito di hunk invertiti).`);
+                        console.log(`SUCCESS: The patch file '${absolutePatchFilePath}' has been updated with the message (original diff content maintained due to inverted hunks).`);
                     }
                     operationSucceeded = true;
                 } else { // Not allHunksAreConsideredInverted - use new diff content
                     if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) { // only log if not add/del of all hunks
-                         console.log(`INFO: Il numero di hunk differisce (originale: ${originalHunks.length}, nuovo: ${newHunks.length}). La patch verrà aggiornata con il nuovo contenuto se differente.`);
+                         console.log(`INFO: The number of hunks differs (original: ${originalHunks.length}, new: ${newHunks.length}). The patch will be updated with the new content if different.`);
                     }
                     const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
                     finalOutputContentToWrite = embedMessageInContent(cleanedDiffContent, effectiveMessageToEmbed);
                     
                     if (finalOutputContentToWrite === originalPatchContent) {
-                        console.log(`INFO: Il contenuto della patch (messaggio e nuovo diff) è identico a quello originale. Non è necessario aggiornare il file taylored.`);
+                        console.log(`INFO: The patch content (message and new diff) is identical to the original. No need to update the taylored file.`);
                     } else {
                         await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
-                        console.log(`SUCCESSO: Il file di patch '${absolutePatchFilePath}' è stato aggiornato con nuovo contenuto e messaggio (se applicabile).`);
+                        console.log(`SUCCESS: The patch file '${absolutePatchFilePath}' has been updated with new content and message (if applicable).`);
                     }
                     operationSucceeded = true;
                 }

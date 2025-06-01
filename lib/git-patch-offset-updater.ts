@@ -250,47 +250,34 @@ async function updatePatchOffsets(
     let cliEquivalentCallSucceeded = false;
 
     try {
-        console.log(`INFO: Creating temporary branch '${tempBranchName}' from '${originalBranchOrCommit}'.`);
         await execGit(repoRoot, ['checkout', '-b', tempBranchName, originalBranchOrCommit, '--quiet']);
-        console.log(`INFO: Switched to temporary branch '${tempBranchName}'.`);
 
         try {
-            console.log(`INFO: On branch '${tempBranchName}', attempting to execute internal remove for: ${patchFileName}`);
             await handleApplyOperation(patchFileName, false, true, '--remove (invoked by offset)', repoRoot);
-            console.log(`INFO: Internal remove of '${patchFileName}' command executed successfully on temp branch.`);
             cliEquivalentCallSucceeded = true;
         } catch (removeError: any) {
-            console.warn(`WARN: Internal remove of '${patchFileName}' command failed on temp branch.`);
             if (removeError.message) {
-                console.warn(`  Error details: ${removeError.message}`);
             }
 
-            console.log(`INFO: On branch '${tempBranchName}', attempting to execute internal add for: ${patchFileName} (after remove failed)`);
             try {
                 await handleApplyOperation(patchFileName, false, false, '--add (invoked by offset, after remove failed)', repoRoot);
-                console.log(`INFO: Internal add of '${patchFileName}' command executed successfully on temp branch.`);
                 cliEquivalentCallSucceeded = true;
             } catch (addError: any) {
-                console.warn(`WARN: Internal add of '${patchFileName}' command also failed on temp branch.`);
                 if (addError.message) {
-                    console.warn(`  Error details: ${addError.message}`);
                 }
                 cliEquivalentCallSucceeded = false;
             }
         }
 
         if (cliEquivalentCallSucceeded) {
-            console.log(`INFO: Staging changes on temporary branch '${tempBranchName}'.`);
             await execGit(repoRoot, ['add', '.']);
 
             const tempCommitMessageText = "Internal: Staged changes for offset update";
-            console.log(`INFO: Committing staged changes on temporary branch '${tempBranchName}'.`);
             await execGit(repoRoot, ['commit', '--allow-empty', '-m', tempCommitMessageText, '--quiet']);
 
             const tayloredDirPath = path.join(repoRoot, TAYLORED_DIR_NAME);
             await fs.ensureDir(tayloredDirPath);
 
-            console.log(`INFO: On branch '${tempBranchName}', calculating new patch content using 'git diff main HEAD'.`);
             const diffCmdResult = await execGit(repoRoot, ['diff', 'main', 'HEAD'], { allowFailure: true });
 
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
@@ -335,22 +322,18 @@ async function updatePatchOffsets(
                 const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
 
                 if (allHunksAreConsideredInverted) {
-                    console.log("INFO: The hunks of the recalculated patch are inverted. Proceeding to update/insert the message in the patch file while keeping the original diff content.");
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
                     finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
                 } else {
                     if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) {
-                         console.log(`INFO: The number of hunks differs (original: ${originalHunks.length}, new: ${newHunks.length}). The patch will be updated with the new content if different.`);
                     }
                     finalOutputContentToWrite = embedMessageInContent(cleanedDiffContent, effectiveMessageToEmbed);
                 }
 
                 // Refined write condition
                 if (finalOutputContentToWrite === originalPatchContent) {
-                    console.log(`INFO: The patch content (message and new diff) is identical to the original. No need to update the taylored file.`);
                 } else {
                     await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
-                    console.log(`SUCCESS: Patch file '${absolutePatchFilePath}' has been updated with new content and message (if applicable).`);
                 }
                 operationSucceeded = true;
             }
@@ -365,18 +348,14 @@ async function updatePatchOffsets(
         }
         operationSucceeded = false;
     } finally {
-        console.log("INFO: Cleaning up temporary branch and restoring original state...");
         try {
-            console.log(`INFO: Checking out original branch/commit '${originalBranchOrCommit}'.`);
             await execGit(repoRoot, ['checkout', '--force', originalBranchOrCommit, '--quiet']);
 
             const tempBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', tempBranchName], { allowFailure: true, ignoreStderr: true });
             if (tempBranchExistsResult.success) {
-                console.log(`INFO: Deleting temporary branch '${tempBranchName}'.`);
                 await execGit(repoRoot, ['branch', '-D', tempBranchName, '--quiet']);
             }
         } catch (cleanupErr: any) {
-            console.warn(`WARN: Error during Git cleanup: ${cleanupErr.message}. Manual cleanup of branch '${tempBranchName}' and checkout of '${originalBranchOrCommit}' might be needed.`);
         }
     }
 

@@ -29,19 +29,12 @@ export async function handleApplyOperation(
     const actualTayloredFilePath = path.join(tayloredDir, tayloredFileNameWithExt);
 
     // Log the operation details clearly.
-    console.log(`INFO: Initiating ${modeName} operation.`);
-    console.log(`  Taylored File:     ${actualTayloredFilePath} (from ${TAYLORED_DIR_NAME}/${tayloredFileNameWithExt})`);
-    console.log(`  Project Directory: ${CWD} (current working directory)`);
 
     if (isVerify) {
-        console.log("  Mode:              Verification only (using 'git apply --check').");
     } else {
-        console.log("  Mode:              Execution (applying changes to filesystem).");
     }
     if (isReverse) {
-        console.log("  Action:            Reverting/Removing differences based on taylored file.");
     } else {
-        console.log("  Action:            Applying/Adding differences from taylored file.");
     }
 
     try {
@@ -70,8 +63,6 @@ export async function handleApplyOperation(
     // though typically taylored filenames are sanitized.
     gitApplyCommand += ` "${actualTayloredFilePath.replace(/"/g, '\\"')}"`;
 
-    console.log(`  Executing command in '${CWD}': ${gitApplyCommand}`);
-
     try {
         // Execute the git apply command.
         // stdio: 'inherit' allows git's output (stdout, stderr) to be displayed directly in the console,
@@ -80,9 +71,7 @@ export async function handleApplyOperation(
 
         // Log success message based on whether it was a verification or an execution.
         if (isVerify) {
-            console.log(`SUCCESS: Verification for ${modeName} successful. The taylored file ${isReverse ? 'can be reverted' : 'can be applied'} cleanly.`);
         } else {
-            console.log(`SUCCESS: ${modeName} operation completed.`);
         }
     } catch (error: any) {
         // execSync throws an error if the command exits with a non-zero status,

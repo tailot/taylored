@@ -140,13 +140,8 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
     const targetDirectoryPath = path.join(CWD, TAYLORED_DIR_NAME);
     const resolvedOutputFileName = path.join(targetDirectoryPath, outputFileName);
 
-    console.log(`INFO: Executing --save operation for branch "${branchName}".`);
-    console.log(`  Target output directory: ${targetDirectoryPath}`);
-    console.log(`  Target output file: ${resolvedOutputFileName}`);
-
     try {
         await fsExtra.ensureDir(targetDirectoryPath);
-        console.log(`INFO: Ensured directory '${TAYLORED_DIR_NAME}' exists at '${targetDirectoryPath}'.`);
     } catch (mkdirError: any) {
         console.error(`CRITICAL ERROR: Failed to create directory '${targetDirectoryPath}'. Details: ${mkdirError.message}`);
         throw mkdirError;
@@ -158,14 +153,6 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
         if (typeof diffResult.diffOutput === 'string') {
             try {
                 await fs.writeFile(resolvedOutputFileName, diffResult.diffOutput);
-                console.log(`SUCCESS: Diff file '${resolvedOutputFileName}' created.`);
-                if (diffResult.additions === 0 && diffResult.deletions === 0) {
-                    console.log(`INFO: The diff ${diffResult.diffOutput.trim() === '' ? 'is empty' : 'contains no textual line changes'}. Additions: 0, Deletions: 0.`);
-                } else if (diffResult.additions > 0) {
-                    console.log(`INFO: The diff contains only additions (${diffResult.additions} line(s)).`);
-                } else if (diffResult.deletions > 0) {
-                    console.log(`INFO: The diff contains only deletions (${diffResult.deletions} line(s)).`);
-                }
             } catch (writeError: any) {
                 console.error(`CRITICAL ERROR: Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`);
                 throw writeError;
@@ -201,19 +188,14 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
  */
 async function handleListOperation(CWD: string): Promise<void> {
     const tayloredDirPath = path.join(CWD, TAYLORED_DIR_NAME);
-    console.log(`INFO: Listing ${TAYLORED_FILE_EXTENSION} files from '${tayloredDirPath}'...`);
     try {
         try {
             const stats = await fs.stat(tayloredDirPath);
             if (!stats.isDirectory()) {
-                console.log(`INFO: Expected '${TAYLORED_DIR_NAME}' to be a directory, but it's not (found at '${tayloredDirPath}').`);
-                console.log("No taylored files to list.");
                 return;
             }
         } catch (statError: any) {
             if (statError.code === 'ENOENT') {
-                console.log(`INFO: Directory '${TAYLORED_DIR_NAME}' not found at '${tayloredDirPath}'.`);
-                console.log("No taylored files to list.");
                 return;
             }
             console.error(`CRITICAL ERROR: Could not access directory '${tayloredDirPath}'. Details: ${statError.message}`);
@@ -236,11 +218,8 @@ async function handleListOperation(CWD: string): Promise<void> {
         }
 
         if (tayloredFilesList.length === 0) {
-            console.log(`INFO: No ${TAYLORED_FILE_EXTENSION} files found in '${tayloredDirPath}'.`);
         } else {
-            console.log(`\nAvailable ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/':`);
             tayloredFilesList.sort().forEach(fileName => {
-                console.log(`  - ${fileName}`);
             });
         }
     } catch (error: any) {
@@ -256,24 +235,15 @@ async function handleListOperation(CWD: string): Promise<void> {
  * @param customCommitMessage Optional custom commit message (will trigger a warning as it's unused).
  */
 async function handleOffsetCommand(userInputFileName: string, CWD: string, customCommitMessage?: string): Promise<void> {
-    console.log(`INFO: Initiating --offset operation for taylored file: '${userInputFileName}'.`);
-
     const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
     if (resolvedTayloredFileName !== userInputFileName) {
-        console.log(`INFO: Using actual file name '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
     }
 
-    console.log(`  Target Patch File: ${resolvedTayloredFileName} (located in '${TAYLORED_DIR_NAME}/' directory)`);
-    console.log(`  Repository Root: ${CWD}`);
-
     if (customCommitMessage) {
-        console.log(`INFO: The --message option was provided ("${customCommitMessage}"). This will be used for the 'Subject:' line of the updated .taylored file if a new patch is generated. Temporary commits made during the offset process use a default message.`);
     }
 
     try {
         const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, customCommitMessage);
-        console.log(`\nSUCCESS: Offset update process for '${resolvedTayloredFileName}' completed.`);
-        console.log(`  Updated patch file: ${result.outputPath}`);
 
     } catch (error: any) {
         console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
@@ -338,7 +308,6 @@ async function main(): Promise<void> {
                 printUsageAndExit(`CRITICAL ERROR: A '.git' entity exists at '${gitDirPath}', but it is not a directory. This script must be run from the root of a Git repository.`);
             }
             if (mode !== '--data') {
-                console.log(`INFO: Verified execution within a Git repository root ('${CWD}').`);
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
@@ -422,7 +391,6 @@ async function main(): Promise<void> {
 
                 const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
                 if (resolvedTayloredFileName !== userInputFileName) {
-                    console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
                 }
 
                 let isVerify = false;

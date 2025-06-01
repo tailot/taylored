@@ -188,14 +188,19 @@ async function handleSaveOperation(branchName: string, CWD: string): Promise<voi
  */
 async function handleListOperation(CWD: string): Promise<void> {
     const tayloredDirPath = path.join(CWD, TAYLORED_DIR_NAME);
+    console.log(`INFO: Listing ${TAYLORED_FILE_EXTENSION} files from '${tayloredDirPath}'...`);
     try {
         try {
             const stats = await fs.stat(tayloredDirPath);
             if (!stats.isDirectory()) {
+                console.log(`INFO: Expected '${TAYLORED_DIR_NAME}' to be a directory, but it's not (found at '${tayloredDirPath}').`);
+                console.log("No taylored files to list.");
                 return;
             }
         } catch (statError: any) {
             if (statError.code === 'ENOENT') {
+                console.log(`INFO: Directory '${TAYLORED_DIR_NAME}' not found at '${tayloredDirPath}'.`);
+                console.log("No taylored files to list.");
                 return;
             }
             console.error(`CRITICAL ERROR: Could not access directory '${tayloredDirPath}'. Details: ${statError.message}`);
@@ -218,8 +223,11 @@ async function handleListOperation(CWD: string): Promise<void> {
         }
 
         if (tayloredFilesList.length === 0) {
+            console.log(`INFO: No ${TAYLORED_FILE_EXTENSION} files found in '${tayloredDirPath}'.`);
         } else {
+            console.log(`\nAvailable ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/':`);
             tayloredFilesList.sort().forEach(fileName => {
+                console.log(`  - ${fileName}`);
             });
         }
     } catch (error: any) {

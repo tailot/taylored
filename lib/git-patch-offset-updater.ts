@@ -210,25 +210,19 @@ async function updatePatchOffsets(
         await execGit(repoRoot, ['checkout', '-b', tempBranchName, originalBranchOrCommit, '--quiet']);
         console.log(`INFO: Switched to temporary branch '${tempBranchName}'.`);
 
-        // MODIFIED: Direct function calls to handleApplyOperation instead of CLI commands
         try {
             console.log(`INFO: On branch '${tempBranchName}', attempting to execute internal remove for: ${patchFileName}`);
-            // Call handleApplyOperation for remove.
-            // patchFileName already includes the .taylored extension.
             await handleApplyOperation(patchFileName, false, true, '--remove (invoked by offset)', repoRoot);
             console.log(`INFO: Internal remove of '${patchFileName}' command executed successfully on temp branch.`);
             cliEquivalentCallSucceeded = true;
         } catch (removeError: any) {
             console.warn(`WARN: Internal remove of '${patchFileName}' command failed on temp branch.`);
             if (removeError.message) {
-                // handleApplyOperation already logs detailed errors from git apply.
-                // This log is supplementary.
                 console.warn(`  Error details: ${removeError.message}`);
             }
 
             console.log(`INFO: On branch '${tempBranchName}', attempting to execute internal add for: ${patchFileName} (after remove failed)`);
             try {
-                // Call handleApplyOperation for add.
                 await handleApplyOperation(patchFileName, false, false, '--add (invoked by offset, after remove failed)', repoRoot);
                 console.log(`INFO: Internal add of '${patchFileName}' command executed successfully on temp branch.`);
                 cliEquivalentCallSucceeded = true;
@@ -259,12 +253,13 @@ async function updatePatchOffsets(
             const rawNewDiffContent = diffCmdResult.stdout || "";
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
-                console.error(`ERROR: 'git diff main HEAD' command execution failed with unexpected exit code ${diffCmdResult.error.code} on temp branch.`);
+                console.error(`ERRORE: L'esecuzione del comando 'git diff main HEAD' è fallita con un codice di uscita imprevisto ${diffCmdResult.error.code} sul branch temporaneo.`);
                 if (diffCmdResult.stderr) console.error(`  Stderr: ${diffCmdResult.stderr}`);
+                 // operationSucceeded will remain false or be set to false
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);
                 const newHunks = parsePatchHunks(rawNewDiffContent);
-
+                
                 let numCorrespondingHunks = 0;
                 let numInvertedHunks = 0;
                 let allHunksAreConsideredInverted = false;
@@ -289,46 +284,49 @@ async function updatePatchOffsets(
                         allHunksAreConsideredInverted = true;
                     }
                 } else if (originalHunks.length !== newHunks.length) {
-                     console.log(`INFO: Number of hunks differs (original: ${originalHunks.length}, new: ${newHunks.length}). Patch will be updated with new content if different.`);
+                     console.log(`INFO: Il numero di hunk differisce (originale: ${originalHunks.length}, nuovo: ${newHunks.length}). La patch verrà aggiornata con il nuovo contenuto se differente.`);
                 }
 
                 if (allHunksAreConsideredInverted) {
                     console.log("INFO: Tutti gli hunk della patch ricalcolata risultano 'strettamente' invertiti rispetto all'originale. Il file taylored non verrà aggiornato.");
-                    operationSucceeded = true;
+                    operationSucceeded = true; 
                 } else {
                     let messageToEmbed: string | null = null;
                     if (customCommitMessage) {
-                        // The warning about customCommitMessage being unused by this new logic
-                        // should be handled by the caller (e.g., handleOffsetCommand in index.ts)
-                        // or noted here if this function is the sole decider.
-                        // For now, we assume the caller warns.
                         messageToEmbed = customCommitMessage;
                     } else {
                         messageToEmbed = extractMessageFromPatch(originalPatchContent);
                     }
 
-                    let finalOutputContent = rawNewDiffContent;
+                    // 1. Clean trailing whitespace from each line of the raw diff content
+                    const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
+
+                    let finalOutputContentToWrite = cleanedDiffContent;
+
                     if (messageToEmbed) {
                         const subjectLine = `Subject: [PATCH] ${messageToEmbed}`;
-                        if (rawNewDiffContent.trim() === "") {
-                           finalOutputContent = `${subjectLine}\n`;
+                        // Only add the subject line if there's actual, non-whitespace diff content.
+                        if (cleanedDiffContent.trim() !== "") {
+                            finalOutputContentToWrite = `${subjectLine}\n\n${cleanedDiffContent}`;
                         } else {
-                           finalOutputContent = `${subjectLine}\n\n${rawNewDiffContent}`;
+                            // If the diff is effectively empty, the patch file should also be empty.
+                            // A "Subject" line alone makes an invalid patch for `git apply`.
+                            finalOutputContentToWrite = "";
                         }
                     }
-
-                    if (finalOutputContent.trim() === originalPatchContent.trim()) {
+                    
+                    if (finalOutputContentToWrite.trim() === originalPatchContent.trim()) {
                         console.log(`INFO: Il contenuto della patch (messaggio e nuovo diff) è identico a quello originale. Non è necessario aggiornare il file taylored.`);
                         operationSucceeded = true;
                     } else {
-                        await fs.writeFile(absolutePatchFilePath, finalOutputContent);
-                        console.log(`SUCCESS: Patch file '${absolutePatchFilePath}' aggiornato con nuovo contenuto e messaggio (se applicabile).`);
+                        await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite); // Use finalOutputContentToWrite
+                        console.log(`SUCCESSO: Il file di patch '${absolutePatchFilePath}' è stato aggiornato con nuovo contenuto e messaggio (se applicabile).`);
                         operationSucceeded = true;
                     }
                 }
             }
-        } else {
-            console.error(`ERROR: Prerequisite internal apply/remove operations for '${patchFileName}' failed on temp branch.`);
+        } else { 
+            console.error(`ERRORE: Le operazioni interne preliminari di apply/remove per '${patchFileName}' sono fallite sul branch temporaneo.`);
         }
 
     } catch (error: any) {
@@ -336,7 +334,6 @@ async function updatePatchOffsets(
         if (error instanceof GitExecutionError && error.stderr) {
             console.error(`Git STDERR: ${error.stderr}`);
         }
-        // Ensure operationSucceeded remains false if an error occurs in the main try block
         operationSucceeded = false;
     } finally {
         console.log("INFO: Cleaning up temporary branch and restoring original state...");
@@ -355,7 +352,6 @@ async function updatePatchOffsets(
     }
 
     if (!operationSucceeded) {
-        // This error message is consistent with the original logic when the internal operations fail or the patch is deemed obsolete.
         throw new Error(`WARNING: The taylored file '${patchFileName}' is obsolete or could not be processed for offset update.`);
     }
 

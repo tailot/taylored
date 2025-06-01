@@ -1,3 +1,4 @@
+// lib/git-patch-offset-updater.ts
 // Copyright (c) 2025 tailot@gmail.com
 // SPDX-License-Identifier: MIT
 
@@ -5,6 +6,8 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { exec, ExecOptions as ChildProcessExecOptions } from 'child_process';
 import * as util from 'util';
+import { handleApplyOperation } from './apply-logic'; // MODIFIED: Import handleApplyOperation
+import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants'; // MODIFIED: Import constants
 
 const execAsync = util.promisify(exec);
 
@@ -96,7 +99,7 @@ function extractMessageFromPatch(patchContent: string | null | undefined): strin
         /^Fixes:/i, /^Link:/i, /^[a-zA-Z0-9-]+:/
     ];
     for (const line of lines) {
-        if (line.startsWith('---')) { inHeader = false; continue; } 
+        if (line.startsWith('---')) { inHeader = false; continue; }
         if (line.startsWith('diff --git')) { foundDiff = true; break; }
         if (!inHeader && !foundDiff && line.trim() !== '') {
             const trimmedLine = line.trim();
@@ -108,7 +111,7 @@ function extractMessageFromPatch(patchContent: string | null | undefined): strin
                 }
             }
             if (!isHeaderLike) {
-                if (potentialMessageLines.length < 10) { 
+                if (potentialMessageLines.length < 10) {
                     potentialMessageLines.push(trimmedLine);
                 }
             }
@@ -117,11 +120,11 @@ function extractMessageFromPatch(patchContent: string | null | undefined): strin
     if (potentialMessageLines.length > 0) {
         for (const pLine of potentialMessageLines) {
             const colonIndex = pLine.indexOf(':');
-            if (colonIndex === -1 || colonIndex > 30) { 
+            if (colonIndex === -1 || colonIndex > 30) {
                  return pLine;
             }
         }
-        return potentialMessageLines[0]; 
+        return potentialMessageLines[0];
     }
     return null;
 }
@@ -167,13 +170,12 @@ interface SimplifiedUpdatePatchOffsetsResult {
 }
 
 async function updatePatchOffsets(
-    patchFileName: string,
+    patchFileName: string, // Expected to be the full filename with .taylored extension
     repoRoot: string,
     customCommitMessage?: string
 ): Promise<SimplifiedUpdatePatchOffsetsResult> {
-    const tayloredDirName = '.taylored';
-    const TAYLORED_FILE_EXTENSION = '.taylored';
-    const absolutePatchFilePath = path.join(repoRoot, tayloredDirName, patchFileName);
+    // Constants are now imported
+    const absolutePatchFilePath = path.join(repoRoot, TAYLORED_DIR_NAME, patchFileName);
 
     if (!fs.existsSync(absolutePatchFilePath) || !fs.statSync(absolutePatchFilePath).isFile()) {
         throw new Error(`Patch file '${absolutePatchFilePath}' not found or is not a file.`);
@@ -201,46 +203,45 @@ async function updatePatchOffsets(
 
     const tempBranchName = `temp/offset-automation-${Date.now()}`;
     let operationSucceeded = false;
-    let cliCallSucceeded = false;
+    let cliEquivalentCallSucceeded = false; // Renamed for clarity
 
     try {
         console.log(`INFO: Creating temporary branch '${tempBranchName}' from '${originalBranchOrCommit}'.`);
         await execGit(repoRoot, ['checkout', '-b', tempBranchName, originalBranchOrCommit, '--quiet']);
         console.log(`INFO: Switched to temporary branch '${tempBranchName}'.`);
 
-        const baseName = patchFileName.replace(new RegExp(`\\${TAYLORED_FILE_EXTENSION}$`), '');
-        const nodeExecutable = process.argv[0];
-        const scriptPath = process.argv[1];
-        const tayloredCliCommandBase = `${quoteForShell(nodeExecutable)} ${quoteForShell(scriptPath)}`;
-
-        const removeCommand = `${tayloredCliCommandBase} --remove ${quoteForShell(baseName)}`;
-        console.log(`INFO: On branch '${tempBranchName}', attempting to execute: ${removeCommand}`);
+        // MODIFIED: Direct function calls to handleApplyOperation instead of CLI commands
         try {
-            const { stdout, stderr } = await execAsync(removeCommand, { cwd: repoRoot });
-            if (stderr && stderr.trim() !== '') console.warn(`WARN: Stderr from 'taylored --remove ${baseName}' on temp branch:\n${stderr.trim()}`);
-            console.log(`INFO: 'taylored --remove ${baseName}' command executed successfully on temp branch.`);
-            cliCallSucceeded = true;
+            console.log(`INFO: On branch '${tempBranchName}', attempting to execute internal remove for: ${patchFileName}`);
+            // Call handleApplyOperation for remove.
+            // patchFileName already includes the .taylored extension.
+            await handleApplyOperation(patchFileName, false, true, '--remove (invoked by offset)', repoRoot);
+            console.log(`INFO: Internal remove of '${patchFileName}' command executed successfully on temp branch.`);
+            cliEquivalentCallSucceeded = true;
         } catch (removeError: any) {
-            console.warn(`WARN: 'taylored --remove ${baseName}' command failed on temp branch.`);
-            if (removeError.stdout && removeError.stdout.trim() !== '') console.warn(`  Stdout: ${removeError.stdout.trim()}`);
-            if (removeError.stderr && removeError.stderr.trim() !== '') console.warn(`  Stderr: ${removeError.stderr.trim()}`);
-            
-            const addCommand = `${tayloredCliCommandBase} --add ${quoteForShell(baseName)}`;
-            console.log(`INFO: On branch '${tempBranchName}', attempting to execute: ${addCommand}`);
+            console.warn(`WARN: Internal remove of '${patchFileName}' command failed on temp branch.`);
+            if (removeError.message) {
+                // handleApplyOperation already logs detailed errors from git apply.
+                // This log is supplementary.
+                console.warn(`  Error details: ${removeError.message}`);
+            }
+
+            console.log(`INFO: On branch '${tempBranchName}', attempting to execute internal add for: ${patchFileName} (after remove failed)`);
             try {
-                const { stdout, stderr } = await execAsync(addCommand, { cwd: repoRoot });
-                if (stderr && stderr.trim() !== '') console.warn(`WARN: Stderr from 'taylored --add ${baseName}' on temp branch:\n${stderr.trim()}`);
-                console.log(`INFO: 'taylored --add ${baseName}' command executed successfully on temp branch.`);
-                cliCallSucceeded = true;
+                // Call handleApplyOperation for add.
+                await handleApplyOperation(patchFileName, false, false, '--add (invoked by offset, after remove failed)', repoRoot);
+                console.log(`INFO: Internal add of '${patchFileName}' command executed successfully on temp branch.`);
+                cliEquivalentCallSucceeded = true;
             } catch (addError: any) {
-                console.warn(`WARN: 'taylored --add ${baseName}' command also failed on temp branch.`);
-                if (addError.stdout && addError.stdout.trim() !== '') console.warn(`  Stdout: ${addError.stdout.trim()}`);
-                if (addError.stderr && addError.stderr.trim() !== '') console.warn(`  Stderr: ${addError.stderr.trim()}`);
-                cliCallSucceeded = false; 
+                console.warn(`WARN: Internal add of '${patchFileName}' command also failed on temp branch.`);
+                if (addError.message) {
+                    console.warn(`  Error details: ${addError.message}`);
+                }
+                cliEquivalentCallSucceeded = false;
             }
         }
 
-        if (cliCallSucceeded) {
+        if (cliEquivalentCallSucceeded) {
             console.log(`INFO: Staging changes on temporary branch '${tempBranchName}'.`);
             await execGit(repoRoot, ['add', '.']);
 
@@ -248,14 +249,14 @@ async function updatePatchOffsets(
             console.log(`INFO: Committing staged changes on temporary branch '${tempBranchName}'.`);
             await execGit(repoRoot, ['commit', '--allow-empty', '-m', tempCommitMessage, '--quiet']);
 
-            const tayloredDirPath = path.join(repoRoot, tayloredDirName);
+            const tayloredDirPath = path.join(repoRoot, TAYLORED_DIR_NAME);
             await fs.ensureDir(tayloredDirPath);
 
             console.log(`INFO: On branch '${tempBranchName}', calculating new patch content using 'git diff main HEAD'.`);
             const diffCmdResult = await execGit(repoRoot, ['diff', 'main', 'HEAD'], { allowFailure: true });
-            
+
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
-            const rawNewDiffContent = diffCmdResult.stdout || ""; 
+            const rawNewDiffContent = diffCmdResult.stdout || "";
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
                 console.error(`ERROR: 'git diff main HEAD' command execution failed with unexpected exit code ${diffCmdResult.error.code} on temp branch.`);
@@ -263,7 +264,7 @@ async function updatePatchOffsets(
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);
                 const newHunks = parsePatchHunks(rawNewDiffContent);
-                
+
                 let numCorrespondingHunks = 0;
                 let numInvertedHunks = 0;
                 let allHunksAreConsideredInverted = false;
@@ -274,13 +275,12 @@ async function updatePatchOffsets(
                         const origHunk = originalHunks[i];
                         const newHunk = newHunks[i];
 
-                        // Stricter inversion check: checks start lines and line counts
                         if (
                             newHunk.oldStart === origHunk.newStart &&
                             newHunk.oldLines === origHunk.newLines &&
                             newHunk.newStart === origHunk.oldStart &&
                             newHunk.newLines === origHunk.oldLines &&
-                            origHunk.oldLines !== origHunk.newLines // Asymmetry condition
+                            origHunk.oldLines !== origHunk.newLines
                         ) {
                             numInvertedHunks++;
                         }
@@ -294,25 +294,29 @@ async function updatePatchOffsets(
 
                 if (allHunksAreConsideredInverted) {
                     console.log("INFO: Tutti gli hunk della patch ricalcolata risultano 'strettamente' invertiti rispetto all'originale. Il file taylored non verrà aggiornato.");
-                    operationSucceeded = true; 
+                    operationSucceeded = true;
                 } else {
                     let messageToEmbed: string | null = null;
                     if (customCommitMessage) {
+                        // The warning about customCommitMessage being unused by this new logic
+                        // should be handled by the caller (e.g., handleOffsetCommand in index.ts)
+                        // or noted here if this function is the sole decider.
+                        // For now, we assume the caller warns.
                         messageToEmbed = customCommitMessage;
                     } else {
                         messageToEmbed = extractMessageFromPatch(originalPatchContent);
                     }
 
-                    let finalOutputContent = rawNewDiffContent; 
+                    let finalOutputContent = rawNewDiffContent;
                     if (messageToEmbed) {
                         const subjectLine = `Subject: [PATCH] ${messageToEmbed}`;
                         if (rawNewDiffContent.trim() === "") {
-                           finalOutputContent = `${subjectLine}\n`; 
+                           finalOutputContent = `${subjectLine}\n`;
                         } else {
                            finalOutputContent = `${subjectLine}\n\n${rawNewDiffContent}`;
                         }
                     }
-                    
+
                     if (finalOutputContent.trim() === originalPatchContent.trim()) {
                         console.log(`INFO: Il contenuto della patch (messaggio e nuovo diff) è identico a quello originale. Non è necessario aggiornare il file taylored.`);
                         operationSucceeded = true;
@@ -324,7 +328,7 @@ async function updatePatchOffsets(
                 }
             }
         } else {
-            console.error(`ERROR: Prerequisite 'taylored --remove ${baseName}' or 'taylored --add ${baseName}' failed on temp branch.`);
+            console.error(`ERROR: Prerequisite internal apply/remove operations for '${patchFileName}' failed on temp branch.`);
         }
 
     } catch (error: any) {
@@ -332,12 +336,14 @@ async function updatePatchOffsets(
         if (error instanceof GitExecutionError && error.stderr) {
             console.error(`Git STDERR: ${error.stderr}`);
         }
+        // Ensure operationSucceeded remains false if an error occurs in the main try block
+        operationSucceeded = false;
     } finally {
         console.log("INFO: Cleaning up temporary branch and restoring original state...");
         try {
             console.log(`INFO: Checking out original branch/commit '${originalBranchOrCommit}'.`);
             await execGit(repoRoot, ['checkout', '--force', originalBranchOrCommit, '--quiet']);
-            
+
             const tempBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', tempBranchName], { allowFailure: true, ignoreStderr: true });
             if (tempBranchExistsResult.success) {
                 console.log(`INFO: Deleting temporary branch '${tempBranchName}'.`);
@@ -349,11 +355,11 @@ async function updatePatchOffsets(
     }
 
     if (!operationSucceeded) {
-        throw new Error(`WARNING: The taylored file '${patchFileName}' is obsolete or could not be processed.`);
+        // This error message is consistent with the original logic when the internal operations fail or the patch is deemed obsolete.
+        throw new Error(`WARNING: The taylored file '${patchFileName}' is obsolete or could not be processed for offset update.`);
     }
 
     return { outputPath: absolutePatchFilePath };
 }
 
-// La funzione getDiffBody è stata rimossa perché non più necessaria con questa logica.
 export { updatePatchOffsets, extractMessageFromPatch, parsePatchHunks, quoteForShell, GitExecutionError };

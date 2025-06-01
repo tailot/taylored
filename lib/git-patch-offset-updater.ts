@@ -6,8 +6,8 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { exec, ExecOptions as ChildProcessExecOptions } from 'child_process';
 import * as util from 'util';
-import { handleApplyOperation } from './apply-logic'; // MODIFIED: Import handleApplyOperation
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants'; // MODIFIED: Import constants
+import { handleApplyOperation } from './apply-logic';
+import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
 
 const execAsync = util.promisify(exec);
 
@@ -165,16 +165,62 @@ function parsePatchHunks(patchContent: string | null | undefined): HunkHeaderInf
     return hunks;
 }
 
+/**
+ * Helper function to embed a message as a Subject line into patch content.
+ * @param diffBody The main body of the diff.
+ * @param message The message to embed. If null, diffBody is returned as is.
+ * @returns Patch content with the message embedded, or original if no message.
+ */
+function embedMessageInContent(diffBody: string, message: string | null): string {
+    let contentToWrite = diffBody;
+    if (message) {
+        const subjectLine = `Subject: [PATCH] ${message}`;
+        // Ensure diffBody is trimmed before checking if it's empty,
+        // but use the un-trimmed version if adding subject.
+        if (diffBody.trim() !== "") {
+            contentToWrite = `${subjectLine}\n\n${diffBody}`;
+        } else {
+            // If original diff body was effectively empty, and we have a message,
+            // the patch should represent no changes, so it should be empty.
+            contentToWrite = "";
+        }
+    }
+    // Ensure the final string written to file ends with a newline if not empty
+    if (contentToWrite !== "" && !contentToWrite.endsWith('\n')) {
+        contentToWrite += '\n';
+    }
+    return contentToWrite;
+}
+
+/**
+ * Helper function to get the actual diff body, stripping any existing Subject line.
+ * @param patchFileContent The full content of the patch file.
+ * @returns The diff body.
+ */
+function getActualDiffBody(patchFileContent: string): string {
+    const lines = patchFileContent.split('\n');
+    if (lines.length > 0 && lines[0].startsWith('Subject: [PATCH]')) {
+        // Check for the empty line after Subject
+        if (lines.length > 1 && lines[1] === '') { 
+            return lines.slice(2).join('\n'); // Skip Subject and empty line
+        }
+        // If Subject line exists but no empty line follows (e.g., an empty patch that only had a Subject)
+        // consider the body to be empty.
+        return ""; 
+    }
+    return patchFileContent; // No Subject line found, return content as is
+}
+
+
 interface SimplifiedUpdatePatchOffsetsResult {
     outputPath: string;
 }
 
 async function updatePatchOffsets(
-    patchFileName: string, // Expected to be the full filename with .taylored extension
+    patchFileName: string,
     repoRoot: string,
     customCommitMessage?: string
 ): Promise<SimplifiedUpdatePatchOffsetsResult> {
-    // Constants are now imported
     const absolutePatchFilePath = path.join(repoRoot, TAYLORED_DIR_NAME, patchFileName);
 
     if (!fs.existsSync(absolutePatchFilePath) || !fs.statSync(absolutePatchFilePath).isFile()) {
@@ -203,7 +249,7 @@ async function updatePatchOffsets(
 
     const tempBranchName = `temp/offset-automation-${Date.now()}`;
     let operationSucceeded = false;
-    let cliEquivalentCallSucceeded = false; // Renamed for clarity
+    let cliEquivalentCallSucceeded = false;
 
     try {
         console.log(`INFO: Creating temporary branch '${tempBranchName}' from '${originalBranchOrCommit}'.`);
@@ -239,9 +285,9 @@ async function updatePatchOffsets(
             console.log(`INFO: Staging changes on temporary branch '${tempBranchName}'.`);
             await execGit(repoRoot, ['add', '.']);
 
-            const tempCommitMessage = "Internal: Staged changes for offset update";
+            const tempCommitMessageText = "Internal: Staged changes for offset update";
             console.log(`INFO: Committing staged changes on temporary branch '${tempBranchName}'.`);
-            await execGit(repoRoot, ['commit', '--allow-empty', '-m', tempCommitMessage, '--quiet']);
+            await execGit(repoRoot, ['commit', '--allow-empty', '-m', tempCommitMessageText, '--quiet']);
 
             const tayloredDirPath = path.join(repoRoot, TAYLORED_DIR_NAME);
             await fs.ensureDir(tayloredDirPath);
@@ -252,24 +298,27 @@ async function updatePatchOffsets(
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
             const rawNewDiffContent = diffCmdResult.stdout || "";
 
+            // Determine effective message to embed (custom takes precedence)
+            let effectiveMessageToEmbed: string | null = null;
+            if (customCommitMessage) {
+                effectiveMessageToEmbed = customCommitMessage;
+            } else {
+                effectiveMessageToEmbed = extractMessageFromPatch(originalPatchContent);
+            }
+
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
                 console.error(`ERRORE: L'esecuzione del comando 'git diff main HEAD' è fallita con un codice di uscita imprevisto ${diffCmdResult.error.code} sul branch temporaneo.`);
                 if (diffCmdResult.stderr) console.error(`  Stderr: ${diffCmdResult.stderr}`);
-                 // operationSucceeded will remain false or be set to false
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);
                 const newHunks = parsePatchHunks(rawNewDiffContent);
                 
-                let numCorrespondingHunks = 0;
-                let numInvertedHunks = 0;
                 let allHunksAreConsideredInverted = false;
-
                 if (originalHunks.length > 0 && originalHunks.length === newHunks.length) {
-                    numCorrespondingHunks = originalHunks.length;
+                    let numInvertedHunks = 0;
                     for (let i = 0; i < originalHunks.length; i++) {
                         const origHunk = originalHunks[i];
                         const newHunk = newHunks[i];
-
                         if (
                             newHunk.oldStart === origHunk.newStart &&
                             newHunk.oldLines === origHunk.newLines &&
@@ -280,49 +329,39 @@ async function updatePatchOffsets(
                             numInvertedHunks++;
                         }
                     }
-                    if (numInvertedHunks > 0 && numInvertedHunks === numCorrespondingHunks) {
+                    if (numInvertedHunks > 0 && numInvertedHunks === originalHunks.length) {
                         allHunksAreConsideredInverted = true;
                     }
-                } else if (originalHunks.length !== newHunks.length) {
-                     console.log(`INFO: Il numero di hunk differisce (originale: ${originalHunks.length}, nuovo: ${newHunks.length}). La patch verrà aggiornata con il nuovo contenuto se differente.`);
                 }
 
+                let finalOutputContentToWrite: string;
+
                 if (allHunksAreConsideredInverted) {
-                    console.log("INFO: Tutti gli hunk della patch ricalcolata risultano 'strettamente' invertiti rispetto all'originale. Il file taylored non verrà aggiornato.");
-                    operationSucceeded = true; 
-                } else {
-                    let messageToEmbed: string | null = null;
-                    if (customCommitMessage) {
-                        messageToEmbed = customCommitMessage;
-                    } else {
-                        messageToEmbed = extractMessageFromPatch(originalPatchContent);
-                    }
+                    console.log("INFO: Gli hunk della patch ricalcolata sono invertiti. Si procede ad aggiornare/inserire il messaggio nel file di patch mantenendo il contenuto diff originale.");
+                    const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
+                    finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
 
-                    // 1. Clean trailing whitespace from each line of the raw diff content
+                    if (finalOutputContentToWrite === originalPatchContent) {
+                        console.log(`INFO: Il file taylored è già aggiornato con il messaggio corretto e contenuto diff originale (hunk invertiti). Nessun aggiornamento necessario.`);
+                    } else {
+                        await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
+                        console.log(`SUCCESSO: Il file di patch '${absolutePatchFilePath}' è stato aggiornato con il messaggio (contenuto diff originale mantenuto a seguito di hunk invertiti).`);
+                    }
+                    operationSucceeded = true;
+                } else { // Not allHunksAreConsideredInverted - use new diff content
+                    if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) { // only log if not add/del of all hunks
+                         console.log(`INFO: Il numero di hunk differisce (originale: ${originalHunks.length}, nuovo: ${newHunks.length}). La patch verrà aggiornata con il nuovo contenuto se differente.`);
+                    }
                     const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
-
-                    let finalOutputContentToWrite = cleanedDiffContent;
-
-                    if (messageToEmbed) {
-                        const subjectLine = `Subject: [PATCH] ${messageToEmbed}`;
-                        // Only add the subject line if there's actual, non-whitespace diff content.
-                        if (cleanedDiffContent.trim() !== "") {
-                            finalOutputContentToWrite = `${subjectLine}\n\n${cleanedDiffContent}`;
-                        } else {
-                            // If the diff is effectively empty, the patch file should also be empty.
-                            // A "Subject" line alone makes an invalid patch for `git apply`.
-                            finalOutputContentToWrite = "";
-                        }
-                    }
+                    finalOutputContentToWrite = embedMessageInContent(cleanedDiffContent, effectiveMessageToEmbed);
                     
-                    if (finalOutputContentToWrite.trim() === originalPatchContent.trim()) {
+                    if (finalOutputContentToWrite === originalPatchContent) {
                         console.log(`INFO: Il contenuto della patch (messaggio e nuovo diff) è identico a quello originale. Non è necessario aggiornare il file taylored.`);
-                        operationSucceeded = true;
                     } else {
-                        await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite); // Use finalOutputContentToWrite
+                        await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
                         console.log(`SUCCESSO: Il file di patch '${absolutePatchFilePath}' è stato aggiornato con nuovo contenuto e messaggio (se applicabile).`);
-                        operationSucceeded = true;
                     }
+                    operationSucceeded = true;
                 }
             }
         } else { 

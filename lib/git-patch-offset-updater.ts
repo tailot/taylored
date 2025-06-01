@@ -221,6 +221,12 @@ async function updatePatchOffsets(
     repoRoot: string,
     customCommitMessage?: string
 ): Promise<SimplifiedUpdatePatchOffsetsResult> {
+    // Check for uncommitted changes before proceeding
+    const statusResult = await execGit(repoRoot, ['status', '--porcelain']);
+    if (statusResult.stdout.trim() !== '') {
+        throw new Error("CRITICAL ERROR: Uncommitted changes detected in the repository. Please commit or stash them before running --offset.\n" + statusResult.stdout);
+    }
+
     const absolutePatchFilePath = path.join(repoRoot, TAYLORED_DIR_NAME, patchFileName);
 
     if (!fs.existsSync(absolutePatchFilePath) || !fs.statSync(absolutePatchFilePath).isFile()) {

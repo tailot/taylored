@@ -167,29 +167,28 @@ function parsePatchHunks(patchContent: string | null | undefined): HunkHeaderInf
 
 /**
  * Helper function to embed a message as a Subject line into patch content.
- * @param diffBody The main body of the diff.
- * @param message The message to embed. If null, diffBody is returned as is.
- * @returns Patch content with the message embedded, or original if no message.
+ * @param diffBody The main body of the diff. Should be pre-cleaned (e.g., line endings normalized, trailing whitespace on lines removed).
+ * @param message The message to embed.
+ * @returns Patch content with the message embedded, or an empty string if the diffBody is effectively empty.
  */
 function embedMessageInContent(diffBody: string, message: string | null): string {
-    let contentToWrite = diffBody;
-    if (message) {
+    const trimmedDiffBody = diffBody.trim();
+
+    if (trimmedDiffBody === "") {
+        return ""; 
+    }
+
+    let contentWithPotentialMessage = diffBody;
+
+    if (message) { 
         const subjectLine = `Subject: [PATCH] ${message}`;
-        // Ensure diffBody is trimmed before checking if it's empty,
-        // but use the un-trimmed version if adding subject.
-        if (diffBody.trim() !== "") {
-            contentToWrite = `${subjectLine}\n\n${diffBody}`;
-        } else {
-            // If original diff body was effectively empty, and we have a message,
-            // the patch should represent no changes, so it should be empty.
-            contentToWrite = "";
-        }
+        contentWithPotentialMessage = `${subjectLine}\n\n${diffBody}`;
     }
-    // Ensure the final string written to file ends with a newline if not empty
-    if (contentToWrite !== "" && !contentToWrite.endsWith('\n')) {
-        contentToWrite += '\n';
+
+    if (contentWithPotentialMessage !== "" && !contentWithPotentialMessage.endsWith('\n')) {
+        contentWithPotentialMessage += '\n';
     }
-    return contentToWrite;
+    return contentWithPotentialMessage;
 }
 
 /**
@@ -200,15 +199,12 @@ function embedMessageInContent(diffBody: string, message: string | null): string
 function getActualDiffBody(patchFileContent: string): string {
     const lines = patchFileContent.split('\n');
     if (lines.length > 0 && lines[0].startsWith('Subject: [PATCH]')) {
-        // Check for the empty line after Subject
         if (lines.length > 1 && lines[1] === '') { 
-            return lines.slice(2).join('\n'); // Skip Subject and empty line
+            return lines.slice(2).join('\n'); 
         }
-        // If Subject line exists but no empty line follows (e.g., an empty patch that only had a Subject)
-        // consider the body to be empty.
         return ""; 
     }
-    return patchFileContent; // No Subject line found, return content as is
+    return patchFileContent; 
 }
 
 
@@ -221,7 +217,6 @@ async function updatePatchOffsets(
     repoRoot: string,
     customCommitMessage?: string
 ): Promise<SimplifiedUpdatePatchOffsetsResult> {
-    // Check for uncommitted changes before proceeding
     const statusResult = await execGit(repoRoot, ['status', '--porcelain']);
     if (statusResult.stdout.trim() !== '') {
         throw new Error("CRITICAL ERROR: Uncommitted changes detected in the repository. Please commit or stash them before running --offset.\n" + statusResult.stdout);
@@ -304,13 +299,16 @@ async function updatePatchOffsets(
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
             const rawNewDiffContent = diffCmdResult.stdout || "";
 
-            // Determine effective message to embed (custom takes precedence)
             let effectiveMessageToEmbed: string | null = null;
+            // DEBUG LOGGING START
+            console.log(`DEBUG: updatePatchOffsets - customCommitMessage received: '${customCommitMessage}'`);
             if (customCommitMessage) {
                 effectiveMessageToEmbed = customCommitMessage;
             } else {
                 effectiveMessageToEmbed = extractMessageFromPatch(originalPatchContent);
             }
+            console.log(`DEBUG: updatePatchOffsets - effectiveMessageToEmbed after logic: '${effectiveMessageToEmbed}'`);
+            // DEBUG LOGGING END
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
                 console.error(`ERROR: Execution of 'git diff main HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`);
@@ -318,7 +316,7 @@ async function updatePatchOffsets(
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);
                 const newHunks = parsePatchHunks(rawNewDiffContent);
-                
+
                 let allHunksAreConsideredInverted = false;
                 if (originalHunks.length > 0 && originalHunks.length === newHunks.length) {
                     let numInvertedHunks = 0;
@@ -341,37 +339,36 @@ async function updatePatchOffsets(
                 }
 
                 let finalOutputContentToWrite: string;
+                const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
+
+                // DEBUG LOGGING for embedMessageInContent inputs
+                console.log(`DEBUG: updatePatchOffsets - cleanedDiffContent.trim() === "": ${cleanedDiffContent.trim() === ""}`);
+                console.log(`DEBUG: updatePatchOffsets - cleanedDiffContent (first 70 chars): '${cleanedDiffContent.substring(0,70).replace(/\n/g, "\\n")}'`);
+
 
                 if (allHunksAreConsideredInverted) {
                     console.log("INFO: The hunks of the recalculated patch are inverted. Proceeding to update/insert the message in the patch file while keeping the original diff content.");
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
+                    console.log(`DEBUG: updatePatchOffsets (inverted) - bodyOfOriginalPatch (first 70 chars): '${bodyOfOriginalPatch.substring(0,70).replace(/\n/g, "\\n")}'`);
                     finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
-
-                    if (finalOutputContentToWrite === originalPatchContent) {
-                        console.log(`INFO: The taylored file is already updated with the correct message and original diff content (inverted hunks). No update needed.`);
-                    } else {
-                        await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
-                        console.log(`SUCCESS: The patch file '${absolutePatchFilePath}' has been updated with the message (original diff content maintained due to inverted hunks).`);
-                    }
-                    operationSucceeded = true;
-                } else { // Not allHunksAreConsideredInverted - use new diff content
-                    if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) { // only log if not add/del of all hunks
+                } else {
+                    if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) {
                          console.log(`INFO: The number of hunks differs (original: ${originalHunks.length}, new: ${newHunks.length}). The patch will be updated with the new content if different.`);
                     }
-                    const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
                     finalOutputContentToWrite = embedMessageInContent(cleanedDiffContent, effectiveMessageToEmbed);
-                    
-                    if (finalOutputContentToWrite === originalPatchContent) {
-                        console.log(`INFO: The patch content (message and new diff) is identical to the original. No need to update the taylored file.`);
-                    } else {
-                        await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
-                        console.log(`SUCCESS: The patch file '${absolutePatchFilePath}' has been updated with new content and message (if applicable).`);
-                    }
-                    operationSucceeded = true;
                 }
+
+                // Refined write condition
+                if (finalOutputContentToWrite === originalPatchContent) {
+                    console.log(`INFO: The patch content (message and new diff) is identical to the original. No need to update the taylored file.`);
+                } else {
+                    await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
+                    console.log(`SUCCESS: Patch file '${absolutePatchFilePath}' has been updated with new content and message (if applicable).`);
+                }
+                operationSucceeded = true;
             }
         } else { 
-            console.error(`ERRORE: Le operazioni interne preliminari di apply/remove per '${patchFileName}' sono fallite sul branch temporaneo.`);
+            console.error(`ERROR: Preliminary internal apply/remove operations for '${patchFileName}' failed on the temporary branch.`);
         }
 
     } catch (error: any) {

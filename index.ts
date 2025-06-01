@@ -17,6 +17,18 @@ import { updatePatchOffsets, extractMessageFromPatch } from './lib/git-patch-off
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './lib/constants';
 import { handleApplyOperation } from './lib/apply-logic';
 
+/**
+ * Resolves the taylored file name by appending the default extension if not present.
+ * @param userInputFileName The file name input by the user.
+ * @returns The resolved file name with the extension.
+ */
+function resolveTayloredFileName(userInputFileName: string): string {
+    if (userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
+        return userInputFileName;
+    }
+    return userInputFileName + TAYLORED_FILE_EXTENSION;
+}
+
 function printUsageAndExit(errorMessage?: string, detailed: boolean = false): void {
     if (errorMessage) {
         console.error(`\n${errorMessage}`);
@@ -28,7 +40,6 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
     console.error(`  taylored --verify-remove <taylored_file_name>`);
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
-    // console.error(`  taylored --upgrade`); // REMOVED
     console.error(`  taylored --offset <taylored_file_name> [--message "Custom commit message"]`);
     console.error(`  taylored --data <taylored_file_name>`);
 
@@ -47,7 +58,6 @@ function printUsageAndExit(errorMessage?: string, detailed: boolean = false): vo
         console.error(`  --save                    : Generate diff file into '${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}'.`);
         console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
         console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
-        // console.error(`  --upgrade                 : Attempt to upgrade all ${TAYLORED_FILE_EXTENSION} files in '${TAYLORED_DIR_NAME}/'.`); // REMOVED
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);
         console.error(`  --data                    : Extract and print message from a taylored file. Prints empty string if not found.`);
@@ -239,8 +249,6 @@ async function handleListOperation(CWD: string): Promise<void> {
     }
 }
 
-// REMOVED handleUpgradeOperation function
-
 /**
  * Handles the --offset command: updates patch offsets using the new logic.
  * @param userInputFileName The name of the .taylored file (without path).
@@ -250,9 +258,8 @@ async function handleListOperation(CWD: string): Promise<void> {
 async function handleOffsetCommand(userInputFileName: string, CWD: string, customCommitMessage?: string): Promise<void> {
     console.log(`INFO: Initiating --offset operation for taylored file: '${userInputFileName}'.`);
 
-    let resolvedTayloredFileName = userInputFileName;
-    if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
-        resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
+    const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
+    if (resolvedTayloredFileName !== userInputFileName) {
         console.log(`INFO: Using actual file name '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
     }
 
@@ -260,7 +267,7 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string, custo
     console.log(`  Repository Root: ${CWD}`);
 
     if (customCommitMessage) {
-        console.warn(`WARN: The --message option was provided ("${customCommitMessage}") for --offset. The underlying offset update logic may or may not use this directly for commit messages during its process. Refer to specific messages from the offset updater.`);
+        console.log(`INFO: The --message option was provided ("${customCommitMessage}"). This will be used for the 'Subject:' line of the updated .taylored file if a new patch is generated. Temporary commits made during the offset process use a default message.`);
     }
 
     try {
@@ -285,10 +292,7 @@ async function handleOffsetCommand(userInputFileName: string, CWD: string, custo
  * @param CWD The current working directory (expected to be the Git repository root).
  */
 async function handleDataOperation(userInputFileName: string, CWD: string): Promise<void> {
-    let resolvedTayloredFileName = userInputFileName;
-    if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
-        resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
-    }
+    const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
 
     const tayloredDir = path.join(CWD, TAYLORED_DIR_NAME);
     const actualTayloredFilePath = path.join(tayloredDir, resolvedTayloredFileName);
@@ -360,9 +364,7 @@ async function main(): Promise<void> {
                 printUsageAndExit("CRITICAL ERROR: --list option does not take any arguments.");
             }
             await handleListOperation(CWD);
-        } 
-        // REMOVED else if (mode === '--upgrade') block
-        else if (mode === '--offset') {
+        } else if (mode === '--offset') {
             if (rawArgs.length < 2) {
                 printUsageAndExit("CRITICAL ERROR: --offset option requires at least one <taylored_file_name> argument.");
             }
@@ -418,12 +420,9 @@ async function main(): Promise<void> {
                     printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${userInputFileName}') must be a simple filename without path separators (e.g., 'my_patch'). It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
                 }
 
-                let resolvedTayloredFileName = userInputFileName;
-                if (!userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
-                    resolvedTayloredFileName = userInputFileName + TAYLORED_FILE_EXTENSION;
-                    if (mode !== '--data') { 
-                         console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
-                    }
+                const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
+                if (resolvedTayloredFileName !== userInputFileName) {
+                    console.log(`INFO: Using actual file '${resolvedTayloredFileName}' based on provided name '${userInputFileName}'.`);
                 }
 
                 let isVerify = false;

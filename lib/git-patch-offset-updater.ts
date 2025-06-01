@@ -58,9 +58,6 @@ async function execGit(repoRoot: string, args: string[], options: ExecGitOptions
     const execOptions: ChildProcessExecOptions = { cwd: repoRoot, ...options.execOptions };
     try {
         const { stdout, stderr } = await execAsync(command, execOptions);
-        if (stderr && !options.ignoreStderr && stderr.trim() !== "") {
-            // console.warn(`Git command stderr for "${command}":\n${stderr.trim()}`);
-        }
         return { stdout: stdout.trim(), stderr: stderr.trim(), success: true };
     } catch (error: any) {
         if (options.allowFailure) {
@@ -300,15 +297,11 @@ async function updatePatchOffsets(
             const rawNewDiffContent = diffCmdResult.stdout || "";
 
             let effectiveMessageToEmbed: string | null = null;
-            // DEBUG LOGGING START
-            console.log(`DEBUG: updatePatchOffsets - customCommitMessage received: '${customCommitMessage}'`);
             if (customCommitMessage) {
                 effectiveMessageToEmbed = customCommitMessage;
             } else {
                 effectiveMessageToEmbed = extractMessageFromPatch(originalPatchContent);
             }
-            console.log(`DEBUG: updatePatchOffsets - effectiveMessageToEmbed after logic: '${effectiveMessageToEmbed}'`);
-            // DEBUG LOGGING END
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
                 console.error(`ERROR: Execution of 'git diff main HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`);
@@ -341,15 +334,9 @@ async function updatePatchOffsets(
                 let finalOutputContentToWrite: string;
                 const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
 
-                // DEBUG LOGGING for embedMessageInContent inputs
-                console.log(`DEBUG: updatePatchOffsets - cleanedDiffContent.trim() === "": ${cleanedDiffContent.trim() === ""}`);
-                console.log(`DEBUG: updatePatchOffsets - cleanedDiffContent (first 70 chars): '${cleanedDiffContent.substring(0,70).replace(/\n/g, "\\n")}'`);
-
-
                 if (allHunksAreConsideredInverted) {
                     console.log("INFO: The hunks of the recalculated patch are inverted. Proceeding to update/insert the message in the patch file while keeping the original diff content.");
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
-                    console.log(`DEBUG: updatePatchOffsets (inverted) - bodyOfOriginalPatch (first 70 chars): '${bodyOfOriginalPatch.substring(0,70).replace(/\n/g, "\\n")}'`);
                     finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
                 } else {
                     if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) {

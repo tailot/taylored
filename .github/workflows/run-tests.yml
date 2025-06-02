@@ -26,5 +26,5 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run test script
+      - name: Run Jest E2E Tests
         run: npm test

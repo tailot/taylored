@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithBufferEncoding } from 'child_process';
 
-const PROJECT_ROOT_PATH = '/app'; // Explicitly set to /app
+const PROJECT_ROOT_PATH = path.resolve(__dirname, '../..');
 const TEST_SUBDIR_NAME = "taylored_test_repo_space";
 const TEST_DIR_FULL_PATH = path.join(PROJECT_ROOT_PATH, TEST_SUBDIR_NAME);
 const TAYLORED_CMD_BASE = `npx ts-node ${path.join(PROJECT_ROOT_PATH, 'index.ts')}`;

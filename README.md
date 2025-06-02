@@ -164,6 +164,75 @@ Here are the commands you can use with Taylored:
     ```
     Reads the specified `.taylored` file and prints the extracted commit message (typically from a `Subject:` line) to standard output. If no message is found in the patch (e.g., it wasn't saved with one or the format is unexpected), it prints an empty string. This is useful for scripting or inspecting the intended purpose of a patch.
 
+* #### Automatically find and extract taylored blocks
+    ```bash
+    taylored --automatic <EXTENSION>
+    ```
+    Scans files with the specified `<EXTENSION>` for special code blocks and extracts them into individual `.taylored` files.
+    - **Purpose**: To automatically find and extract code blocks into taylored files.
+    - **Markers**:
+        - Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`)
+        - End marker: `<taylored>`
+        - `NUMERO` is an integer used to uniquely identify blocks, especially if a file has multiple.
+    - **Extension Argument**: `<EXTENSION>` specifies which files to scan (e.g., `ts`, `.py`, `java`). The leading dot is optional (e.g., `ts` is treated the same as `.ts`).
+    - **Output**:
+        - Taylored files are created in the `.taylored/` directory.
+        - The naming convention for output files is `originalFilename_taylored_NUMERO.taylored` (e.g., if `src/utils.ts` contains a block starting with `<taylored 3>`, the output will be `.taylored/utils_taylored_3.taylored`).
+    - **Behavior**:
+        - Recursively searches the current directory and subdirectories for files matching the extension.
+        - Excludes `.git`, `node_modules`, and the `.taylored` directory itself from the search.
+        - If the `.taylored` directory doesn't exist, it will be created.
+        - Extracted content is trimmed of leading/trailing whitespace before saving.
+
+    *Example:*
+    ```bash
+    taylored --automatic js # or taylored --automatic .js
+    ```
+
+    ### Example: Using `--automatic`
+
+    Suppose you have a file `src/feature.js` with the following content:
+
+    ```javascript
+    function oldCode() {
+      // ...
+    }
+
+    // <taylored 1>
+    function newFeaturePart1() {
+      console.log("This is part 1 of the new feature");
+    }
+    // <taylored>
+
+    // Some other code
+
+    // <taylored 2>
+    function newFeaturePart2() {
+      console.log("This is part 2, depending on part 1");
+    }
+    // <taylored>
+    ```
+
+    To extract these blocks:
+
+    ```bash
+    taylored --automatic js
+    ```
+
+    This will create two files:
+    *   `.taylored/feature_taylored_1.taylored` containing:
+        ```javascript
+        function newFeaturePart1() {
+          console.log("This is part 1 of the new feature");
+        }
+        ```
+    *   `.taylored/feature_taylored_2.taylored` containing:
+        ```javascript
+        function newFeaturePart2() {
+          console.log("This is part 2, depending on part 1");
+        }
+        ```
+
     *Example:*
     ```bash
     taylored --data my_feature_patch
@@ -179,6 +248,7 @@ Here are the commands you can use with Taylored:
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
 * **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a sophisticated approach (`lib/git-patch-offset-updater.js`). **It first checks for uncommitted changes in the repository; if any exist, the command will exit.** Otherwise, it attempts to apply/revert the patch on a temporary branch, generates a new patch from this state against the `main` branch, and then replaces the original `.taylored/<file>` with this new, offset-adjusted patch. If the `--message` option is used, this message is intended for the `Subject:` line of the *output* `.taylored` file. Temporary commits made during the process use a default internal message. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
 * **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
+* **Automatic Extraction:** `taylored --automatic <EXTENSION>` recursively searches for files with the given extension. For each file, it looks for blocks delineated by `<taylored NUMERO>` and `<taylored>` markers. The content of each such block is extracted and saved into a new file named `originalFilename_taylored_NUMERO.taylored` within the `.taylored` directory. Common development directories like `.git` and `node_modules` are excluded from the search.
 
 ## Contributing
 

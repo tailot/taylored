@@ -14,6 +14,7 @@ import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';
 import { handleOffsetCommand } from './lib/handlers/offset-handler';
 import { handleDataOperation } from './lib/handlers/data-handler';
+import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
 import { resolveTayloredFileName, printUsageAndExit, getAndAnalyzeDiff } from './lib/utils';
 
 /**
@@ -33,7 +34,7 @@ async function main(): Promise<void> {
     let customMessage: string | undefined;
 
     // List of modes that require a .git directory check
-    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--data'];
+    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--data', '--automatic'];
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
         try {
@@ -106,6 +107,20 @@ async function main(): Promise<void> {
                 printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${argument}') must be a simple filename without path separators. It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
             }
             await handleDataOperation(argument, CWD);
+        }
+        else if (mode === '--automatic') {
+            if (rawArgs.length !== 2) {
+                printUsageAndExit("CRITICAL ERROR: --automatic option requires exactly one <EXTENSION> argument (e.g., .ts, js, py).");
+            }
+            argument = rawArgs[1]; // This will be the extension
+            if (argument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid extension '${argument}' after --automatic. It cannot start with '--'.`);
+            }
+            // Basic validation for extension format
+            if (argument.includes(path.sep) || argument.includes('/') || argument.includes('\\')) {
+                printUsageAndExit(`CRITICAL ERROR: <EXTENSION> ('${argument}') must be a simple extension string (e.g., 'ts', '.py') without path separators.`);
+            }
+            await handleAutomaticOperation(argument, CWD);
         }
         else {
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];

@@ -25,6 +25,7 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
     console.error(`  taylored --verify-remove <taylored_file_name>`);
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
+    console.error(`  taylored --automatic <EXTENSION>`);
     console.error(`  taylored --offset <taylored_file_name> [--message "Custom commit message"]`);
     console.error(`  taylored --data <taylored_file_name>`);
 
@@ -43,6 +44,7 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`  --save                    : Generate diff file into '${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}'.`);
         console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
         console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
+        console.error(`  --automatic <EXTENSION>   : Automatically search for taylored blocks in files with the specified <EXTENSION> (e.g., .js, .ts, .py) and create taylored files from them. Markers: <taylored NUMERO and taylored> (where NUMERO is an integer).`);
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);
         console.error(`  --data                    : Extract and print message from a taylored file. Prints empty string if not found.`);

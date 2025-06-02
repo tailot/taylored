@@ -2,6 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithBufferEncoding } from 'child_process';
 
+const normalizeLineEndings = (str: string): string => {
+  return str.replace(/\r\n/g, '\n');
+};
+
 const PROJECT_ROOT_PATH = path.resolve(__dirname, '../..');
 const TEST_SUBDIR_NAME = "taylored_test_repo_space";
 const TEST_DIR_FULL_PATH = path.join(PROJECT_ROOT_PATH, TEST_SUBDIR_NAME);
@@ -108,7 +112,7 @@ describe('Taylored E2E Tests', () => {
   });
 
   test('initial setup correctly created files and patch', () => {
-    expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+    expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
     expect(fs.existsSync(PLUGIN_DELETIONS_FULL_PATH)).toBe(true);
   });
 
@@ -124,12 +128,12 @@ describe('Taylored E2E Tests', () => {
     describe('taylored --verify-add (deletions patch)', () => {
       test('verifies patch addition (with .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --verify-add ${PLUGIN_DELETIONS_NAME}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(true);
       });
       test('verifies patch addition (without .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --verify-add ${PLUGIN_DELETIONS_NO_EXT}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(true);
       });
     });
@@ -137,12 +141,12 @@ describe('Taylored E2E Tests', () => {
     describe('taylored --add (deletions patch)', () => {
       test('adds patch (with .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_DELETIONS_NAME}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(MODIFIED_FILE1_DELETIONS_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(MODIFIED_FILE1_DELETIONS_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(false);
       });
       test('adds patch (without .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_DELETIONS_NO_EXT}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(MODIFIED_FILE1_DELETIONS_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(MODIFIED_FILE1_DELETIONS_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(false);
       });
     });
@@ -151,12 +155,12 @@ describe('Taylored E2E Tests', () => {
       beforeEach(() => applyDeletionsPatch());
       test('verifies patch removal (with .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --verify-remove ${PLUGIN_DELETIONS_NAME}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(MODIFIED_FILE1_DELETIONS_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(MODIFIED_FILE1_DELETIONS_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(false);
       });
       test('verifies patch removal (without .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --verify-remove ${PLUGIN_DELETIONS_NO_EXT}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(MODIFIED_FILE1_DELETIONS_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(MODIFIED_FILE1_DELETIONS_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(false);
       });
     });
@@ -165,12 +169,12 @@ describe('Taylored E2E Tests', () => {
       beforeEach(() => applyDeletionsPatch());
       test('removes patch (with .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --remove ${PLUGIN_DELETIONS_NAME}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(true);
       });
       test('removes patch (without .taylored extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --remove ${PLUGIN_DELETIONS_NO_EXT}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(true);
       });
     });
@@ -232,13 +236,13 @@ index 0000000..b902982
 
     test('taylored --add (additions patch, with extension)', () => {
       execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_ADDITIONS_NAME}`, execOptions);
-      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT); // file1.txt should be unchanged
+      expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT)); // file1.txt should be unchanged
       expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'))).toBe(true);
     });
 
     test('taylored --add (additions patch, without extension)', () => {
       execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_ADDITIONS_NO_EXT}`, execOptions);
-      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT); // file1.txt should be unchanged
+      expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT)); // file1.txt should be unchanged
       expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'))).toBe(true);
     });
 
@@ -248,12 +252,12 @@ index 0000000..b902982
       });
       test('removes additions patch (with extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --remove ${PLUGIN_ADDITIONS_NAME}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'))).toBe(false);
       });
       test('removes additions patch (without extension)', () => {
         execSync(`${TAYLORED_CMD_BASE} --remove ${PLUGIN_ADDITIONS_NO_EXT}`, execOptions);
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'))).toBe(false);
       });
     });
@@ -300,8 +304,8 @@ index 0000000..b902982
         if (fs.existsSync(rejFilePath)) fs.unlinkSync(rejFilePath);
       }
       if (success) {
-        expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))
-          .toBe(MODIFIED_FILE1_DELETIONS_CONTENT + "\nSlight modification.");
+        expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')))
+          .toBe(normalizeLineEndings(MODIFIED_FILE1_DELETIONS_CONTENT + "\nSlight modification."));
         expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(false);
       }
     });
@@ -315,7 +319,7 @@ index 0000000..b902982
       } catch (error) {
         commandOutput = ((error as any).stdout?.toString() || "") + ((error as any).stderr?.toString() || "");
       }
-      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
+      expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8'))).toBe(normalizeLineEndings(INITIAL_FILE1_CONTENT));
       expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(true);
       expect(commandOutput.toLowerCase()).toContain("critical error: 'git apply' failed during --remove operation");
     });
@@ -391,8 +395,8 @@ index 0000000..b902982
             }
             expect(failed).toBe(true);
             expect(stderr.toLowerCase()).toMatch(/obsolete|could not be processed|patch does not apply|offset failed/);
-            expect(fs.readFileSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11, 'utf8')).toBe(storedOffsetDelPluginS11Content);
-            expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_DEL_FILE), 'utf8')).toBe(mainModifiedContentS11);
+            expect(normalizeLineEndings(fs.readFileSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11, 'utf8'))).toBe(normalizeLineEndings(storedOffsetDelPluginS11Content));
+            expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_DEL_FILE), 'utf8'))).toBe(normalizeLineEndings(mainModifiedContentS11));
         });
     });
 
@@ -455,8 +459,8 @@ index 0000000..b902982
             }
             expect(failed).toBe(true);
             expect(stderr.toLowerCase()).toMatch(/obsolete|could not be processed|patch does not apply|offset failed/);
-            expect(fs.readFileSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12, 'utf8')).toBe(storedOffsetAddPluginS12Content);
-            expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_ADD_FILE_S12), 'utf8')).toBe(mainModifiedContentS12);
+            expect(normalizeLineEndings(fs.readFileSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12, 'utf8'))).toBe(normalizeLineEndings(storedOffsetAddPluginS12Content));
+            expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_ADD_FILE_S12), 'utf8'))).toBe(normalizeLineEndings(mainModifiedContentS12));
         });
     });
   });

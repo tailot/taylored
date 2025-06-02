@@ -8,6 +8,7 @@ import { exec, ExecOptions as ChildProcessExecOptions } from 'child_process';
 import * as util from 'util';
 import { handleApplyOperation } from './apply-logic';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
+import { extractMessageFromPatch } from './utils';
 
 const execAsync = util.promisify(exec);
 
@@ -71,59 +72,6 @@ async function execGit(repoRoot: string, args: string[], options: ExecGitOptions
         const errorMessage = `Error executing git command: ${command}\nRepo: ${repoRoot}\nExit Code: ${error.code}\nStdout: ${error.stdout ? error.stdout.trim() : 'N/A'}\nStderr: ${error.stderr ? error.stderr.trim() : 'N/A'}`;
         throw new GitExecutionError(errorMessage, error);
     }
-}
-
-function extractMessageFromPatch(patchContent: string | null | undefined): string | null {
-    if (!patchContent || typeof patchContent !== 'string') {
-        return null;
-    }
-    const lines = patchContent.split('\n');
-    for (const line of lines) {
-        if (line.startsWith('Subject:')) {
-            let message = line.substring('Subject:'.length).trim();
-            message = message.replace(/^\[PATCH(?:\s+\d+\/\d+)?\]\s*/, '');
-            if (message) {
-                return message;
-            }
-        }
-    }
-    let inHeader = true;
-    const potentialMessageLines: string[] = [];
-    let foundDiff = false;
-    const commonHeaderPatterns: RegExp[] = [
-        /^From[:\s]/i, /^Date[:\s]/i, /^Subject[:\s]/i, /^Signed-off-by:/i,
-        /^Cc:/i, /^Reported-by:/i, /^Acked-by:/i, /^Reviewed-by:/i,
-        /^Fixes:/i, /^Link:/i, /^[a-zA-Z0-9-]+:/
-    ];
-    for (const line of lines) {
-        if (line.startsWith('---')) { inHeader = false; continue; }
-        if (line.startsWith('diff --git')) { foundDiff = true; break; }
-        if (!inHeader && !foundDiff && line.trim() !== '') {
-            const trimmedLine = line.trim();
-            let isHeaderLike = false;
-            for (const pattern of commonHeaderPatterns) {
-                if (pattern.test(trimmedLine)) {
-                    isHeaderLike = true;
-                    break;
-                }
-            }
-            if (!isHeaderLike) {
-                if (potentialMessageLines.length < 10) {
-                    potentialMessageLines.push(trimmedLine);
-                }
-            }
-        }
-    }
-    if (potentialMessageLines.length > 0) {
-        for (const pLine of potentialMessageLines) {
-            const colonIndex = pLine.indexOf(':');
-            if (colonIndex === -1 || colonIndex > 30) {
-                 return pLine;
-            }
-        }
-        return potentialMessageLines[0];
-    }
-    return null;
 }
 
 interface HunkHeaderInfo {
@@ -366,4 +314,4 @@ async function updatePatchOffsets(
     return { outputPath: absolutePatchFilePath };
 }
 
-export { updatePatchOffsets, extractMessageFromPatch, parsePatchHunks, quoteForShell, GitExecutionError };
+export { updatePatchOffsets, parsePatchHunks, quoteForShell, GitExecutionError };

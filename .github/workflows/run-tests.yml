@@ -24,7 +24,7 @@ jobs:
         run: npm install
 
       - name: Permission
-        run: chmod +x test/test.sh
+        run: chmod +x tests/test.sh
 
       - name: Run test script
-        run: test/test.sh
+        run: tests/test.sh

@@ -48,15 +48,16 @@ export async function handleApplyOperation(
     // --reject: Creates .rej files for conflicting hunks instead of failing outright,
     //           which can be helpful for debugging, although the primary success/failure
     //           is determined by the exit code of `git apply`.
-    let gitApplyCommand = `git apply --verbose --reject`; // --whitespace=fix removed from base
-    if (!isVerify) { // Add --whitespace=fix only if NOT a verification
-        gitApplyCommand += " --whitespace=fix";
-    }
+    let gitApplyCommand = `git apply --verbose`; // New base command
     if (isVerify) {
-        gitApplyCommand += " --check";
+        gitApplyCommand += " --check"; // Add check first if verifying
+    } else {
+        gitApplyCommand += " --whitespace=fix"; // Add fix only if not verifying
     }
+    gitApplyCommand += " --reject"; // Add --reject after --check or --whitespace=fix
+
     if (isReverse) {
-        gitApplyCommand += " --reverse";
+        gitApplyCommand += " --reverse"; // Add --reverse if needed
     }
     // Ensure the filepath is quoted to handle potential spaces or special characters,
     // though typically taylored filenames are sanitized.

@@ -6,4 +6,5 @@ tests
 node_modules
 index.ts
 tsconfig.json
+jest.config.js
 *.ts

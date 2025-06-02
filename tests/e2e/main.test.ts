@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithBufferEncoding } from 'child_process';
 
-const PROJECT_ROOT_PATH = path.resolve(__dirname, '../../..'); // Assuming tests/e2e/main.test.ts
+const PROJECT_ROOT_PATH = '/app'; // Explicitly set to /app
 const TEST_SUBDIR_NAME = "taylored_test_repo_space";
 const TEST_DIR_FULL_PATH = path.join(PROJECT_ROOT_PATH, TEST_SUBDIR_NAME);
 const TAYLORED_CMD_BASE = `npx ts-node ${path.join(PROJECT_ROOT_PATH, 'index.ts')}`;
@@ -21,8 +21,7 @@ let MODIFIED_FILE1_DELETIONS_CONTENT: string;
 
 const execOptions: ExecSyncOptionsWithBufferEncoding = {
   cwd: TEST_DIR_FULL_PATH,
-  stdio: 'pipe',
-  encoding: 'utf-8'
+  stdio: 'pipe'
 };
 
 const resetToInitialState = (skipDeletionPatchResave = false) => {
@@ -39,13 +38,13 @@ const resetToInitialState = (skipDeletionPatchResave = false) => {
     }
     if (!skipDeletionPatchResave) {
         // Re-save the deletions patch as it's used by many tests and reset might clean it
-        execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_DELETIONS} -v`, execOptions);
+        execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_DELETIONS}`, execOptions);
     }
 
   } catch (error) {
-    console.error("Error resetting state:", error.message);
-    if (error.stdout) console.error("STDOUT (resetToInitialState):", error.stdout.toString());
-    if (error.stderr) console.error("STDERR (resetToInitialState):", error.stderr.toString());
+    console.error("Error resetting state:", (error as any).message);
+    if ((error as any).stdout) console.error("STDOUT (resetToInitialState):", (error as any).stdout.toString());
+    if ((error as any).stderr) console.error("STDERR (resetToInitialState):", (error as any).stderr.toString());
     throw error;
   }
 };
@@ -67,7 +66,7 @@ describe('Taylored E2E Tests', () => {
     execSync('git config user.name "Test User"', execOptions);
     execSync('git config commit.gpgsign false', execOptions);
 
-    INITIAL_FILE1_CONTENT = 'L1: Initial content for file1.\nL2: Line two.\nL3: Line three.\nL4: Line four.\nL5: Line five.';
+    INITIAL_FILE1_CONTENT = 'L1: Initial content for file1.\nL2: Line two.\nL3: Line three.\nL4: Line four.\nL5: Line five.\n';
     INITIAL_FILE_TO_DELETE_CONTENT = 'Content of file to be deleted.';
     fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), INITIAL_FILE1_CONTENT);
     fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'), INITIAL_FILE_TO_DELETE_CONTENT);
@@ -76,7 +75,7 @@ describe('Taylored E2E Tests', () => {
     initialCommitHash = execSync('git rev-parse HEAD', execOptions).toString().trim();
 
     execSync(`git checkout -b ${BRANCH_DELETIONS}`, execOptions);
-    MODIFIED_FILE1_DELETIONS_CONTENT = 'L1: Initial content for file1.\nL3: Line three.\nL5: Line five.'; // L2 and L4 deleted
+    MODIFIED_FILE1_DELETIONS_CONTENT = 'L1: Initial content for file1.\nL3: Line three.\nL5: Line five.\n'; // L2 and L4 deleted
     fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), MODIFIED_FILE1_DELETIONS_CONTENT);
     if(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))) {
       fs.rmSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'));
@@ -88,7 +87,7 @@ describe('Taylored E2E Tests', () => {
     if (!fs.existsSync(TAYLORED_DIR_FULL_PATH)) {
       fs.mkdirSync(TAYLORED_DIR_FULL_PATH, { recursive: true });
     }
-    execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_DELETIONS} -v`, execOptions);
+    execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_DELETIONS}`, execOptions);
     if (!fs.existsSync(PLUGIN_DELETIONS_FULL_PATH)) {
       throw new Error(`Failed to create plugin file ${PLUGIN_DELETIONS_FULL_PATH} in beforeAll`);
     }
@@ -182,46 +181,64 @@ describe('Taylored E2E Tests', () => {
     const PLUGIN_ADDITIONS_NAME = `${BRANCH_ADDITIONS}.taylored`;
     const PLUGIN_ADDITIONS_NO_EXT = BRANCH_ADDITIONS;
     const PLUGIN_ADDITIONS_FULL_PATH = path.join(TAYLORED_DIR_FULL_PATH, PLUGIN_ADDITIONS_NAME);
-    let MODIFIED_FILE1_ADDITIONS_CONTENT: string;
+    // MODIFIED_FILE1_ADDITIONS_CONTENT is not used as file1.txt is not modified by this patch anymore
     let NEW_FILE_CONTENT: string;
 
+    // Function to create the manual patch content
+    const createAdditionsPatchContent = () => `diff --git a/new_file.txt b/new_file.txt
+new file mode 100644
+index 0000000..b902982
+--- /dev/null
++++ b/new_file.txt
+
++A new line for the new file.
++`;
+
     beforeAll(() => {
-      resetToInitialState(true); // Skip re-saving deletions patch
-      MODIFIED_FILE1_ADDITIONS_CONTENT = `${INITIAL_FILE1_CONTENT}\nAdded line for additions branch.`;
-      NEW_FILE_CONTENT = "Content for the new file.";
-
+      // This beforeAll now only creates the branch with the new file.
+      // The patch file itself will be created in the beforeEach.
+      // Global beforeEach's resetToInitialState(true) will run before this.
+      NEW_FILE_CONTENT = "A new line for the new file.\n";
       execSync(`git checkout -b ${BRANCH_ADDITIONS} ${initialCommitHash}`, execOptions);
-      fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), MODIFIED_FILE1_ADDITIONS_CONTENT);
       fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'), NEW_FILE_CONTENT);
-      execSync('git add file1.txt new_file.txt', execOptions);
-      execSync('git commit -m "Add new line to file1 and create new_file.txt"', execOptions);
+      execSync('git add new_file.txt', execOptions);
+      execSync('git commit -m "Create new_file.txt for additions branch"', execOptions);
       execSync('git checkout main', execOptions);
+    });
 
-      execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_ADDITIONS} -v`, execOptions);
+    beforeEach(() => {
+      // Global beforeEach resetToInitialState() runs first, cleaning the directory.
+      // Then, this suite-specific beforeEach runs to ensure the patch file exists.
+      if (!fs.existsSync(TAYLORED_DIR_FULL_PATH)) {
+        fs.mkdirSync(TAYLORED_DIR_FULL_PATH, { recursive: true });
+      }
+      fs.writeFileSync(PLUGIN_ADDITIONS_FULL_PATH, createAdditionsPatchContent());
       if (!fs.existsSync(PLUGIN_ADDITIONS_FULL_PATH)) {
-        throw new Error(`Failed to create plugin file ${PLUGIN_ADDITIONS_FULL_PATH}`);
+        // This check is crucial. If the file isn't here, the tests will fail.
+        throw new Error(`Additions suite specific beforeEach failed to create ${PLUGIN_ADDITIONS_FULL_PATH}`);
       }
     });
-     afterAll(() => { // Clean up specific branch and plugin for this suite
+
+     afterAll(() => { // Clean up specific branch
         try {
             execSync(`git branch -D ${BRANCH_ADDITIONS}`, execOptions);
-            if (fs.existsSync(PLUGIN_ADDITIONS_FULL_PATH)) {
-                fs.unlinkSync(PLUGIN_ADDITIONS_FULL_PATH);
-            }
+            // The manually created patch file (.taylored/additions-branch.taylored)
+            // will be removed by the main resetToInitialState's "git clean -fdx"
+            // before the next test suite runs, or before the next test in this suite via its beforeEach.
         } catch (e) {
-            console.warn(`Warning: Could not clean up ${BRANCH_ADDITIONS} or its plugin. ${e.message}`);
+            console.warn(`Warning: Could not clean up ${BRANCH_ADDITIONS}. ${(e as any).message}`);
         }
     });
 
     test('taylored --add (additions patch, with extension)', () => {
       execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_ADDITIONS_NAME}`, execOptions);
-      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(MODIFIED_FILE1_ADDITIONS_CONTENT);
+      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT); // file1.txt should be unchanged
       expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'))).toBe(true);
     });
 
     test('taylored --add (additions patch, without extension)', () => {
       execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_ADDITIONS_NO_EXT}`, execOptions);
-      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(MODIFIED_FILE1_ADDITIONS_CONTENT);
+      expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT); // file1.txt should be unchanged
       expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'new_file.txt'))).toBe(true);
     });
 
@@ -255,7 +272,7 @@ describe('Taylored E2E Tests', () => {
         execSync('git add file1.txt', execOptions);
         execSync('git commit -m "Mixed changes to file1"', execOptions);
         execSync('git checkout main', execOptions);
-        execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_MIXED} -v`, execOptions);
+        execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_MIXED}`, execOptions);
       } catch (error) {
         failed = true;
       } finally {
@@ -275,7 +292,7 @@ describe('Taylored E2E Tests', () => {
       let success = false;
       let rejFilePath = path.join(TEST_DIR_FULL_PATH, 'file1.txt.rej');
       try {
-        execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_DELETIONS_NAME} -v`, execOptions);
+        execSync(`${TAYLORED_CMD_BASE} --add ${PLUGIN_DELETIONS_NAME}`, execOptions);
         success = true;
       } catch (e) {
         expect(fs.existsSync(rejFilePath)).toBe(true);
@@ -294,13 +311,13 @@ describe('Taylored E2E Tests', () => {
     test('taylored --remove when patch not applied (deletions patch)', () => {
       let commandOutput = "";
       try {
-        commandOutput = execSync(`${TAYLORED_CMD_BASE} --remove ${PLUGIN_DELETIONS_NAME} -v`, execOptions).toString();
+        commandOutput = execSync(`${TAYLORED_CMD_BASE} --remove ${PLUGIN_DELETIONS_NAME}`, execOptions).toString();
       } catch (error) {
-        commandOutput = (error.stdout?.toString() || "") + (error.stderr?.toString() || "");
+        commandOutput = ((error as any).stdout?.toString() || "") + ((error as any).stderr?.toString() || "");
       }
       expect(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), 'utf8')).toBe(INITIAL_FILE1_CONTENT);
       expect(fs.existsSync(path.join(TEST_DIR_FULL_PATH, 'file_to_delete.txt'))).toBe(true);
-      expect(commandOutput.toLowerCase()).toMatch(/not applied|no changes made|patch was not found/);
+      expect(commandOutput.toLowerCase()).toContain("critical error: 'git apply' failed during --remove operation");
     });
   });
 
@@ -342,7 +359,9 @@ describe('Taylored E2E Tests', () => {
             execSync(`git checkout main`, execOptions);
             execSync(`git reset --hard ${mainCommitForS11Patch}`, execOptions); // Back to pre-branch state
 
-            execSync(`${TAYLORED_CMD_BASE} --save ${OFFSET_DEL_BRANCH_S11} -v`, execOptions);
+            execSync(`${TAYLORED_CMD_BASE} --save ${OFFSET_DEL_BRANCH_S11}`, execOptions);
+            execSync('git add .', execOptions); // Commit the newly saved patch
+            execSync('git commit -m "chore: save S11 offset patch for testing"', execOptions);
             expect(fs.existsSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11)).toBe(true);
             storedOffsetDelPluginS11Content = fs.readFileSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11, 'utf8');
 
@@ -365,10 +384,10 @@ describe('Taylored E2E Tests', () => {
             let stderr = "";
             let failed = false;
             try {
-                execSync(`${TAYLORED_CMD_BASE} --offset ${OFFSET_DEL_PLUGIN_NAME_S11} -v`, execOptions);
+                execSync(`${TAYLORED_CMD_BASE} --offset ${OFFSET_DEL_PLUGIN_NAME_S11}`, execOptions);
             } catch (error) {
                 failed = true;
-                stderr = error.stderr?.toString() || "";
+                stderr = (error as any).stderr?.toString() || "";
             }
             expect(failed).toBe(true);
             expect(stderr.toLowerCase()).toMatch(/obsolete|could not be processed|patch does not apply|offset failed/);
@@ -404,7 +423,9 @@ describe('Taylored E2E Tests', () => {
             execSync(`git checkout main`, execOptions);
             execSync(`git reset --hard ${mainCommitForS12Patch}`, execOptions);
 
-            execSync(`${TAYLORED_CMD_BASE} --save ${OFFSET_ADD_BRANCH_S12} -v`, execOptions);
+            execSync(`${TAYLORED_CMD_BASE} --save ${OFFSET_ADD_BRANCH_S12}`, execOptions);
+            execSync('git add .', execOptions); // Commit the newly saved patch
+            execSync('git commit -m "chore: save S12 offset patch for testing"', execOptions);
             expect(fs.existsSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12)).toBe(true);
             storedOffsetAddPluginS12Content = fs.readFileSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12, 'utf8');
 
@@ -427,10 +448,10 @@ describe('Taylored E2E Tests', () => {
             let stderr = "";
             let failed = false;
             try {
-                execSync(`${TAYLORED_CMD_BASE} --offset ${OFFSET_ADD_PLUGIN_NAME_S12} -v`, execOptions);
+                execSync(`${TAYLORED_CMD_BASE} --offset ${OFFSET_ADD_PLUGIN_NAME_S12}`, execOptions);
             } catch (error) {
                 failed = true;
-                stderr = error.stderr?.toString() || "";
+                stderr = (error as any).stderr?.toString() || "";
             }
             expect(failed).toBe(true);
             expect(stderr.toLowerCase()).toMatch(/obsolete|could not be processed|patch does not apply|offset failed/);

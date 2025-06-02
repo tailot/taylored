@@ -48,7 +48,10 @@ export async function handleApplyOperation(
     // --reject: Creates .rej files for conflicting hunks instead of failing outright,
     //           which can be helpful for debugging, although the primary success/failure
     //           is determined by the exit code of `git apply`.
-    let gitApplyCommand = `git apply --verbose --whitespace=fix --reject`;
+    let gitApplyCommand = `git apply --verbose --reject`; // --whitespace=fix removed from base
+    if (!isVerify) { // Add --whitespace=fix only if NOT a verification
+        gitApplyCommand += " --whitespace=fix";
+    }
     if (isVerify) {
         gitApplyCommand += " --check";
     }

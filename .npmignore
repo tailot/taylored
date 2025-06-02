@@ -2,7 +2,7 @@
 .gitignore
 .npmignore
 .github
-test
+tests
 node_modules
 index.ts
 tsconfig.json

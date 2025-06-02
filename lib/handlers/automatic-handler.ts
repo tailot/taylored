@@ -3,11 +3,11 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execSync, ExecSyncOptionsWithBufferEncoding } from 'child_process';
+import { execSync, ExecSyncOptionsWithStringEncoding } from 'child_process';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 import { handleSaveOperation } from './save-handler'; // Ensure this path is correct
 
-const execOpts: ExecSyncOptionsWithBufferEncoding = { encoding: 'utf8', stdio: 'pipe' };
+const execOpts: ExecSyncOptionsWithStringEncoding = { encoding: 'utf8', stdio: 'pipe' };
 
 async function findFilesRecursive(dir: string, ext: string, allFiles: string[] = []): Promise<string[]> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -79,7 +79,7 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
 
     console.log(`Found ${filesToScan.length} file(s) with extension '${normalizedExtension}'. Processing...`);
 
-    const blockRegex = /<taylored (\d+)>([\s\S]*?)<taylored>/g;
+    const blockRegex = /<taylored (\d+)>([\s\S]*?)<\/taylored>/g;
     let totalBlocksProcessed = 0;
     let aBlockFailed = false;
 

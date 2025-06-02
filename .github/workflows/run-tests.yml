@@ -8,7 +8,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
@@ -23,8 +26,5 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Permission
-        run: chmod +x tests/test.sh
-
       - name: Run test script
-        run: tests/test.sh
+        run: npm test

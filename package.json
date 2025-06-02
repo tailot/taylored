@@ -24,7 +24,7 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "test": "bash test/test.sh"
+    "test": "node run-tests.js"
   },
   "dependencies": {
     "fs-extra": "^11.3.0",

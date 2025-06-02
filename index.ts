@@ -153,8 +153,21 @@ async function main(): Promise<void> {
             }
         }
     } catch (error: any) {
-        process.exit(1);
+        // console.error(`Error caught in main, re-throwing: ${error.message}`); // Optional debug
+        // Re-throwing the error should cause the node process to exit with a non-zero status code,
+        // which is typically 1 for unhandled exceptions.
+        throw error;
     }
 }
 
-main();
+main().catch((err) => {
+    // This catch is for the promise returned by main().
+    // If main() throws (due to the 'throw error' above), this will catch it.
+    // We want to ensure Node.js exits with a non-zero code.
+    // process.exit(1) here ensures that even if the unhandled rejection itself
+    // doesn't guarantee the status code seen by execSync in all environments,
+    // this explicit exit will.
+    const errorMessage = err && err.message ? err.message : 'Unknown error in main().catch';
+    console.error(`Error in main().catch: ${errorMessage}`);
+    process.exit(1);
+});

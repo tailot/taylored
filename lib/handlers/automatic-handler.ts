@@ -5,7 +5,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithStringEncoding } from 'child_process';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
-import { handleSaveOperation } from './save-handler'; // Ensure this path is correct
+import { handleSaveOperation } from './save-handler';
 
 const execOpts: ExecSyncOptionsWithStringEncoding = { encoding: 'utf8', stdio: 'pipe' };
 
@@ -28,29 +28,33 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
     let originalBranchName: string;
     try {
         originalBranchName = execSync('git rev-parse --abbrev-ref HEAD', { cwd: CWD, ...execOpts }).trim();
-        if (originalBranchName === 'HEAD') { // Detached HEAD state
-            console.error("CRITICAL ERROR: Repository is in a detached HEAD state. Please checkout a branch.");
-            process.exit(1);
+        if (originalBranchName === 'HEAD') { 
+            const errorMessage = "CRITICAL ERROR: Repository is in a detached HEAD state. Please checkout a branch.";
+            console.error(errorMessage);
+            throw new Error(errorMessage);
         }
     } catch (error: any) {
-        console.error(`CRITICAL ERROR: Failed to get current Git branch. Details: ${error.message}`);
+        const errorMessage = `CRITICAL ERROR: Failed to get current Git branch. Details: ${error.message}`;
+        console.error(errorMessage);
         if (error.stderr) console.error("STDERR:\n" + error.stderr);
         if (error.stdout) console.error("STDOUT:\n" + error.stdout);
-        process.exit(1);
+        throw new Error(errorMessage);
     }
 
     try {
         const gitStatus = execSync('git status --porcelain', { cwd: CWD, ...execOpts }).trim();
         if (gitStatus) {
-            console.error("CRITICAL ERROR: Uncommitted changes or untracked files in the repository. Please commit or stash them before running --automatic.");
+            const errorMessage = "CRITICAL ERROR: Uncommitted changes or untracked files in the repository. Please commit or stash them before running --automatic.";
+            console.error(errorMessage);
             console.error("Details:\n" + gitStatus);
-            process.exit(1);
+            throw new Error(errorMessage);
         }
     } catch (error: any) {
-        console.error(`CRITICAL ERROR: Failed to check Git status. Details: ${error.message}`);
+        const errorMessage = `CRITICAL ERROR: Failed to check Git status. Details: ${error.message}`;
+        console.error(errorMessage);
         if (error.stderr) console.error("STDERR:\n" + error.stderr);
         if (error.stdout) console.error("STDOUT:\n" + error.stdout);
-        process.exit(1);
+        throw new Error(errorMessage);
     }
 
     console.log(`Starting automatic taylored block extraction for extension '${extension}' in directory '${CWD}'. Original branch: '${originalBranchName}'`);
@@ -59,8 +63,9 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
     try {
         await fs.mkdir(tayloredDir, { recursive: true });
     } catch (error: any) {
-        console.error(`CRITICAL ERROR: Could not create directory '${tayloredDir}'. Details: ${error.message}`);
-        process.exit(1);
+        const errorMessage = `CRITICAL ERROR: Could not create directory '${tayloredDir}'. Details: ${error.message}`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
     }
 
     const normalizedExtension = extension.startsWith('.') ? extension : `.${extension}`;
@@ -69,7 +74,7 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
         filesToScan = await findFilesRecursive(CWD, normalizedExtension);
     } catch (error: any) {
         console.error(`Error while searching for files: ${error.message}`);
-        return;
+        return; 
     }
 
     if (filesToScan.length === 0) {
@@ -81,104 +86,94 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
 
     const blockRegex = /<taylored (\d+)>([\s\S]*?)<\/taylored>/g;
     let totalBlocksProcessed = 0;
-    let aBlockFailed = false;
 
     for (const originalFilePath of filesToScan) {
-        if (aBlockFailed) break; 
         let fileContent: string;
         try {
             fileContent = await fs.readFile(originalFilePath, 'utf-8');
         } catch (readError: any) {
-            console.error(`Error reading file '${originalFilePath}': ${readError.message}. Skipping this file.`);
+            console.warn(`Warning: Error reading file '${originalFilePath}': ${readError.message}. Skipping this file.`);
             continue;
         }
 
         const matches = Array.from(fileContent.matchAll(blockRegex));
+        if (matches.length === 0) {
+            continue;
+        }
 
         for (const match of matches) {
-            if (aBlockFailed) break;
-
             const numero = match[1];
             const fullMatchText = match[0];
-
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
             const targetTayloredFilePath = path.join(tayloredDir, targetTayloredFileName);
-            
-            // Define the path for the intermediate file that handleSaveOperation('main', CWD) will create
             const intermediateMainTayloredPath = path.join(tayloredDir, `main${TAYLORED_FILE_EXTENSION}`);
 
             console.log(`Processing block ${numero} from ${originalFilePath}...`);
-
-            // Pre-operation Check 1 (intermediate file from save-handler)
             try {
                 await fs.access(intermediateMainTayloredPath);
-                console.error(`CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it before running --automatic.`);
-                aBlockFailed = true; break; 
-            } catch (error) { /* File does not exist, which is good */ }
+                const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it.`;
+                console.error(message);
+                throw new Error(message);
+            } catch (error: any) {
+                if (error.code !== 'ENOENT') {
+                    throw error; 
+                }
+            }
 
-            // Pre-operation Check 2 (target file)
             try {
                 await fs.access(targetTayloredFilePath);
-                console.error(`CRITICAL ERROR: Target file ${targetTayloredFilePath} already exists. Please remove or rename it.`);
-                aBlockFailed = true; break;
-            } catch (error) { /* File does not exist, good */ }
-
+                const message = `CRITICAL ERROR: Target file ${targetTayloredFilePath} already exists. Please remove or rename it.`;
+                console.error(message);
+                throw new Error(message);
+            } catch (error: any) {
+                if (error.code !== 'ENOENT') {
+                    throw error;
+                }
+            }
+            
             const fileLines = fileContent.split('\n');
             const contentUpToMatch = fileContent.substring(0, match.index);
             const startLineNum = contentUpToMatch.split('\n').length; 
             const matchLinesCount = fullMatchText.split('\n').length;
-
             const tempBranchName = `temp-taylored-${numero}-${Date.now()}`;
             
             try {
                 execSync(`git checkout -b ${tempBranchName}`, { cwd: CWD, ...execOpts });
-
                 const currentFileLines = (await fs.readFile(originalFilePath, 'utf-8')).split('\n');
                 currentFileLines.splice(startLineNum - 1, matchLinesCount); 
                 await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
-                
                 execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
                 execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
-
-                // HEAD is tempBranchName. Diff HEAD against 'main' branch.
                 await handleSaveOperation('main', CWD); 
-                // This creates `.taylored/main.taylored`
-
                 await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
-
                 console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
                 totalBlocksProcessed++;
-
             } catch (error: any) {
-                aBlockFailed = true;
                 console.error(`CRITICAL ERROR: Failed to process block ${numero} from ${originalFilePath}.`);
                 console.error(`Error message: ${error.message}`);
                 if (error.stderr) console.error("STDERR:\n" + error.stderr);
                 if (error.stdout) console.error("STDOUT:\n" + error.stdout);
+                throw error; 
             } finally {
                 try {
                     execSync(`git checkout "${originalBranchName}"`, { cwd: CWD, stdio: 'ignore' });
-                } catch (checkoutError: any) {}
+                } catch (checkoutError: any) {
+                    console.warn(`Warning: Failed to checkout original branch '${originalBranchName}' during cleanup. May require manual cleanup. ${checkoutError.message}`);
+                }
                 try {
                     execSync(`git branch -D "${tempBranchName}"`, { cwd: CWD, stdio: 'ignore' });
-                } catch (deleteBranchError: any) {}
+                } catch (deleteBranchError: any) {
+                    console.warn(`Warning: Failed to delete temporary branch '${tempBranchName}' during cleanup. May require manual cleanup. ${deleteBranchError.message}`);
+                }
                 try {
-                    // Ensure we attempt to clean the correct intermediate file name
                     await fs.access(intermediateMainTayloredPath); 
                     await fs.unlink(intermediateMainTayloredPath);
                 } catch (e) { /* File doesn't exist or can't be accessed, ignore */ }
-
-                if (aBlockFailed) {
-                     console.error("Processing stopped due to critical error.");
-                     process.exit(1);
-                }
             }
         }
     }
 
-    if (aBlockFailed) {
-        console.error("Automatic block processing finished with one or more errors.");
-    } else if (totalBlocksProcessed === 0) {
+    if (totalBlocksProcessed === 0) {
         console.log("No taylored blocks found matching the criteria in any of the scanned files.");
     } else {
         console.log(`Finished processing. Successfully created ${totalBlocksProcessed} taylored file(s).`);

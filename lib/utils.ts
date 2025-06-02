@@ -78,23 +78,20 @@ export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput
         diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
         success = true;
     } catch (error: any) {
-        if (typeof error.stdout === 'string') {
-            diffOutput = error.stdout;
-            success = true;
-            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-                // console.warn(`Git stderr (non-fatal) while diffing branch '${branchName}':\n${error.stderr.toString().trim()}`);
-            }
-        } else {
-            errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
-            if (error.status) errorMessage += ` Exit status: ${error.status}.`;
-            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-                errorMessage += ` Git stderr: ${error.stderr.toString().trim()}.`;
-            } else if (error.message) {
-                errorMessage += ` Error message: ${error.message}.`;
-            }
-            errorMessage += ` Attempted command: ${command}.`;
-            success = false;
+        // If execSync throws, the command is considered to have failed.
+        errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
+        if (error.status) { // status is the exit code
+            errorMessage += ` Exit status: ${error.status}.`;
         }
+        // stderr usually contains the actual error message from git
+        if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
+            errorMessage += ` Git stderr: ${error.stderr.trim()}.`;
+        } else if (error.message) { // Fallback if stderr is not informative
+            errorMessage += ` Error message: ${error.message}.`;
+        }
+        errorMessage += ` Attempted command: ${command}.`;
+        success = false;
+        // diffOutput remains undefined because the command failed
     }
 
     if (success && typeof diffOutput === 'string') {

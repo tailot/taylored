@@ -346,12 +346,7 @@ BRANCH_MIXED="mixed-changes-branch"
 PLUGIN_MIXED_NAME="${BRANCH_MIXED}.taylored"
 git checkout -b "$BRANCH_MIXED"
 echo "Riga aggiunta a file1 per test misto." >> file1.txt # Addition
-# Using a portable way to delete a line for testing
-if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
-  sed -i '/Riga 3 in file1 che rimane./d' file1.txt
-else # macOS sed requires extension for -i
-  sed -i.bak '/Riga 3 in file1 che rimane./d' file1.txt && rm file1.txt.bak
-fi
+node -e "const fs = require('fs'); const p = 'file1.txt'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/Riga 3 in file1 che rimane.\\n?/, ''));"
 git add file1.txt
 git commit -m "Modifiche miste su $BRANCH_MIXED"
 git checkout main

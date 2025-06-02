@@ -7,7 +7,7 @@ import * as path from 'path';
 import { exec, ExecOptions as ChildProcessExecOptions } from 'child_process';
 import * as util from 'util';
 import { handleApplyOperation } from './apply-logic';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
+import { TAYLORED_DIR_NAME } from './constants';
 import { extractMessageFromPatch } from './utils';
 
 const execAsync = util.promisify(exec);
@@ -204,15 +204,15 @@ async function updatePatchOffsets(
             await handleApplyOperation(patchFileName, false, true, '--remove (invoked by offset)', repoRoot);
             cliEquivalentCallSucceeded = true;
         } catch (removeError: any) {
-            if (removeError.message) {
-            }
-
+            // Error during initial 'remove' attempt.
+            // The original code had an empty if block here.
+            // Now, attempting 'add' as a fallback.
             try {
                 await handleApplyOperation(patchFileName, false, false, '--add (invoked by offset, after remove failed)', repoRoot);
                 cliEquivalentCallSucceeded = true;
             } catch (addError: any) {
-                if (addError.message) {
-                }
+                // Error during fallback 'add' attempt.
+                // The original code had an empty if block here.
                 cliEquivalentCallSucceeded = false;
             }
         }
@@ -273,13 +273,18 @@ async function updatePatchOffsets(
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
                     finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
                 } else {
-                    if (originalHunks.length !== newHunks.length && !(originalHunks.length === 0 && newHunks.length > 0) && !(originalHunks.length > 0 && newHunks.length === 0) ) {
-                    }
+                    // The original code had an empty 'if' block here checking for
+                    // mismatched hunk lengths under certain conditions.
+                    // This condition (originalHunks.length !== newHunks.length etc.)
+                    // didn't change the program flow as the block was empty.
+                    // If specific handling for this case is needed, it would be added here.
                     finalOutputContentToWrite = embedMessageInContent(cleanedDiffContent, effectiveMessageToEmbed);
                 }
 
                 // Refined write condition
                 if (finalOutputContentToWrite === originalPatchContent) {
+                    // Content is identical, no need to write the file.
+                    // Original code had an empty 'if' branch here.
                 } else {
                     await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
                 }
@@ -304,6 +309,10 @@ async function updatePatchOffsets(
                 await execGit(repoRoot, ['branch', '-D', tempBranchName, '--quiet']);
             }
         } catch (cleanupErr: any) {
+            // Errors during cleanup are logged to console.error by default by execGit if not caught.
+            // However, this catch block was empty, meaning cleanup errors were intentionally suppressed.
+            // Consider if logging `cleanupErr.message` is appropriate here if issues arise.
+            // For now, maintaining the behavior of suppressing cleanup errors.
         }
     }
 

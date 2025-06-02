@@ -3,16 +3,11 @@
 // Copyright (c) 2025 tailot@gmail.com
 // SPDX-License-Identifier: MIT
 
-/*
-Usage:
-  (Same usage information as before, but --upgrade will be removed)
-*/
+// Main command-line interface for Taylored
+// See printUsageAndExit() for detailed usage information.
 
 import * as fs from 'fs/promises'; // Using fs/promises for async file operations
-import * as fsExtra from 'fs-extra'; // For ensureDir
 import * as path from 'path';
-import { execSync } from 'child_process';
-import * as parseDiffModule from 'parse-diff';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './lib/constants';
 import { handleApplyOperation } from './lib/apply-logic';
 import { handleSaveOperation } from './lib/handlers/save-handler';
@@ -37,7 +32,7 @@ async function main(): Promise<void> {
     let argument: string | undefined;
     let customMessage: string | undefined;
 
-    // REMOVED '--upgrade' from this list
+    // List of modes that require a .git directory check
     const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--data'];
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
@@ -46,8 +41,7 @@ async function main(): Promise<void> {
             if (!gitDirStats.isDirectory()) {
                 printUsageAndExit(`CRITICAL ERROR: A '.git' entity exists at '${gitDirPath}', but it is not a directory. This script must be run from the root of a Git repository.`);
             }
-            if (mode !== '--data') {
-            }
+            // The empty if (mode !== '--data') {} block was here. It has been removed.
         } catch (error: any) {
             if (error.code === 'ENOENT') {
                 printUsageAndExit(`CRITICAL ERROR: No '.git' directory found in '${CWD}'. This script must be run from the root of a Git repository.`);
@@ -129,8 +123,6 @@ async function main(): Promise<void> {
                 }
 
                 const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
-                if (resolvedTayloredFileName !== userInputFileName) {
-                }
 
                 let isVerify = false;
                 let isReverse = false;

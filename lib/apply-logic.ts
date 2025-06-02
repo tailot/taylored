@@ -29,13 +29,9 @@ export async function handleApplyOperation(
     const actualTayloredFilePath = path.join(tayloredDir, tayloredFileNameWithExt);
 
     // Log the operation details clearly.
-
-    if (isVerify) {
-    } else {
-    }
-    if (isReverse) {
-    } else {
-    }
+    // Current logging for verify/reverse is implicitly handled by the command construction
+    // and error messages. Explicit logging for these flags before command execution
+    // can be added here if desired in the future.
 
     try {
         // Check if the taylored file exists and is accessible before attempting to use it.
@@ -70,9 +66,8 @@ export async function handleApplyOperation(
         execSync(gitApplyCommand, { cwd: CWD, stdio: 'inherit' });
 
         // Log success message based on whether it was a verification or an execution.
-        if (isVerify) {
-        } else {
-        }
+        // Success messages can be added here if more detailed positive feedback is needed.
+        // For now, successful execution implies the command ran without throwing an error.
     } catch (error: any) {
         // execSync throws an error if the command exits with a non-zero status,
         // indicating failure of `git apply`.

@@ -164,81 +164,88 @@ Here are the commands you can use with Taylored:
     ```
     Reads the specified `.taylored` file and prints the extracted commit message (typically from a `Subject:` line) to standard output. If no message is found in the patch (e.g., it wasn't saved with one or the format is unexpected), it prints an empty string. This is useful for scripting or inspecting the intended purpose of a patch.
 
-* #### Automatically find and extract taylored blocks
+* #### Automatically find and extract taylored blocks (Git Workflow)
     ```bash
     taylored --automatic <EXTENSION>
     ```
-    Scans files with the specified `<EXTENSION>` for special code blocks and extracts them into individual `.taylored` files.
-    - **Purpose**: To automatically find and extract code blocks into taylored files.
-    - **Markers**:
-        - Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`)
-        - End marker: `<taylored>`
-        - `NUMERO` is an integer used to uniquely identify blocks, especially if a file has multiple.
-    - **Extension Argument**: `<EXTENSION>` specifies which files to scan (e.g., `ts`, `.py`, `java`). The leading dot is optional (e.g., `ts` is treated the same as `.ts`).
-    - **Output**:
-        - Taylored files are created in the `.taylored/` directory.
-        - The naming convention for output files is `originalFilename_taylored_NUMERO.taylored` (e.g., if `src/utils.ts` contains a block starting with `<taylored 3>`, the output will be `.taylored/utils_taylored_3.taylored`).
-    - **Behavior**:
-        - Recursively searches the current directory and subdirectories for files matching the extension.
-        - Excludes `.git`, `node_modules`, and the `.taylored` directory itself from the search.
-        - If the `.taylored` directory doesn't exist, it will be created.
-        - Extracted content is trimmed of leading/trailing whitespace before saving.
+    Scans files with the specified `<EXTENSION>` for taylored blocks and creates individual, diff-based `.taylored` files for each block using a Git workflow.
 
-    *Example:*
-    ```bash
-    taylored --automatic js # or taylored --automatic .js
-    ```
+    **Prerequisites**:
+    *   **Clean Git Repository**: The command must be run in a Git repository with no uncommitted changes or untracked files.
+    *   **No `.taylored/main.taylored`**: The file `.taylored/main.taylored` must not exist, as it's used as a temporary name during the internal save step.
+    *   **No Target File Conflict**: The specific output file (e.g., `.taylored/1.taylored` for a block numbered `1`) must not already exist.
 
-    ### Example: Using `--automatic`
+    **Workflow Overview**:
+    The command iterates through each file matching `<EXTENSION>` and processes blocks defined by `<taylored NUMERO>` and `</taylored>` markers. For each block:
+    1.  A temporary Git branch is created from the current branch.
+    2.  On this temporary branch, the entire block (including the start and end markers) is removed from the source file.
+    3.  This removal is committed on the temporary branch.
+    4.  The tool then internally simulates `taylored --save main`. This compares `HEAD` (the commit on the temporary branch with the block removed) against the `main` branch. The resulting diff represents the changes needed to "add" the block back to the state where it was removed.
+    5.  This diff is initially saved as `.taylored/main.taylored`.
+    6.  The file `.taylored/main.taylored` is then renamed to `.taylored/NUMERO.taylored`, where `NUMERO` is taken from the block's start marker.
+    7.  Finally, the temporary Git branch is deleted, and the repository is switched back to the original branch. The source files remain untouched on the original branch.
 
-    Suppose you have a file `src/feature.js` with the following content:
+    **Output**:
+    *   For each taylored block, a file named `.taylored/NUMERO.taylored` is created (e.g., `.taylored/1.taylored`, `.taylored/42.taylored`).
+    *   Each such file contains a Git diff. Applying this diff file (e.g., using `taylored --add NUMERO`) would add the taylored block (including its markers) to the source file from which it was extracted (relative to the state of the `main` branch at the time of extraction).
+
+    **Markers**:
+    *   Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`). `NUMERO` is an integer that becomes the name of the output `.taylored` file (e.g., `1.taylored`).
+    *   End marker: `<taylored>`
+
+    **Extension Argument**:
+    *   `<EXTENSION>` specifies which files to scan (e.g., `ts`, `py`, `java`). The leading dot is optional (e.g., `ts` is treated the same as `.ts`).
+    *   The search is recursive, excluding `.git`, `node_modules`, and the `.taylored` directory itself.
+
+    ### Example: Using `--automatic` (Git Workflow)
+
+    Suppose you have a file `src/feature.js` on your `main` branch, committed with the following content:
 
     ```javascript
-    function oldCode() {
+    // src/feature.js
+    function existingCode() {
       // ...
     }
 
-    // <taylored 1>
-    function newFeaturePart1() {
-      console.log("This is part 1 of the new feature");
+    // <taylored 15>
+    function newFeaturePart() {
+      console.log("This is a new, self-contained feature snippet.");
     }
     // <taylored>
 
-    // Some other code
-
-    // <taylored 2>
-    function newFeaturePart2() {
-      console.log("This is part 2, depending on part 1");
-    }
-    // <taylored>
+    console.log("End of file.");
     ```
 
-    To extract these blocks:
+    To create a taylored diff file for block `15`:
 
-    ```bash
-    taylored --automatic js
-    ```
-
-    This will create two files:
-    *   `.taylored/feature_taylored_1.taylored` containing:
-        ```javascript
-        function newFeaturePart1() {
-          console.log("This is part 1 of the new feature");
-        }
-        ```
-    *   `.taylored/feature_taylored_2.taylored` containing:
-        ```javascript
-        function newFeaturePart2() {
-          console.log("This is part 2, depending on part 1");
-        }
+    1.  Ensure your Git working directory is clean.
+    2.  Ensure `.taylored/main.taylored` and `.taylored/15.taylored` do not exist.
+    3.  Run the command:
+        ```bash
+        taylored --automatic js
         ```
 
-    *Example:*
-    ```bash
-    taylored --data my_feature_patch
-    # Output might be: Refactor: Adjust patch for latest changes
-    # Or empty if no message was found.
-    ```
+    This will:
+    *   Internally perform Git operations: create a temporary branch, remove the block, commit, and generate a diff against the `main` branch.
+    *   Create a file named `.taylored/15.taylored`.
+    *   The content of `.taylored/15.taylored` will be a Git diff, which, if applied, would add the block to `src/feature.js`. It would look something like this:
+
+        ```diff
+        --- a/src/feature.js
+        +++ b/src/feature.js
+
+           // ...
+         }
+         
+        +// <taylored 15>
+        +function newFeaturePart() {
+        +  console.log("This is a new, self-contained feature snippet.");
+        +}
+        +// <taylored>
+        +
+         console.log("End of file.");
+        ```
+    *   Your `src/feature.js` file on your `main` branch will remain unchanged by this operation.
 
 ## How it Works
 
@@ -248,7 +255,14 @@ Here are the commands you can use with Taylored:
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
 * **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a sophisticated approach (`lib/git-patch-offset-updater.js`). **It first checks for uncommitted changes in the repository; if any exist, the command will exit.** Otherwise, it attempts to apply/revert the patch on a temporary branch, generates a new patch from this state against the `main` branch, and then replaces the original `.taylored/<file>` with this new, offset-adjusted patch. If the `--message` option is used, this message is intended for the `Subject:` line of the *output* `.taylored` file. Temporary commits made during the process use a default internal message. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
 * **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
-* **Automatic Extraction:** `taylored --automatic <EXTENSION>` recursively searches for files with the given extension. For each file, it looks for blocks delineated by `<taylored NUMERO>` and `<taylored>` markers. The content of each such block is extracted and saved into a new file named `originalFilename_taylored_NUMERO.taylored` within the `.taylored` directory. Common development directories like `.git` and `node_modules` are excluded from the search.
+* **Automatic Extraction (Git Workflow):** `taylored --automatic <EXTENSION>` requires a clean Git state. For each taylored block found (delimiters: `<taylored NUMERO>` and `</taylored>`):
+    1. It creates a temporary branch.
+    2. In this branch, it removes the block from the source file and commits this change.
+    3. It then generates a diff by comparing `HEAD` (the temporary branch with the block removed) to the `main` branch. This diff represents the addition of the block.
+    4. This diff is saved as `.taylored/main.taylored` by an internal call similar to `taylored --save main`.
+    5. The file `.taylored/main.taylored` is renamed to `.taylored/NUMERO.taylored`.
+    6. The temporary branch is deleted, and the original branch is restored. The source files on the original branch are not modified by this process.
+    This ensures that each `.taylored/NUMERO.taylored` file is a proper Git diff.
 
 ## Contributing
 

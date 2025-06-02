@@ -11,12 +11,7 @@ import { TAYLORED_DIR_NAME } from '../constants';
  */
 export async function handleOffsetCommand(userInputFileName: string, CWD: string, customCommitMessage?: string): Promise<void> {
     const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
-    if (resolvedTayloredFileName !== userInputFileName) {
-    }
-
-    if (customCommitMessage) {
-    }
-
+    
     try {
         const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, customCommitMessage);
 

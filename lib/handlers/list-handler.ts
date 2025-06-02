@@ -38,7 +38,7 @@ export async function handleListOperation(CWD: string): Promise<void> {
                     tayloredFilesList.push(entry);
                 }
             } catch (fileStatError: any) {
-                // console.warn(`WARN: Could not process entry '${entryPath}': ${fileStatError.message}`);
+                console.warn(`WARN: Could not process entry '${entryPath}': ${fileStatError.message}`);
             }
         }
 

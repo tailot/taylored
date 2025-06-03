@@ -54,8 +54,11 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`                            The <taylored NUMERO> tag can optionally include a 'compute="CHARS_TO_STRIP"' attribute.`);
         console.error(`                            If 'compute' is present, the content within the taylored block is executed as a Node.js script.`);
         console.error(`                            'CHARS_TO_STRIP' are characters removed from the beginning of the script before execution.`);
-        console.error(`                            The script's stdout output then replaces the entire taylored block in the generated patch.`);
-        console.error(`                            Example: <taylored 1 compute="/*">/*console.log("Hello");*\/</taylored>\`);`);
+        console.error(`                            The script's standard output then replaces the entire taylored block (from \\\`<taylored ...>\\\` to \\\`</taylored>\\\`) in the generated patch.`);
+        console.error(`                            This means the dynamic content or calculation result is saved as a standard diff, which can then be applied or reverted using Taylored's \\\`--add\\\` or \\\`--remove\\\` commands.`);
+        console.error(`                            Example: <taylored 1 compute="/*">/*#!/usr/bin/env node
+console.log("Computed value: " + (Math.random() * 100).toFixed(0));*\/</taylored>\`);`);
+        console.error(`                            (The \\\`#!/usr/bin/env node\\\` shebang makes the script directly executable in environments where Node.js is in the system's PATH.)`);
         console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);

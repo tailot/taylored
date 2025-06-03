@@ -84,7 +84,7 @@ describe('Automatic Command (Git Workflow)', () => {
       createFileAndCommit(testRepoPath, 'committed_file.txt', 'initial content', 'Initial commit of a file');
       fs.writeFileSync(path.join(testRepoPath, 'committed_file.txt'), 'changed content'); 
       
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("CRITICAL ERROR: Uncommitted changes or untracked files in the repository.");
     });
@@ -93,7 +93,7 @@ describe('Automatic Command (Git Workflow)', () => {
       testRepoPath = setupTestRepo('clean_state_untracked');
       fs.writeFileSync(path.join(testRepoPath, 'untracked_file.txt'), 'untracked content'); 
       
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("CRITICAL ERROR: Uncommitted changes or untracked files in the repository.");
     });
@@ -107,7 +107,7 @@ describe('Automatic Command (Git Workflow)', () => {
       // Create AND commit the conflicting file to pass the "dirty repo" check
       createFileAndCommit(testRepoPath, path.join(TAYLORED_DIR_NAME, `main${TAYLORED_FILE_EXTENSION}`), 'dummy content', 'add main.taylored');
             
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
       if (result.status === 0) {
         console.log("Test 'Intermediate .taylored/main.taylored Must Not Exist' unexpectedly got status 0.");
         console.log("STDOUT:", result.stdout);
@@ -127,7 +127,7 @@ describe('Automatic Command (Git Workflow)', () => {
       // Create AND commit the conflicting file
       createFileAndCommit(testRepoPath, path.join(TAYLORED_DIR_NAME, `1${TAYLORED_FILE_EXTENSION}`), 'dummy content', 'add 1.taylored');
       
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
       if (result.status === 0) {
         console.log("Test 'Target .taylored/NUMERO.taylored Must Not Exist' unexpectedly got status 0.");
         console.log("STDOUT:", result.stdout);
@@ -157,7 +157,7 @@ describe('Automatic Command (Git Workflow)', () => {
 // Line 6`;
       createFileAndCommit(testRepoPath, 'src/app.ts', appTsContent, 'Add app.ts with block 42');
 
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
       
       expect(result.stderr).toBe(''); 
       expect(result.status).toBe(0);
@@ -195,7 +195,7 @@ describe('Automatic Command (Git Workflow)', () => {
         const utilsJsContent = `// Utils Start\n// <taylored 2>const utilOne = 1;\n// </taylored>\n// Middle Code\n// <taylored 3>const utilTwo = 2;\n// </taylored>\n// Utils End`;
         createFileAndCommit(testRepoPath, 'src/utils.js', utilsJsContent, 'Add utils.js');
 
-        const result = runTayloredCommand(testRepoPath, '--automatic js');
+        const result = runTayloredCommand(testRepoPath, '--automatic js main');
         expect(result.status).toBe(0);
         expect(result.stderr).toBe('');
 
@@ -230,7 +230,7 @@ console.log(jsVar);`;
       createFileAndCommit(testRepoPath, 'src/component.js', jsContent, 'Add component.js with block 102');
 
       // Run taylored for both .ts and .js extensions
-      const result = runTayloredCommand(testRepoPath, '--automatic ts,js');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts,js main');
 
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
@@ -286,7 +286,7 @@ console.log(jsVar);`;
       testRepoPath = setupTestRepo('no_markers_found');
       createFileAndCommit(testRepoPath, 'src/app.ts', '// No markers here', 'Add app.ts without markers');
       
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
       expect(result.status).toBe(0); 
       expect(result.stdout).toContain("No taylored blocks found matching the criteria");
       
@@ -294,30 +294,34 @@ console.log(jsVar);`;
       expect(tayloredDirContents.length).toBe(0); 
     });
 
-    test('Error during handleSaveOperation (e.g., main branch missing)', () => {
-      testRepoPath = setupTestRepo('error_save_operation');
+    test('Error during handleSaveOperation (e.g., specified branch missing)', () => {
+      testRepoPath = setupTestRepo('error_save_non_existent_branch');
       createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
-      // Delete the 'main' branch to cause failure in handleSaveOperation
-      const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
-      if (currentBranch === 'main') { // Should be on main
-        execSync('git checkout -b temp-branch-for-main-deletion', { cwd: testRepoPath });
-      }
-      execSync('git branch -D main', { cwd: testRepoPath }); 
 
-      const result = runTayloredCommand(testRepoPath, '--automatic ts');
+      // Ensure main branch exists and is not the one we are making non-existent
+      const initialBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
+      if (initialBranch !== 'main') {
+        execSync('git checkout main', { cwd: testRepoPath }); // Ensure we are on main if it exists
+      } else {
+        // If already on main, good.
+      }
+
+      const result = runTayloredCommand(testRepoPath, '--automatic ts non_existent_branch');
       if (result.status === 0) {
-        console.log("Test 'Error during handleSaveOperation (e.g., main branch missing)' unexpectedly got status 0.");
+        console.log("Test 'Error during handleSaveOperation (e.g., specified branch missing)' unexpectedly got status 0.");
         console.log("STDOUT:", result.stdout);
         console.log("STDERR:", result.stderr);
       }
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("Failed to process block 1"); 
-      expect(result.stderr).toMatch(/fatal: ambiguous argument 'main'|unknown revision or path not in the working tree|'main' is not a valid branch name/i);
+      // Check for an error message indicating the non_existent_branch is the issue
+      expect(result.stderr).toMatch(/fatal: ambiguous argument 'non_existent_branch'|unknown revision or path not in the working tree|'non_existent_branch' is not a valid branch name/i);
 
       const branches = execSync('git branch', { cwd: testRepoPath, encoding: 'utf8' });
-      expect(branches).not.toContain('temp-taylored-'); 
-      // Current branch might be the temp one created before main deletion, or the original if checkout failed.
-      // The key is that the temp-taylored-* branch for block processing should be gone.
+      expect(branches).not.toContain('temp-taylored-');
+      // Ensure we are back on the original branch (main in this setup)
+      const currentBranchAfter = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
+      expect(currentBranchAfter).toBe('main');
     });
   });
 });

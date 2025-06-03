@@ -166,9 +166,9 @@ Here are the commands you can use with Taylored:
 
 * #### Automatically find and extract taylored blocks (Git Workflow)
     ```bash
-    taylored --automatic <EXTENSIONS>
+    taylored --automatic <EXTENSIONS> <branch_name>
     ```
-    Scans files with the specified `<EXTENSIONS>` (e.g., a single extension like `ts` or a comma-separated list like `ts,js,py`) for taylored blocks and creates individual, diff-based `.taylored` files for each block using a Git workflow.
+    Scans files with the specified `<EXTENSIONS>` (e.g., a single extension like `ts` or a comma-separated list like `ts,js,py`) for taylored blocks and creates individual, diff-based `.taylored` files for each block using a Git workflow, comparing against the specified `<branch_name>`.
 
     **Prerequisites**:
     *   **Clean Git Repository**: The command must be run in a Git repository with no uncommitted changes or untracked files.
@@ -180,14 +180,14 @@ Here are the commands you can use with Taylored:
     1.  A temporary Git branch is created from the current branch.
     2.  On this temporary branch, the entire block (including the start and end markers) is removed from the source file.
     3.  This removal is committed on the temporary branch.
-    4.  The tool then internally simulates `taylored --save main`. This compares `HEAD` (the commit on the temporary branch with the block removed) against the `main` branch. The resulting diff represents the changes needed to "add" the block back to the state where it was removed.
-    5.  This diff is initially saved as `.taylored/main.taylored`.
+    4.  The tool then internally simulates `taylored --save <branch_name>` (where `<branch_name>` is the branch you provided). This compares `HEAD` (the commit on the temporary branch with the block removed) against the `<branch_name>` you specified. The resulting diff represents the changes needed to "add" the block back to the state where it was removed (relative to that branch).
+    5.  This diff is initially saved as `.taylored/main.taylored` (this is a fixed intermediate name).
     6.  The file `.taylored/main.taylored` is then renamed to `.taylored/NUMERO.taylored`, where `NUMERO` is taken from the block's start marker.
     7.  Finally, the temporary Git branch is deleted, and the repository is switched back to the original branch. The source files remain untouched on the original branch.
 
     **Output**:
     *   For each taylored block, a file named `.taylored/NUMERO.taylored` is created (e.g., `.taylored/1.taylored`, `.taylored/42.taylored`).
-    *   Each such file contains a Git diff. Applying this diff file (e.g., using `taylored --add NUMERO`) would add the taylored block (including its markers) to the source file from which it was extracted (relative to the state of the `main` branch at the time of extraction).
+    *   Each such file contains a Git diff. Applying this diff file (e.g., using `taylored --add NUMERO`) would add the taylored block (including its markers) to the source file from which it was extracted (relative to the state of the `<branch_name>` you specified at the time of extraction).
 
     **Markers**:
     *   Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`). `NUMERO` is an integer that becomes the name of the output `.taylored` file (e.g., `1.taylored`).
@@ -232,17 +232,17 @@ Here are the commands you can use with Taylored:
 
     1.  Ensure your Git working directory is clean.
     2.  Ensure `.taylored/main.taylored` and `.taylored/15.taylored` do not exist.
-    3.  Run the command (if `src/feature.js` is the target):
+    3.  Run the command (if `src/feature.js` is the target, assuming `main` is your desired base branch for the diff):
         ```bash
-        taylored --automatic js
+        taylored --automatic js main
         ```
-    4.  To scan for multiple extensions, for example JavaScript and TypeScript files:
+    4.  To scan for multiple extensions, for example JavaScript and TypeScript files, against the `develop` branch:
         ```bash
-        taylored --automatic js,ts
+        taylored --automatic js,ts develop
         ```
 
     This will:
-    *   Internally perform Git operations: create a temporary branch, remove the block, commit, and generate a diff against the `main` branch.
+    *   Internally perform Git operations: create a temporary branch, remove the block, commit, and generate a diff against the `main` branch (or the branch you specified).
     *   Create a file named `.taylored/15.taylored`.
     *   The content of `.taylored/15.taylored` will be a Git diff, which, if applied, would add the block to `src/feature.js`. It would look something like this:
 
@@ -274,8 +274,8 @@ Here are the commands you can use with Taylored:
 * **Automatic Extraction (Git Workflow):** `taylored --automatic <EXTENSIONS>` requires a clean Git state. For each taylored block found (delimiters: `<taylored NUMERO>` and `</taylored>`) in files matching the specified extensions:
     1. It creates a temporary branch.
     2. In this branch, it removes the block from the source file and commits this change.
-    3. It then generates a diff by comparing `HEAD` (the temporary branch with the block removed) to the `main` branch. This diff represents the addition of the block.
-    4. This diff is saved as `.taylored/main.taylored` by an internal call similar to `taylored --save main`.
+    3. It then generates a diff by comparing `HEAD` (the temporary branch with the block removed) to the `<branch_name>` specified in the command. This diff represents the addition of the block.
+    4. This diff is initially saved as `.taylored/main.taylored` (a temporary name) by an internal call that effectively performs a save operation against your specified `<branch_name>`.
     5. The file `.taylored/main.taylored` is renamed to `.taylored/NUMERO.taylored`.
     6. The temporary branch is deleted, and the original branch is restored. The source files on the original branch are not modified by this process.
     This ensures that each `.taylored/NUMERO.taylored` file is a proper Git diff.

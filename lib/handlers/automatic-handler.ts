@@ -24,7 +24,7 @@ async function findFilesRecursive(dir: string, ext: string, allFiles: string[] =
     return allFiles;
 }
 
-export async function handleAutomaticOperation(extension: string, CWD: string): Promise<void> {
+export async function handleAutomaticOperation(extensionsInput: string, CWD: string): Promise<void> {
     let originalBranchName: string;
     try {
         originalBranchName = execSync('git rev-parse --abbrev-ref HEAD', { cwd: CWD, ...execOpts }).trim();
@@ -57,7 +57,7 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
         throw new Error(errorMessage);
     }
 
-    console.log(`Starting automatic taylored block extraction for extension '${extension}' in directory '${CWD}'. Original branch: '${originalBranchName}'`);
+    console.log(`Starting automatic taylored block extraction for extensions '${extensionsInput}' in directory '${CWD}'. Original branch: '${originalBranchName}'`);
 
     const tayloredDir = path.join(CWD, TAYLORED_DIR_NAME);
     try {
@@ -68,26 +68,31 @@ export async function handleAutomaticOperation(extension: string, CWD: string): 
         throw new Error(errorMessage);
     }
 
-    const normalizedExtension = extension.startsWith('.') ? extension : `.${extension}`;
-    let filesToScan: string[];
-    try {
-        filesToScan = await findFilesRecursive(CWD, normalizedExtension);
-    } catch (error: any) {
-        console.error(`Error while searching for files: ${error.message}`);
-        return; 
+    const extensions = extensionsInput.split(',').map(ext => ext.trim());
+    const allFilesToScan: string[] = [];
+
+    for (const ext of extensions) {
+        const normalizedExtension = ext.startsWith('.') ? ext : `.${ext}`;
+        try {
+            const filesForExtension = await findFilesRecursive(CWD, normalizedExtension);
+            allFilesToScan.push(...filesForExtension);
+        } catch (error: any) {
+            console.error(`Error while searching for files with extension '${normalizedExtension}': ${error.message}`);
+            // Decide if you want to continue with other extensions or return
+        }
     }
 
-    if (filesToScan.length === 0) {
-        console.log(`No files found with extension: ${normalizedExtension}`);
+    if (allFilesToScan.length === 0) {
+        console.log(`No files found with specified extensions: ${extensionsInput}`);
         return;
     }
 
-    console.log(`Found ${filesToScan.length} file(s) with extension '${normalizedExtension}'. Processing...`);
+    console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
     const blockRegex = /<taylored (\d+)>([\s\S]*?)<\/taylored>/g;
     let totalBlocksProcessed = 0;
 
-    for (const originalFilePath of filesToScan) {
+    for (const originalFilePath of allFilesToScan) {
         let fileContent: string;
         try {
             fileContent = await fs.readFile(originalFilePath, 'utf-8');

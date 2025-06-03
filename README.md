@@ -166,9 +166,9 @@ Here are the commands you can use with Taylored:
 
 * #### Automatically find and extract taylored blocks (Git Workflow)
     ```bash
-    taylored --automatic <EXTENSION>
+    taylored --automatic <EXTENSIONS>
     ```
-    Scans files with the specified `<EXTENSION>` for taylored blocks and creates individual, diff-based `.taylored` files for each block using a Git workflow.
+    Scans files with the specified `<EXTENSIONS>` (e.g., a single extension like `ts` or a comma-separated list like `ts,js,py`) for taylored blocks and creates individual, diff-based `.taylored` files for each block using a Git workflow.
 
     **Prerequisites**:
     *   **Clean Git Repository**: The command must be run in a Git repository with no uncommitted changes or untracked files.
@@ -176,7 +176,7 @@ Here are the commands you can use with Taylored:
     *   **No Target File Conflict**: The specific output file (e.g., `.taylored/1.taylored` for a block numbered `1`) must not already exist.
 
     **Workflow Overview**:
-    The command iterates through each file matching `<EXTENSION>` and processes blocks defined by `<taylored NUMERO>` and `</taylored>` markers. For each block:
+    The command iterates through each file matching the specified `<EXTENSIONS>` and processes blocks defined by `<taylored NUMERO>` and `</taylored>` markers. For each block:
     1.  A temporary Git branch is created from the current branch.
     2.  On this temporary branch, the entire block (including the start and end markers) is removed from the source file.
     3.  This removal is committed on the temporary branch.
@@ -205,8 +205,8 @@ Here are the commands you can use with Taylored:
 
     In this case, the taylored block `30` would include the entire line: `function specialProcess() { /* Some specific logic */ } // <taylored 30> Special Comment Block // </taylored>`. When `taylored --automatic js` is run, the generated `.taylored/30.taylored` file will contain this whole line as part of the diff to be added.
 
-    **Extension Argument**:
-    *   `<EXTENSION>` specifies which files to scan (e.g., `ts`, `py`, `java`). The leading dot is optional (e.g., `ts` is treated the same as `.ts`).
+    **Extensions Argument**:
+    *   `<EXTENSIONS>` specifies which file extensions to scan. It can be a single extension (e.g., `ts`, `py`, `java`) or a comma-separated list of extensions (e.g., `ts,js,mjs,py`). The leading dot for extensions is optional (e.g., `ts` is treated the same as `.ts`).
     *   The search is recursive, excluding `.git`, `node_modules`, and the `.taylored` directory itself.
 
     ### Example: Using `--automatic` (Git Workflow)
@@ -232,9 +232,13 @@ Here are the commands you can use with Taylored:
 
     1.  Ensure your Git working directory is clean.
     2.  Ensure `.taylored/main.taylored` and `.taylored/15.taylored` do not exist.
-    3.  Run the command:
+    3.  Run the command (if `src/feature.js` is the target):
         ```bash
         taylored --automatic js
+        ```
+    4.  To scan for multiple extensions, for example JavaScript and TypeScript files:
+        ```bash
+        taylored --automatic js,ts
         ```
 
     This will:
@@ -267,7 +271,7 @@ Here are the commands you can use with Taylored:
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
 * **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a sophisticated approach (`lib/git-patch-offset-updater.js`). **It first checks for uncommitted changes in the repository; if any exist, the command will exit.** Otherwise, it attempts to apply/revert the patch on a temporary branch, generates a new patch from this state against the `main` branch, and then replaces the original `.taylored/<file>` with this new, offset-adjusted patch. If the `--message` option is used, this message is intended for the `Subject:` line of the *output* `.taylored` file. Temporary commits made during the process use a default internal message. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
 * **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
-* **Automatic Extraction (Git Workflow):** `taylored --automatic <EXTENSION>` requires a clean Git state. For each taylored block found (delimiters: `<taylored NUMERO>` and `</taylored>`):
+* **Automatic Extraction (Git Workflow):** `taylored --automatic <EXTENSIONS>` requires a clean Git state. For each taylored block found (delimiters: `<taylored NUMERO>` and `</taylored>`) in files matching the specified extensions:
     1. It creates a temporary branch.
     2. In this branch, it removes the block from the source file and commits this change.
     3. It then generates a diff by comparing `HEAD` (the temporary branch with the block removed) to the `main` branch. This diff represents the addition of the block.

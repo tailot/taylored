@@ -109,11 +109,35 @@ async function main(): Promise<void> {
             await handleDataOperation(argument, CWD);
         }
         else if (mode === '--automatic') {
-            if (rawArgs.length !== 3) {
-                printUsageAndExit("CRITICAL ERROR: --automatic option requires exactly two arguments: <EXTENSIONS> and <branch_name>.");
+            let extensionsInput: string;
+            let branchNameArgument: string;
+            let excludeDirs: string[] | undefined;
+
+            if (rawArgs.length === 3) {
+                extensionsInput = rawArgs[1];
+                branchNameArgument = rawArgs[2];
+            } else if (rawArgs.length === 5) {
+                extensionsInput = rawArgs[1];
+                branchNameArgument = rawArgs[2];
+                if (rawArgs[3] !== '--exclude') {
+                    printUsageAndExit("CRITICAL ERROR: Expected '--exclude' as the fourth argument for --automatic with 5 arguments.");
+                }
+                const excludeArgument = rawArgs[4];
+                if (excludeArgument.startsWith('--')) {
+                    printUsageAndExit(`CRITICAL ERROR: Invalid exclude argument '${excludeArgument}'. It cannot start with '--'.`);
+                }
+                // Further validation for excludeArgument can be added here if needed (e.g., empty string)
+                excludeDirs = excludeArgument.split(',').map(dir => dir.trim()).filter(dir => dir.length > 0);
+                if (excludeDirs.length === 0 && excludeArgument.length > 0) {
+                     printUsageAndExit(`CRITICAL ERROR: Exclude argument '${excludeArgument}' resulted in an empty list of directories.`);
+                } else if (excludeDirs.length === 0 && excludeArgument.length === 0) {
+                    // Allow empty string to mean no exclusions, effectively same as not providing --exclude
+                    excludeDirs = undefined;
+                }
+
+            } else {
+                printUsageAndExit("CRITICAL ERROR: --automatic option requires either 2 arguments (<EXTENSIONS> <branch_name>) or 4 arguments (<EXTENSIONS> <branch_name> --exclude <DIR_LIST>).");
             }
-            const extensionsInput = rawArgs[1];
-            const branchNameArgument = rawArgs[2];
 
             if (extensionsInput.startsWith('--')) {
                 printUsageAndExit(`CRITICAL ERROR: Invalid extensions input '${extensionsInput}' after --automatic. It cannot start with '--'.`);
@@ -126,7 +150,7 @@ async function main(): Promise<void> {
             if (branchNameArgument.startsWith('--')) {
                 printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchNameArgument}' after --automatic <EXTENSIONS>. It cannot start with '--'.`);
             }
-            await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD);
+            await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD, excludeDirs);
         }
         else {
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];

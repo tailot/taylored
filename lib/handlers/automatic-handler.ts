@@ -9,13 +9,23 @@ import { handleSaveOperation } from './save-handler';
 
 const execOpts: ExecSyncOptionsWithStringEncoding = { encoding: 'utf8', stdio: 'pipe' };
 
-async function findFilesRecursive(dir: string, ext: string, allFiles: string[] = []): Promise<string[]> {
+async function findFilesRecursive(
+    dir: string,
+    ext: string,
+    allFiles: string[] = [],
+    excludeDirs?: string[],
+    CWD_ABS?: string // Absolute path to CWD for reliable relative path checking
+): Promise<string[]> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            if (entry.name !== '.git' && entry.name !== 'node_modules' && entry.name !== TAYLORED_DIR_NAME) {
-                await findFilesRecursive(fullPath, ext, allFiles);
+            const relativePath = CWD_ABS ? path.relative(CWD_ABS, fullPath) : entry.name;
+            if (entry.name !== '.git' &&
+                entry.name !== TAYLORED_DIR_NAME &&
+                (!excludeDirs || !excludeDirs.some(excludedDir => relativePath === excludedDir || relativePath.startsWith(excludedDir + path.sep)))
+            ) {
+                await findFilesRecursive(fullPath, ext, allFiles, excludeDirs, CWD_ABS);
             }
         } else if (entry.isFile() && entry.name.endsWith(ext)) {
             allFiles.push(fullPath);
@@ -24,7 +34,12 @@ async function findFilesRecursive(dir: string, ext: string, allFiles: string[] =
     return allFiles;
 }
 
-export async function handleAutomaticOperation(extensionsInput: string, branchName: string, CWD: string): Promise<void> {
+export async function handleAutomaticOperation(
+    extensionsInput: string,
+    branchName: string,
+    CWD: string,
+    excludeDirs?: string[]
+): Promise<void> {
     let originalBranchName: string;
     try {
         originalBranchName = execSync('git rev-parse --abbrev-ref HEAD', { cwd: CWD, ...execOpts }).trim();
@@ -70,11 +85,13 @@ export async function handleAutomaticOperation(extensionsInput: string, branchNa
 
     const extensions = extensionsInput.split(',').map(ext => ext.trim());
     const allFilesToScan: string[] = [];
+    const CWD_ABS = path.resolve(CWD); // Resolve CWD to an absolute path
 
     for (const ext of extensions) {
         const normalizedExtension = ext.startsWith('.') ? ext : `.${ext}`;
         try {
-            const filesForExtension = await findFilesRecursive(CWD, normalizedExtension);
+            // Pass excludeDirs and CWD_ABS to findFilesRecursive
+            const filesForExtension = await findFilesRecursive(CWD_ABS, normalizedExtension, [], excludeDirs, CWD_ABS);
             allFilesToScan.push(...filesForExtension);
         } catch (error: any) {
             console.error(`Error while searching for files with extension '${normalizedExtension}': ${error.message}`);

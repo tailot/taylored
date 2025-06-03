@@ -137,6 +137,7 @@ async function main(): Promise<void> {
 
             } else {
                 printUsageAndExit("CRITICAL ERROR: --automatic option requires either 2 arguments (<EXTENSIONS> <branch_name>) or 4 arguments (<EXTENSIONS> <branch_name> --exclude <DIR_LIST>).");
+                return; // Explicitly exit path for TSC
             }
 
             if (extensionsInput.startsWith('--')) {

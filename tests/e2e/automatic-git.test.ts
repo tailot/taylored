@@ -336,15 +336,15 @@ console.log(jsVar);`;
     test('Correctly excludes specified directories and their subdirectories', () => {
       testRepoPath = setupTestRepo('automatic_exclude_dirs');
 
-      // Create files with taylored blocks
-      createFileAndCommit(testRepoPath, 'file1.js', '// Root file\n// <taylored 1>\n// Block 1 content\n// </taylored>', 'Add file1.js');
+      // Create files with taylored blocks, ensuring all end with a newline
+      createFileAndCommit(testRepoPath, 'file1.js', '// Root file\n// <taylored 1>\n// Block 1 content\n// </taylored>\n', 'Add file1.js');
 
-      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'file2.js'), '// Excluded dir1 file\n// <taylored 2>\n// Block 2 content\n// </taylored>', 'Add file2.js in excluded_dir1');
-      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), '// Sub Excluded dir1 file\n// <taylored 5>\n// Block 5 content\n// </taylored>', 'Add file_in_sub.js in excluded_dir1/sub_excluded_dir');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'file2.js'), '// Excluded dir1 file\n// <taylored 2>\n// Block 2 content\n// </taylored>\n', 'Add file2.js in excluded_dir1');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), '// Sub Excluded dir1 file\n// <taylored 5>\n// Block 5 content\n// </taylored>\n', 'Add file_in_sub.js in excluded_dir1/sub_excluded_dir');
 
-      createFileAndCommit(testRepoPath, path.join('not_excluded_dir', 'file3.js'), '// Not excluded dir file\n// <taylored 3>\n// Block 3 content\n// </taylored>', 'Add file3.js in not_excluded_dir');
+      createFileAndCommit(testRepoPath, path.join('not_excluded_dir', 'file3.js'), '// Not excluded dir file\n// <taylored 3>\n// Block 3 content\n// </taylored>\n', 'Add file3.js in not_excluded_dir');
 
-      createFileAndCommit(testRepoPath, path.join('excluded_dir2', 'file4.js'), '// Excluded dir2 file\n// <taylored 4>\n// Block 4 content\n// </taylored>', 'Add file4.js in excluded_dir2');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir2', 'file4.js'), '// Excluded dir2 file\n// <taylored 4>\n// Block 4 content\n// </taylored>\n', 'Add file4.js in excluded_dir2');
 
       // Run the taylored command with --exclude
       // Assuming 'main' is the default branch after setupTestRepo

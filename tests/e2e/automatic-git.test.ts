@@ -100,7 +100,7 @@ describe('Automatic Command (Git Workflow)', () => {
     
     test('Intermediate .taylored/main.taylored Must Not Exist: Fails if it exists', () => {
       testRepoPath = setupTestRepo('main_taylored_exists');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// <taylored>', 'Add app.ts');
+      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
       
       const tayloredDirPath = path.join(testRepoPath, TAYLORED_DIR_NAME);
       fs.mkdirSync(tayloredDirPath, { recursive: true });
@@ -120,7 +120,7 @@ describe('Automatic Command (Git Workflow)', () => {
 
     test('Target .taylored/NUMERO.taylored Must Not Exist: Fails if it exists', () => {
       testRepoPath = setupTestRepo('numero_taylored_exists');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// <taylored>', 'Add app.ts');
+      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
 
       const tayloredDirPath = path.join(testRepoPath, TAYLORED_DIR_NAME);
       fs.mkdirSync(tayloredDirPath, { recursive: true });
@@ -153,7 +153,7 @@ describe('Automatic Command (Git Workflow)', () => {
 // <taylored 42>
 // This is block 42
 // It has two lines
-// <taylored>
+// </taylored>
 // Line 6`;
       createFileAndCommit(testRepoPath, 'src/app.ts', appTsContent, 'Add app.ts with block 42');
 
@@ -173,7 +173,7 @@ describe('Automatic Command (Git Workflow)', () => {
       expect(tayloredContent).toContain(`+// <taylored 42>`);
       expect(tayloredContent).toContain(`+// This is block 42`);
       expect(tayloredContent).toContain(`+// It has two lines`);
-      expect(tayloredContent).toContain(`+// <taylored>`);
+      expect(tayloredContent).toContain(`+// </taylored>`);
       expect(tayloredContent).toContain(` // Line 1`); 
       expect(tayloredContent).toContain(` // Line 6`); 
 
@@ -189,10 +189,10 @@ describe('Automatic Command (Git Workflow)', () => {
 
     test('Multiple Blocks: Correctly extracts all blocks', () => {
         testRepoPath = setupTestRepo('successful_multiple_blocks');
-        const serviceJsContent = `// Service Start\n// <taylored 1>const service = "alpha";\n// <taylored>\n// Service End`;
+        const serviceJsContent = `// Service Start\n// <taylored 1>const service = "alpha";\n// </taylored>\n// Service End`;
         createFileAndCommit(testRepoPath, 'src/service.js', serviceJsContent, 'Add service.js');
         
-        const utilsJsContent = `// Utils Start\n// <taylored 2>const utilOne = 1;\n// <taylored>\n// Middle Code\n// <taylored 3>const utilTwo = 2;\n// <taylored>\n// Utils End`;
+        const utilsJsContent = `// Utils Start\n// <taylored 2>const utilOne = 1;\n// </taylored>\n// Middle Code\n// <taylored 3>const utilTwo = 2;\n// </taylored>\n// Utils End`;
         createFileAndCommit(testRepoPath, 'src/utils.js', utilsJsContent, 'Add utils.js');
 
         const result = runTayloredCommand(testRepoPath, '--automatic js');
@@ -236,7 +236,7 @@ describe('Automatic Command (Git Workflow)', () => {
 
     test('Error during handleSaveOperation (e.g., main branch missing)', () => {
       testRepoPath = setupTestRepo('error_save_operation');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// <taylored>', 'Add app.ts');
+      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
       // Delete the 'main' branch to cause failure in handleSaveOperation
       const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
       if (currentBranch === 'main') { // Should be on main

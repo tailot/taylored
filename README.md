@@ -191,7 +191,7 @@ Here are the commands you can use with Taylored:
 
     **Markers**:
     *   Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`). `NUMERO` is an integer that becomes the name of the output `.taylored` file (e.g., `1.taylored`).
-    *   End marker: `<taylored>`
+    *   End marker: `</taylored>`
 
     **Extension Argument**:
     *   `<EXTENSION>` specifies which files to scan (e.g., `ts`, `py`, `java`). The leading dot is optional (e.g., `ts` is treated the same as `.ts`).
@@ -211,7 +211,7 @@ Here are the commands you can use with Taylored:
     function newFeaturePart() {
       console.log("This is a new, self-contained feature snippet.");
     }
-    // <taylored>
+    // </taylored>
 
     console.log("End of file.");
     ```
@@ -241,7 +241,7 @@ Here are the commands you can use with Taylored:
         +function newFeaturePart() {
         +  console.log("This is a new, self-contained feature snippet.");
         +}
-        +// <taylored>
+        +// </taylored>
         +
          console.log("End of file.");
         ```

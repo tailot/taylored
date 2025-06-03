@@ -106,7 +106,7 @@ export async function handleAutomaticOperation(
 
     console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
-    const blockRegex = /<taylored (\d+)>([\s\S]*?)<\/taylored>/g;
+    const blockRegex = /<taylored\s+(\d+)(?:\s+compute=["']([^"']*)["'])?>([\s\S]*?)<\/taylored>/g;
     let totalBlocksProcessed = 0;
 
     for (const originalFilePath of allFilesToScan) {
@@ -125,73 +125,166 @@ export async function handleAutomaticOperation(
 
         for (const match of matches) {
             const numero = match[1];
-            const fullMatchText = match[0];
+            const computeCharsToStrip = match[2]; // This will be undefined if compute is not present
+            const scriptContentWithTags = match[0]; // Full matched string <taylored...>...</taylored>
+            const scriptContent = match[3]; // Content between tags
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
             const targetTayloredFilePath = path.join(tayloredDir, targetTayloredFileName);
             const intermediateMainTayloredPath = path.join(tayloredDir, `main${TAYLORED_FILE_EXTENSION}`);
 
             console.log(`Processing block ${numero} from ${originalFilePath}...`);
-            try {
-                await fs.access(intermediateMainTayloredPath);
-                const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it.`;
-                console.error(message);
-                throw new Error(message);
-            } catch (error: any) {
-                if (error.code !== 'ENOENT') {
-                    throw error; 
-                }
-            }
 
-            try {
-                await fs.access(targetTayloredFilePath);
-                const message = `CRITICAL ERROR: Target file ${targetTayloredFilePath} already exists. Please remove or rename it.`;
-                console.error(message);
-                throw new Error(message);
-            } catch (error: any) {
-                if (error.code !== 'ENOENT') {
+            if (computeCharsToStrip !== undefined) {
+                // Handle compute attribute logic
+                // Ensure targetTayloredFilePath does not exist before processing
+                try {
+                    await fs.access(targetTayloredFilePath);
+                    const message = `CRITICAL ERROR: Target file ${targetTayloredFilePath} for computed block already exists. Please remove or rename it.`;
+                    console.error(message);
+                    throw new Error(message);
+                } catch (error: any) {
+                    if (error.code !== 'ENOENT') { // If it's any error other than "file not found", re-throw.
+                        throw error;
+                    }
+                }
+                // Ensure intermediateMainTayloredPath does not exist for compute, as it's not used.
+                try {
+                    await fs.access(intermediateMainTayloredPath);
+                    // If it exists, it's an issue, perhaps from a previous failed run or misuse.
+                    const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} exists for a compute block. This file should not be present. Please remove or rename it.`;
+                    console.error(message);
+                    throw new Error(message);
+                } catch (error: any) {
+                     if (error.code !== 'ENOENT') { // If it's any error other than "file not found", re-throw.
+                        throw error;
+                    }
+                }
+
+
+                let actualScriptContent = scriptContent;
+                if (computeCharsToStrip && computeCharsToStrip.length > 0) {
+                    actualScriptContent = scriptContent.startsWith(computeCharsToStrip)
+                        ? scriptContent.substring(computeCharsToStrip.length)
+                        : scriptContent;
+                }
+
+                const tempScriptPath = path.join(CWD, `taylored-temp-script-${Date.now()}.js`);
+                await fs.writeFile(tempScriptPath, actualScriptContent);
+
+                let scriptResult = '';
+                try {
+                    scriptResult = execSync(`node "${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8' });
+                } catch (execError: any) {
+                    console.error(`ERROR: Script execution failed for block ${numero} in ${originalFilePath}. Error: ${execError.message}`);
+                    // Decide if to throw, continue, or how to handle script errors
+                    // For now, let's let it throw to stop the process for this block
+                    throw execError;
+                } finally {
+                    await fs.unlink(tempScriptPath); // Clean up temp script file
+                }
+
+                const originalFileContent = await fs.readFile(originalFilePath, 'utf-8');
+                const modifiedFileContent = originalFileContent.replace(scriptContentWithTags, scriptResult);
+
+                const tempOriginalFilePath = path.join(CWD, `taylored-temp-original-${numero}-${Date.now()}.${path.extname(originalFilePath).slice(1)}`);
+                const tempModifiedFilePath = path.join(CWD, `taylored-temp-modified-${numero}-${Date.now()}.${path.extname(originalFilePath).slice(1)}`);
+
+                await fs.writeFile(tempOriginalFilePath, originalFileContent);
+                await fs.writeFile(tempModifiedFilePath, modifiedFileContent);
+
+                const diffCommand = `git diff --no-index --no-prefix "${tempOriginalFilePath}" "${tempModifiedFilePath}"`;
+                try {
+                    const diffOutput = execSync(diffCommand, { cwd: CWD, encoding: 'utf8' });
+                    await fs.writeFile(targetTayloredFilePath, diffOutput);
+                    console.log(`Successfully created ${targetTayloredFilePath} for computed block ${numero} from ${originalFilePath}`);
+                    totalBlocksProcessed++;
+                } catch (diffError: any) {
+                    // If git diff returns exit code 1, it means there are differences.
+                    // For other exit codes, it's an error.
+                    if (diffError.status === 1 && diffError.stdout) {
+                         await fs.writeFile(targetTayloredFilePath, diffError.stdout); // Save the diff output
+                         console.log(`Successfully created ${targetTayloredFilePath} for computed block ${numero} from ${originalFilePath} (diff with changes)`);
+                         totalBlocksProcessed++;
+                    } else if (diffError.status === 0) { // No differences
+                         await fs.writeFile(targetTayloredFilePath, ""); // Write empty diff
+                         console.log(`No difference found for computed block ${numero} from ${originalFilePath}. Empty taylored file created: ${targetTayloredFilePath}`);
+                         totalBlocksProcessed++;
+                    }
+                    else {
+                        console.error(`CRITICAL ERROR: Failed to generate diff for computed block ${numero} from ${originalFilePath}.`);
+                        console.error(`Error message: ${diffError.message}`);
+                        if (diffError.stderr) console.error("STDERR:\n" + diffError.stderr);
+                        if (diffError.stdout) console.error("STDOUT:\n" + diffError.stdout);
+                        throw diffError;
+                    }
+                } finally {
+                    await fs.unlink(tempOriginalFilePath);
+                    await fs.unlink(tempModifiedFilePath);
+                }
+            } else {
+                // Existing non-compute logic - wrapped correctly now
+                try {
+                    await fs.access(intermediateMainTayloredPath);
+                    const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it.`;
+                    console.error(message);
+                    throw new Error(message);
+                } catch (error: any) {
+                    if (error.code !== 'ENOENT') {
+                        throw error;
+                    }
+                }
+
+                try {
+                    await fs.access(targetTayloredFilePath);
+                    const message = `CRITICAL ERROR: Target file ${targetTayloredFilePath} already exists. Please remove or rename it.`;
+                    console.error(message);
+                    throw new Error(message);
+                } catch (error: any) {
+                    if (error.code !== 'ENOENT') {
+                        throw error;
+                    }
+                }
+
+                const fileLines = fileContent.split('\n');
+                const contentUpToMatch = fileContent.substring(0, match.index);
+                const startLineNum = contentUpToMatch.split('\n').length;
+                const matchLinesCount = scriptContentWithTags.split('\n').length; // Use scriptContentWithTags here
+                const tempBranchName = `temp-taylored-${numero}-${Date.now()}`;
+
+                try {
+                    execSync(`git checkout -b ${tempBranchName}`, { cwd: CWD, ...execOpts });
+                    const currentFileLines = (await fs.readFile(originalFilePath, 'utf-8')).split('\n');
+                    currentFileLines.splice(startLineNum - 1, matchLinesCount);
+                    await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
+                    execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
+                    execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
+                    await handleSaveOperation(branchName, CWD);
+                    await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
+                    console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
+                    totalBlocksProcessed++;
+                } catch (error: any) {
+                    console.error(`CRITICAL ERROR: Failed to process block ${numero} from ${originalFilePath}.`);
+                    console.error(`Error message: ${error.message}`);
+                    if (error.stderr) console.error("STDERR:\n" + error.stderr);
+                    if (error.stdout) console.error("STDOUT:\n" + error.stdout);
                     throw error;
+                } finally {
+                    try {
+                        execSync(`git checkout "${originalBranchName}"`, { cwd: CWD, stdio: 'ignore' });
+                    } catch (checkoutError: any) {
+                        console.warn(`Warning: Failed to checkout original branch '${originalBranchName}' during cleanup. May require manual cleanup. ${checkoutError.message}`);
+                    }
+                    try {
+                        execSync(`git branch -D "${tempBranchName}"`, { cwd: CWD, stdio: 'ignore' });
+                    } catch (deleteBranchError: any) {
+                        console.warn(`Warning: Failed to delete temporary branch '${tempBranchName}' during cleanup. May require manual cleanup. ${deleteBranchError.message}`);
+                    }
+                    try {
+                        await fs.access(intermediateMainTayloredPath);
+                        await fs.unlink(intermediateMainTayloredPath);
+                    } catch (e) { /* File doesn't exist or can't be accessed, ignore */ }
                 }
-            }
-            
-            const fileLines = fileContent.split('\n');
-            const contentUpToMatch = fileContent.substring(0, match.index);
-            const startLineNum = contentUpToMatch.split('\n').length; 
-            const matchLinesCount = fullMatchText.split('\n').length;
-            const tempBranchName = `temp-taylored-${numero}-${Date.now()}`;
-            
-            try {
-                execSync(`git checkout -b ${tempBranchName}`, { cwd: CWD, ...execOpts });
-                const currentFileLines = (await fs.readFile(originalFilePath, 'utf-8')).split('\n');
-                currentFileLines.splice(startLineNum - 1, matchLinesCount); 
-                await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
-                execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
-                execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
-                await handleSaveOperation(branchName, CWD);
-                await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
-                console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
-                totalBlocksProcessed++;
-            } catch (error: any) {
-                console.error(`CRITICAL ERROR: Failed to process block ${numero} from ${originalFilePath}.`);
-                console.error(`Error message: ${error.message}`);
-                if (error.stderr) console.error("STDERR:\n" + error.stderr);
-                if (error.stdout) console.error("STDOUT:\n" + error.stdout);
-                throw error; 
-            } finally {
-                try {
-                    execSync(`git checkout "${originalBranchName}"`, { cwd: CWD, stdio: 'ignore' });
-                } catch (checkoutError: any) {
-                    console.warn(`Warning: Failed to checkout original branch '${originalBranchName}' during cleanup. May require manual cleanup. ${checkoutError.message}`);
-                }
-                try {
-                    execSync(`git branch -D "${tempBranchName}"`, { cwd: CWD, stdio: 'ignore' });
-                } catch (deleteBranchError: any) {
-                    console.warn(`Warning: Failed to delete temporary branch '${tempBranchName}' during cleanup. May require manual cleanup. ${deleteBranchError.message}`);
-                }
-                try {
-                    await fs.access(intermediateMainTayloredPath); 
-                    await fs.unlink(intermediateMainTayloredPath);
-                } catch (e) { /* File doesn't exist or can't be accessed, ignore */ }
-            }
+            } // This closes the `if (computeCharsToStrip === undefined)` block
         }
     }
 

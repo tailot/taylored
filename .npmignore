@@ -2,6 +2,7 @@
 .gitignore
 .npmignore
 .github
+.vscode
 tests
 node_modules
 index.ts

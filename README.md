@@ -193,6 +193,18 @@ Here are the commands you can use with Taylored:
     *   Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`). `NUMERO` is an integer that becomes the name of the output `.taylored` file (e.g., `1.taylored`).
     *   End marker: `</taylored>`
 
+    It's important to note that **taylored markers affect the entire line they are on.** If markers are placed on a line containing code or comments, the entire line, including the code and/or comments, will be considered part of the taylored block.
+
+    **Example of markers on the same line:**
+
+    Consider the following line in a JavaScript file:
+
+    ```javascript
+    function specialProcess() { /* Some specific logic */ } // <taylored 30> Special Comment Block // </taylored>
+    ```
+
+    In this case, the taylored block `30` would include the entire line: `function specialProcess() { /* Some specific logic */ } // <taylored 30> Special Comment Block // </taylored>`. When `taylored --automatic js` is run, the generated `.taylored/30.taylored` file will contain this whole line as part of the diff to be added.
+
     **Extension Argument**:
     *   `<EXTENSION>` specifies which files to scan (e.g., `ts`, `py`, `java`). The leading dot is optional (e.g., `ts` is treated the same as `.ts`).
     *   The search is recursive, excluding `.git`, `node_modules`, and the `.taylored` directory itself.

@@ -1,5 +1,0 @@
-This is a test file.
-<taylored 1 compute="console.log('Computed output');">
-console.log('Computed output');
-</taylored>
-This is the end of the test file.

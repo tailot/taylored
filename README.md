@@ -1,330 +1,306 @@
-# taylored
+# Taylored
 
-Make changes to a branch a plugin. A command-line tool to manage and apply '''.taylored''' plugins. It supports applying, removing, verifying plugins, and generating them from a branch (GIT).
+**Transform branch changes into manageable plugins. Taylored is a command-line tool to expertly manage and apply `.taylored` plugins, enabling conditional and atomic source code modifications with full Git integration.**
 
-## What is Taylored?
+## Overview
 
-Taylored is a tool that helps you manage source code changes in the form of "plugins" or "patches". These plugins are represented by files with the `.taylored` extension, which contain the differences (diffs) compared to a specific version of the code.
+Taylored helps you streamline source code modifications by treating them as "plugins" or "patches." These are stored in `.taylored` files, which essentially capture `git diff` outputs.
 
-A distinctive feature of Taylored is its ability to generate these `.taylored` files conditionally: a plugin is created using the `--save` command only if the changes between the specified branch and HEAD consist *exclusively* of line additions or *exclusively* of line deletions. This ensures that plugins represent atomic and well-defined changes, making them easier to apply and manage.
+A key feature is Taylored's intelligent plugin generation:
+* The `--save` command creates a `.taylored` file **only if** the changes between a specified branch and `HEAD` consist *exclusively* of line additions or *exclusively* of line deletions. This ensures plugins are atomic and well-defined, simplifying application and management.
+* The `--automatic` command can scan your codebase for special markers, extract these blocks, and generate `.taylored` files for them, even supporting dynamic content generation via a `compute` attribute.
 
-Furthermore, the `--offset` command allows updating patch offsets. It can use the `--message` option to embed a custom `Subject:` line in the resulting `.taylored` file. If `--message` is not provided, Taylored attempts to preserve or extract a message from the input patch for this purpose. Note that temporary commits made by `--offset` during its internal processing use a default message. The `--data` command allows extracting this stored commit message.
+Taylored also provides robust tools for patch lifecycle management:
+* `--offset`: Updates patch offsets to keep them applicable as your codebase evolves. It can embed a custom `Subject:` line in the updated `.taylored` file.
+* `--data`: Extracts commit messages embedded within `.taylored` files.
+
+## Table of Contents
+
+1.  [Why Taylored?](#why-taylored)
+2.  [Installation](#installation)
+    * [Quick Install (for Users)](#quick-install-for-users)
+    * [Development Setup](#development-setup)
+3.  [Usage](#usage)
+    * [Prerequisites](#prerequisites)
+    * [Available Commands](#available-commands)
+        * [Save Changes: `taylored --save`](#save-changes-taylored---save-branch_name)
+        * [Apply Changes: `taylored --add`](#apply-changes-taylored---add-taylored_file_name)
+        * [Remove Changes: `taylored --remove`](#remove-changes-taylored---remove-taylored_file_name)
+        * [Verify Application: `taylored --verify-add`](#verify-application-taylored---verify-add-taylored_file_name)
+        * [Verify Removal: `taylored --verify-remove`](#verify-removal-taylored---verify-remove-taylored_file_name)
+        * [List Plugins: `taylored --list`](#list-plugins-taylored---list)
+        * [Update Offsets: `taylored --offset`](#update-offsets-taylored---offset-taylored_file_name---message-custom-commit-message)
+        * [Extract Data: `taylored --data`](#extract-data-taylored---data-taylored_file_name)
+        * [Automatic Extraction: `taylored --automatic`](#automatic-extraction-taylored---automatic-extensions-branch_name---exclude-dir_list)
+            * [Dynamic Content with `compute`](#dynamic-content-with-compute)
+            * [Markers and Exclusions](#markers-and-exclusions)
+4.  [How It Works (Under the Hood)](#how-it-works-under-the-hood)
+5.  [Contributing](#contributing)
+6.  [License](#license)
+
+## Why Taylored?
+
+* **Atomic Changes**: Ensure that applied modifications are clean and focused, either purely additive or purely deletive.
+* **Versionable Modifications**: Treat complex or conditional code snippets as versionable plugins.
+* **Git-Powered**: Leverages Git's robust diffing and applying capabilities.
+* **Automation**: Automatically extract and manage tagged code blocks as individual patches.
+* **Dynamic Content**: Generate parts of your patches dynamically using executable script blocks.
 
 ## Installation
 
-### Recommended Method (for Users)
+### Quick Install (for Users)
 
-The easiest way to install Taylored is globally via npm. This will make the `taylored` command available in your system:
+The recommended way to install Taylored is globally via npm, making the `taylored` command available system-wide:
 
 ```bash
 npm install -g taylored
 ```
 
-Make sure you have Node.js and npm installed. After installation, you can run `taylored --help` to see the available commands.
+Ensure you have Node.js and npm installed. After installation, run `taylored --help` for a list of commands.
 
-### For Developers and Contributors
+### Development Setup
 
-If you want to contribute to Taylored's development, modify its code, or run it from a local copy:
+If you plan to contribute to Taylored or run it from a local source:
 
-1.  Clone the repository:
+1.  **Clone the repository:**
     ```bash
     git clone git@github.com:tailot/taylored.git
-    ```
-2.  Enter the project directory:
-    ```bash
     cd taylored
     ```
-3.  Install development dependencies:
+2.  **Install dependencies:**
     ```bash
     npm install
     ```
-4.  Compile the TypeScript code (if you make changes to `.ts` files):
+3.  **Build the project (if modifying TypeScript files):**
     ```bash
     npm run build
     ```
-    This command generates the executable JavaScript files in the `dist/` directory.
+    This compiles TypeScript to JavaScript in the `dist/` directory.
 
-After these steps, you can run your local version of Taylored:
-
-* Directly with Node.js (if you've run `npm run build`):
+You can then run your local version:
+* **Directly with Node.js (after `npm run build`):**
     ```bash
     node dist/index.js <command>
+    # Example: node dist/index.js --list
     ```
-    (Example: `node dist/index.js --list`)
-* Alternatively, to use the `taylored` command directly in the terminal within this project directory (useful for development), you can create a symbolic link:
+* **Using `npm link` (for using `taylored` command directly):**
     ```bash
     npm link
     ```
-    This may require administrator privileges. Once linked, `taylored <command>` will use your local copy. Remember to run `npm run build` after TypeScript changes for `npm link` to reflect them.
+    This might require administrator privileges. After linking, `taylored <command>` will use your local build. Remember to run `npm run build` after any TypeScript changes.
 
 ## Usage
 
-**Important Prerequisite:** Taylored must be run from the root directory of a Git repository.
+### Prerequisites
 
-The plugin files (`.taylored`) generated or used by Taylored are stored in a directory called `.taylored/` within the root of your Git project.
+* Taylored **must be run from the root directory** of a Git repository.
+* Plugin files (`.taylored`) are stored and managed within a `.taylored/` directory at the root of your project.
 
 ### Available Commands
 
-Here are the commands you can use with Taylored:
-
-* #### Save changes to a `.taylored` file
-    ```bash
-    taylored --save <branch_name>
-    ```
-    This command creates a diff file between the specified `<branch_name>` and HEAD. The `.taylored` file is saved in `.taylored/<sanitized_branch_name>.taylored`.
-    **Note:** The file is created *only if* the diff contains exclusively line additions, exclusively line deletions, or no textual line changes at all (i.e., an empty diff). Mixed changes (both additions and deletions of lines) will not generate a file.
+#### Save Changes: `taylored --save <branch_name>`
+Creates a diff file between the specified `<branch_name>` and `HEAD`.
+* **Output**: `.taylored/<sanitized_branch_name>.taylored`
+* **Condition**: The file is created *only if* the diff contains exclusively line additions, exclusively line deletions, or no textual line changes. Mixed changes (both additions and deletions) will prevent file generation.
 
     *Example:*
     ```bash
-    taylored --save feature/new-functionality
+    taylored --save feature/new-ui
     ```
 
-* #### Apply changes from a `.taylored` file
-    ```bash
-    taylored --add <taylored_file_name>
-    ```
-    Applies the changes contained in the specified file (which must be in `.taylored/`) to your current working directory.
+#### Apply Changes: `taylored --add <taylored_file_name>`
+Applies changes from the specified `.taylored` file (located in `.taylored/`) to your working directory. The `.taylored` extension is optional.
 
     *Example:*
     ```bash
-    taylored --add feature_new-functionality
+    taylored --add feature_new-ui
     # or
-    taylored --add feature_new-functionality.taylored # (also valid)
+    taylored --add feature_new-ui.taylored
     ```
 
-* #### Remove (undo) changes from a `.taylored` file
-    ```bash
-    taylored --remove <taylored_file_name>
-    ```
-    Undoes the changes specified in the `.taylored` file from your current working directory.
+#### Remove Changes: `taylored --remove <taylored_file_name>`
+Reverts changes from the specified `.taylored` file.
 
     *Example:*
     ```bash
-    taylored --remove feature_new-functionality
-    # or
-    taylored --remove feature_new-functionality.taylored # (also valid)
+    taylored --remove feature_new-ui
     ```
 
-* #### Verify the application of a `.taylored` file (dry-run)
-    ```bash
-    taylored --verify-add <taylored_file_name>
-    ```
-    Checks if the `.taylored` file can be applied without conflicts (does not actually modify files).
+#### Verify Application: `taylored --verify-add <taylored_file_name>`
+Performs a dry-run to check if the patch can be applied cleanly. Does not modify files.
 
     *Example:*
     ```bash
-    taylored --verify-add feature_new-functionality
-    # or
-    taylored --verify-add feature_new-functionality.taylored # (also valid)
+    taylored --verify-add feature_new-ui
     ```
 
-* #### Verify the removal of a `.taylored` file (dry-run)
-    ```bash
-    taylored --verify-remove <taylored_file_name>
-    ```
-    Checks if the changes specified in the `.taylored` file can be undone without conflicts (does not actually modify files).
+#### Verify Removal: `taylored --verify-remove <taylored_file_name>`
+Performs a dry-run to check if the patch can be reverted cleanly.
 
     *Example:*
     ```bash
-    taylored --verify-remove feature_new-functionality
-    # or
-    taylored --verify-remove feature_new-functionality.taylored # (also valid)
+    taylored --verify-remove feature_new-ui
     ```
 
-* #### List available `.taylored` files
-    ```bash
-    taylored --list
-    ```
-    Shows all `.taylored` files found in the `.taylored/` directory.
+#### List Plugins: `taylored --list`
+Displays all `.taylored` files found in the `.taylored/` directory.
 
     *Example:*
     ```bash
     taylored --list
     ```
 
-* #### Update offsets of an existing `.taylored` file
-    ```bash
-    taylored --offset <taylored_file_name> [--message "Custom commit message"]
-    ```
-    Updates the line number offsets within the specified `.taylored` file (located in the `.taylored/` directory) so that it can be applied cleanly to the current state of the repository. This is useful if the underlying code has changed since the patch was originally created, causing the original line numbers in the patch to no longer match.
-    **Prerequisite:** This command will not run if there are uncommitted changes in your Git working directory. Please commit or stash your changes first.
-    If `--message` is provided, its value is used to embed a `Subject: [PATCH] Your Custom Message` line in the *output* `.taylored` file, assuming the file is updated and the new diff content is not empty. This does *not* affect the commit messages of temporary commits made by the offset process itself, which use a default message. If no `--message` is given, Taylored attempts to carry over an existing message from the input patch for the `Subject:` line.
-    The file is updated in place.
+#### Update Offsets: `taylored --offset <taylored_file_name> [--message "Custom commit message"]`
+Updates line number offsets within the specified `.taylored` file to ensure it applies cleanly to the current repository state.
+* **Prerequisite**: No uncommitted changes in the Git working directory.
+* If `--message` is provided, its value is used for the `Subject: [PATCH] Your Custom Message` line in the *output* `.taylored` file. If omitted, Taylored attempts to preserve an existing message from the input patch.
+* The file is updated in place.
 
     *Example:*
     ```bash
     taylored --offset my_feature_patch
-    # or
-    taylored --offset my_feature_patch.taylored --message "Refactor: Adjust patch for latest changes"
+    taylored --offset my_feature_patch.taylored --message "Refactor: Adjust patch for latest API"
     ```
 
-* #### Extract commit message data from a `.taylored` file
+#### Extract Data: `taylored --data <taylored_file_name>`
+Reads the specified `.taylored` file and prints its embedded commit message (typically from a `Subject:` line) to standard output. Prints an empty string if no message is found.
+
+    *Example:*
     ```bash
-    taylored --data <taylored_file_name>
+    taylored --data my_feature_patch
     ```
-    Reads the specified `.taylored` file and prints the extracted commit message (typically from a `Subject:` line) to standard output. If no message is found in the patch (e.g., it wasn't saved with one or the format is unexpected), it prints an empty string. This is useful for scripting or inspecting the intended purpose of a patch.
 
-* #### Automatically find and extract taylored blocks (Git Workflow)
+#### Automatic Extraction: `taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`
+Scans files with specified `<EXTENSIONS>` for taylored blocks and creates individual, diff-based `.taylored` files using a Git workflow, comparing against `<branch_name>`.
+
+* **Arguments**:
+    * `<EXTENSIONS>`: Comma-separated file extensions to scan (e.g., `ts` or `ts,js,py`). Leading dot is optional.
+    * `<branch_name>`: Base branch for comparison when generating diffs.
+    * `--exclude <DIR_LIST>` (Optional): Comma-separated list of directory names to exclude (e.g., `node_modules,dist,build`).
+
+* **Prerequisites**:
+    * Clean Git repository (no uncommitted changes or untracked files).
+    * The file `.taylored/main.taylored` must not exist (used temporarily).
+    * Target output files (e.g., `.taylored/1.taylored`) must not already exist.
+
+* **Workflow**: For each identified block:
+    1.  A temporary Git branch is created.
+    2.  On this branch, the block (including markers) is removed from the source file and committed.
+    3.  A diff is generated by comparing this temporary state against the specified `<branch_name>`. This diff represents the "addition" of the block.
+    4.  This diff is saved as `.taylored/NUMERO.taylored`.
+    5.  The temporary branch is deleted, and the original branch is restored. Source files on the original branch remain untouched.
+
+##### Dynamic Content with `compute`
+The `--automatic` mode allows dynamic content generation within taylored blocks using the `compute` attribute.
+
+```html
+<taylored NUMERO compute="CHARS_TO_STRIP_PATTERNS">
+  <!-- Executable Node.js script content -->
+</taylored>
+```
+
+* **`compute="CHARS_TO_STRIP_PATTERNS"`**:
+    * Signals that the block's content is an executable Node.js script.
+    * `CHARS_TO_STRIP_PATTERNS` is an optional comma-separated string of patterns (e.g., `/*,*/`). Before execution, Taylored removes **all occurrences** of each specified pattern from the script content. This is useful for embedding scripts within comment structures.
+        For example, `compute="/*,*/"` would remove all `/*` and all `*/` sequences from the script.
+* **Script Execution**: The processed script content is executed via Node.js.
+* **Patch Generation**: The standard output (stdout) from the script replaces the *entire* original `<taylored ... compute="...">...</taylored>` block in the generated patch.
+
+This enables dynamic code or text generation that becomes part of a standard Taylored patch, versionable and manageable like any other code change.
+
+**Example with `compute`**:
+```javascript
+// File: src/dynamicModule.js
+// <taylored 1 compute="/*,*/">
+/*
+#!/usr/bin/env node
+// This script generates dynamic content
+const randomNumber = Math.floor(Math.random() * 100);
+console.log(`const dynamicValue = ${randomNumber}; // Generated at ${new Date().toISOString()}`);
+*/
+// </taylored>
+```
+
+Running `taylored --automatic js main` would:
+1.  Extract the script content between the markers.
+2.  Remove `/*` and `*/` due to `compute="/*,*/"`.
+3.  Execute the script: `#!/usr/bin/env node ... console.log(...)`.
+4.  Capture its stdout (e.g., `const dynamicValue = 42; // Generated at 2023-10-27T10:00:00.000Z`).
+5.  Create `.taylored/1.taylored` containing a diff that replaces the original `<taylored...compute...>` block with this stdout.
+
+The `#!/usr/bin/env node` shebang makes the script directly executable if Node.js is in the system's PATH.
+
+##### Markers and Exclusions
+* **Start Marker**: `<taylored NUMERO [compute="..."]>` (e.g., `<taylored 1>`, `<taylored 42 compute="stripThis">`). `NUMERO` is an integer used for the output filename (e.g., `1.taylored`).
+* **End Marker**: `</taylored>`
+* **Important**: Taylored markers affect the **entire line** they are on. Any code or comments on the same line as a marker will be included in the taylored block.
+
+    *Example (marker on the same line):*
+    ```javascript
+    function specialProcess() { /* Some logic */ } // <taylored 30> Special Comment Block </taylored>
+    ```
+    Block `30` will include the entire line.
+
+* **Exclusions**:
+    * The search is recursive.
+    * By default, `.git` and the `.taylored` directory are excluded.
+    * Use `--exclude <DIR_LIST>` to specify additional comma-separated directories to ignore (e.g., `node_modules,dist,build_output`). Subdirectories of excluded directories are also ignored.
+
+**Example: `--automatic` Workflow**
+
+Given `src/feature.js` on your `main` branch:
+```javascript
+// src/feature.js
+function existingCode() { /* ... */ }
+
+// <taylored 15>
+function newFeaturePart() {
+  console.log("This is a new, self-contained feature snippet.");
+}
+// </taylored>
+
+console.log("End of file.");
+```
+
+To create `.taylored/15.taylored`:
+1.  Ensure your Git working directory is clean.
+2.  Ensure `.taylored/main.taylored` and `.taylored/15.taylored` do not exist.
+3.  Run:
     ```bash
-    taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]
+    taylored --automatic js main
     ```
-    Scans files with the specified `<EXTENSIONS>` (e.g., a single extension like `ts` or a comma-separated list like `ts,js,py`) for taylored blocks and creates individual, diff-based `.taylored` files for each block using a Git workflow, comparing against the specified `<branch_name>`.
-    Optionally, specific directories can be excluded from the scan using the `--exclude` parameter.
-
-    **Arguments**:
-    *   `<EXTENSIONS>`: File extension(s) to scan (e.g., 'ts' or 'ts,js,py').
-    *   `<branch_name>`: Branch name to use as the base for comparison when generating diffs.
-    *   `<DIR_LIST>` (used with `--exclude`): An optional comma-separated list of directory names to exclude from scanning (e.g., `node_modules,dist,build`).
-
-    **Prerequisites**:
-    *   **Clean Git Repository**: The command must be run in a Git repository with no uncommitted changes or untracked files.
-    *   **No `.taylored/main.taylored`**: The file `.taylored/main.taylored` must not exist, as it's used as a temporary name during the internal save step.
-    *   **No Target File Conflict**: The specific output file (e.g., `.taylored/1.taylored` for a block numbered `1`) must not already exist.
-
-    **Workflow Overview**:
-    The command iterates through each file matching the specified `<EXTENSIONS>` and processes blocks defined by `<taylored NUMERO>` and `</taylored>` markers. For each block:
-    1.  A temporary Git branch is created from the current branch.
-    2.  On this temporary branch, the entire block (including the start and end markers) is removed from the source file.
-    3.  This removal is committed on the temporary branch.
-    4.  The tool then internally simulates `taylored --save <branch_name>` (where `<branch_name>` is the branch you provided). This compares `HEAD` (the commit on the temporary branch with the block removed) against the `<branch_name>` you specified. The resulting diff represents the changes needed to "add" the block back to the state where it was removed (relative to that branch).
-    5.  This diff is initially saved as `.taylored/main.taylored` (this is a fixed intermediate name).
-    6.  The file `.taylored/main.taylored` is then renamed to `.taylored/NUMERO.taylored`, where `NUMERO` is taken from the block's start marker.
-    7.  Finally, the temporary Git branch is deleted, and the repository is switched back to the original branch. The source files remain untouched on the original branch.
-
-    ### Dynamic Content with `compute`
-
-    The `--automatic` mode supports a powerful feature to generate content dynamically. By adding a `compute="CHARS_TO_STRIP"` attribute to a `<taylored NUMERO>` tag, you can instruct Taylored to execute the content within the tag as a Node.js script.
-
-    ```javascript
-      //<taylored 1 compute="/*,*/">
-          /*
-          #!/usr/bin/env node
-          console.log("Hello from dynamic script! The current date is: " + new Date().toLocaleDateString());
-          *\
-     //</taylored>
+    Or, to scan multiple extensions (e.g., JavaScript and TypeScript) against the `develop` branch, excluding `node_modules` and `dist`:
+    ```bash
+    taylored --automatic js,ts develop --exclude node_modules,dist
     ```
 
-    The `#!/usr/bin/env node` line at the beginning of the script is a common convention called a 'shebang'. It tells the system to execute the script using the `node` interpreter found in the user's environment, making the script portable across different setups.
+This process creates `.taylored/15.taylored` containing a Git diff. Applying this patch (e.g., `taylored --add 15`) would add the block to `src/feature.js` relative to the state of the `<branch_name>` used during extraction. Your `src/feature.js` on the original branch remains unchanged by the `--automatic` operation itself.
 
-    **How it works:**
+## How It Works (Under the Hood)
 
-    1.  **`compute="CHARS_TO_STRIP"`**:
-        *   The `compute` attribute signals that the block's content is executable.
-        *   `CHARS_TO_STRIP` is an optional string. If provided, this exact string will be removed from the very beginning of the script content. In the example above, `/*` would be stripped. This allows for content that might be part of a multi-line comment (like `/* ... */`) to be turned into a valid script.
-    2.  **Script Execution**:
-        *   After potentially stripping the prefix, the remaining content is executed as a Node.js script.
-    3.  **Patch Generation**:
-        *   The standard output (stdout) from the script is captured. This output effectively *becomes the content of the generated patch*.
-        *   The `.taylored` file generated by the `--automatic` command will contain a diff that replaces the *entire* original `<taylored ... compute="...">...</taylored>` block (from `<taylored` to `</taylored>`) with the captured stdout from your script.
-
-    This allows for dynamic generation of code or text that is then applied via the standard Taylored patch mechanism. This allows users to treat these dynamically generated results (or 'calculations') as versionable source code changes. They can be applied to their codebase using `taylored --add <NUMERO>` and reverted using `taylored --remove <NUMERO>`, just like any other taylored patch.
-
-    **Output**:
-    *   For each taylored block, a file named `.taylored/NUMERO.taylored` is created (e.g., `.taylored/1.taylored`, `.taylored/42.taylored`).
-    *   Each such file contains a Git diff. Applying this diff file (e.g., using `taylored --add NUMERO`) would add the taylored block (including its markers) to the source file from which it was extracted (relative to the state of the `<branch_name>` you specified at the time of extraction).
-
-    **Markers**:
-    *   Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`). `NUMERO` is an integer that becomes the name of the output `.taylored` file (e.g., `1.taylored`).
-    *   End marker: `</taylored>`
-
-    It's important to note that **taylored markers affect the entire line they are on.** If markers are placed on a line containing code or comments, the entire line, including the code and/or comments, will be considered part of the taylored block.
-
-    **Example of markers on the same line:**
-
-    Consider the following line in a JavaScript file:
-
-    ```javascript
-    function specialProcess() { /* Some specific logic */ } // <taylored 30> Special Comment Block // </taylored>
-    ```
-
-    In this case, the taylored block `30` would include the entire line: `function specialProcess() { /* Some specific logic */ } // <taylored 30> Special Comment Block // </taylored>`. When `taylored --automatic js` is run, the generated `.taylored/30.taylored` file will contain this whole line as part of the diff to be added.
-
-    **Extensions and Exclude Arguments**:
-    *   `<EXTENSIONS>` specifies which file extensions to scan. It can be a single extension (e.g., `ts`, `py`, `java`) or a comma-separated list of extensions (e.g., `ts,js,mjs,py`). The leading dot for extensions is optional (e.g., `ts` is treated the same as `.ts`).
-    *   The search is recursive. By default, it excludes `.git` and the `.taylored` directory itself.
-    *   The `--exclude <DIR_LIST>` parameter allows you to specify additional directories to exclude from the scan. `<DIR_LIST>` is a comma-separated string of directory names (e.g., `node_modules,dist,build_output`). If you need to exclude `node_modules`, you must now explicitly add it to this list. Subdirectories of excluded directories are also excluded.
-
-    ### Example: Using `--automatic` (Git Workflow)
-
-    Suppose you have a file `src/feature.js` on your `main` branch, committed with the following content:
-
-    ```javascript
-    // src/feature.js
-    function existingCode() {
-      // ...
-    }
-
-    // <taylored 15>
-    function newFeaturePart() {
-      console.log("This is a new, self-contained feature snippet.");
-    }
-    // </taylored>
-
-    console.log("End of file.");
-    ```
-
-    To create a taylored diff file for block `15`:
-
-    1.  Ensure your Git working directory is clean.
-    2.  Ensure `.taylored/main.taylored` and `.taylored/15.taylored` do not exist.
-    3.  Run the command (if `src/feature.js` is the target, assuming `main` is your desired base branch for the diff):
-        ```bash
-        taylored --automatic js main
-        ```
-    4.  To scan for multiple extensions (e.g., JavaScript and TypeScript) against the `develop` branch, and exclude `node_modules` and `dist` directories:
-        ```bash
-        taylored --automatic js,ts develop --exclude node_modules,dist
-        ```
-
-    This will:
-    *   Internally perform Git operations: create a temporary branch, remove the block, commit, and generate a diff against the `main` branch (or the branch you specified).
-    *   Create a file named `.taylored/15.taylored`.
-    *   The content of `.taylored/15.taylored` will be a Git diff, which, if applied, would add the block to `src/feature.js`. It would look something like this:
-
-        ```diff
-        --- a/src/feature.js
-        +++ b/src/feature.js
-
-           // ...
-         }
-         
-        +// <taylored 15>
-        +function newFeaturePart() {
-        +  console.log("This is a new, self-contained feature snippet.");
-        +}
-        +// </taylored>
-        +
-         console.log("End of file.");
-        ```
-    *   Your `src/feature.js` file on your `main` branch will remain unchanged by this operation.
-
-## How it Works
-
-* **Saving:** When you use `taylored --save <branch_name>`, it runs `git diff HEAD <branch_name>`. The output is parsed. If all changes are additions, all changes are deletions (of lines), or there are no textual line changes, the diff is saved to `.taylored/<sanitized_branch_name>.taylored`. Otherwise (mixed changes), no file is created, and an error is reported.
-* **Applying/Removing:** `taylored --add <file>` uses `git apply .taylored/<file>`. `taylored --remove <file>` uses `git apply -R .taylored/<file>`.
-* **Verifying:** `taylored --verify-add <file>` uses `git apply --check .taylored/<file>`. `taylored --verify-remove <file>` uses `git apply --check -R .taylored/<file>`.
-* **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
-* **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a sophisticated approach (`lib/git-patch-offset-updater.js`). **It first checks for uncommitted changes in the repository; if any exist, the command will exit.** Otherwise, it attempts to apply/revert the patch on a temporary branch, generates a new patch from this state against the `main` branch, and then replaces the original `.taylored/<file>` with this new, offset-adjusted patch. If the `--message` option is used, this message is intended for the `Subject:` line of the *output* `.taylored` file. Temporary commits made during the process use a default internal message. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
-* **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
-* **Automatic Extraction (Git Workflow):** `taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]` requires a clean Git state. It scans files matching the specified extensions, skipping any directories listed in `--exclude` (and their subdirectories), as well as the default exclusions (`.git`, `.taylored`). For each taylored block found (delimiters: `<taylored NUMERO>` and `</taylored>`):
-    1. It creates a temporary branch.
-    2. In this branch, it removes the block from the source file and commits this change.
-    3. It then generates a diff by comparing `HEAD` (the temporary branch with the block removed) to the `<branch_name>` specified in the command. This diff represents the addition of the block.
-    4. This diff is initially saved as `.taylored/main.taylored` (a temporary name) by an internal call that effectively performs a save operation against your specified `<branch_name>`.
-    5. The file `.taylored/main.taylored` is renamed to `.taylored/NUMERO.taylored`.
-    6. The temporary branch is deleted, and the original branch is restored. The source files on the original branch are not modified by this process.
-    This ensures that each `.taylored/NUMERO.taylored` file is a proper Git diff.
+* **`--save`**: Runs `git diff HEAD <branch_name>`. If the diff is purely additive or deletive (or empty), it's saved. Mixed changes are rejected.
+* **`--add`/`--remove`**: Uses `git apply` (with `-R` for remove).
+* **`--verify-add`/`--verify-remove`**: Uses `git apply --check` (with `-R` for verify-remove).
+* **`--list`**: Lists `*.taylored` files in the `.taylored/` directory.
+* **`--offset`**: Operates on a temporary branch. It attempts to apply/revert the patch, then generates a new diff against the `main` branch, replacing the original `.taylored` file. Requires a clean working directory.
+* **`--data`**: Parses the `.taylored` file to extract a commit message, typically from a `Subject:` line.
+* **`--automatic`**: Requires a clean Git state. For each block:
+    1.  Creates a temporary branch.
+    2.  Removes the block and commits this change on the temporary branch.
+    3.  Generates a diff by comparing `HEAD` of the temporary branch (block removed) to the user-specified `<branch_name>`.
+    4.  Saves this diff to `.taylored/NUMERO.taylored`.
+    5.  Cleans up by deleting the temporary branch and restoring the original branch.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit pull requests or open issues on the [GitHub repository](https://github.com/tailot/taylored).
+Contributions are highly welcome! Please feel free to submit pull requests or open issues on the [GitHub repository](https://github.com/tailot/taylored).
 
 1.  Fork the repository.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
+2.  Create your feature branch (`git checkout -b feature/YourAmazingFeature`).
+3.  Commit your changes (`git commit -m 'Add YourAmazingFeature'`).
+4.  Push to the branch (`git push origin feature/YourAmazingFeature`).
 5.  Open a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details (assuming a LICENSE file exists, if not, state "MIT Licensed").
+This project is licensed under the MIT License.

@@ -51,6 +51,11 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`                            (e.g., .js, .ts, .py) using <branch_name> as the target for comparison,`);
         console.error(`                            and create taylored files from them. Markers: <taylored NUMERO> and </taylored>`);
         console.error(`                            (where NUMERO is an integer).`);
+        console.error(`                            The <taylored NUMERO> tag can optionally include a 'compute="CHARS_TO_STRIP"' attribute.`);
+        console.error(`                            If 'compute' is present, the content within the taylored block is executed as a Node.js script.`);
+        console.error(`                            'CHARS_TO_STRIP' are characters removed from the beginning of the script before execution.`);
+        console.error(`                            The script's stdout output then replaces the entire taylored block in the generated patch.`);
+        console.error(`                            Example: <taylored 1 compute="/*">/*console.log("Hello");*\/</taylored>\`);`);
         console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);

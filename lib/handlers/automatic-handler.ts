@@ -106,7 +106,16 @@ export async function handleAutomaticOperation(
 
     console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
-    const blockRegex = /<taylored\s+(\d+)(?:\s+compute=["']([^"']*)["'])?>([\s\S]*?)<\/taylored>/g;
+    // Regex explained:
+    // <taylored\s+(\d+) : Matches "<taylored " and captures the number (numero, match[1])
+    // (?: ... )? : Optional group for the compute attribute
+    //   (?:\s+compute="([^"]*)") : Matches compute="<value>" (value in match[2])
+    //   |                          : OR
+    //   (?:\s+compute='([^']*)') : Matches compute='<value>' (value in match[3])
+    // > : Matches the closing > of the opening tag
+    // ([\s\S]*?) : Captures the content between tags (scriptContent, match[4])
+    // <\/taylored> : Matches the closing </taylored>
+    const blockRegex = /<taylored\s+(\d+)(?:(?:\s+compute="([^"]*)")|(?:\s+compute='([^']*)'))?>([\s\S]*?)<\/taylored>/g;
     let totalBlocksProcessed = 0;
 
     for (const originalFilePath of allFilesToScan) {
@@ -125,9 +134,11 @@ export async function handleAutomaticOperation(
 
         for (const match of matches) {
             const numero = match[1];
-            const computeCharsToStrip = match[2]; // This will be undefined if compute is not present
+            const computeValueDouble = match[2];
+            const computeValueSingle = match[3];
+            const computeCharsToStrip = computeValueDouble || computeValueSingle; // Value of compute attribute
             const scriptContentWithTags = match[0]; // Full matched string <taylored...>...</taylored>
-            const scriptContent = match[3]; // Content between tags
+            const scriptContent = match[4]; // Content between tags
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
             const targetTayloredFilePath = path.join(tayloredDir, targetTayloredFileName);
             const intermediateMainTayloredPath = path.join(tayloredDir, `main${TAYLORED_FILE_EXTENSION}`);
@@ -161,19 +172,20 @@ export async function handleAutomaticOperation(
                 }
 
 
-                let actualScriptContent = scriptContent;
-                if (computeCharsToStrip && computeCharsToStrip.length > 0) {
-                    actualScriptContent = scriptContent.startsWith(computeCharsToStrip)
-                        ? scriptContent.substring(computeCharsToStrip.length)
-                        : scriptContent;
+                // Ensure computeCharsToStrip is defined and not empty
+                if (!computeCharsToStrip || computeCharsToStrip.trim() === "") {
+                    console.warn(`Warning: compute attribute for block ${numero} in ${originalFilePath} is empty or missing. Skipping execution.`);
+                    continue; // or throw error, based on desired behavior
                 }
+
+                const actualScriptContent = computeCharsToStrip; // Use the value of the compute attribute directly
 
                 const tempScriptPath = path.join(CWD, `taylored-temp-script-${Date.now()}.js`);
                 await fs.writeFile(tempScriptPath, actualScriptContent);
 
                 let scriptResult = '';
                 try {
-                    scriptResult = execSync(`node "${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8' });
+                    scriptResult = execSync(`node "${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8' }).replace(/\r?\n$/, '');
                 } catch (execError: any) {
                     console.error(`ERROR: Script execution failed for block ${numero} in ${originalFilePath}. Error: ${execError.message}`);
                     // Decide if to throw, continue, or how to handle script errors

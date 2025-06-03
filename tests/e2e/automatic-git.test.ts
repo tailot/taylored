@@ -324,4 +324,119 @@ console.log(jsVar);`;
       expect(currentBranchAfter).toBe('main');
     });
   });
+
+  describe('Exclude Functionality', () => {
+    let testRepoPath: string;
+    afterEach(() => {
+        if (testRepoPath && fs.existsSync(testRepoPath)) {
+            fs.rmSync(testRepoPath, { recursive: true, force: true });
+        }
+    });
+
+    test('Correctly excludes specified directories and their subdirectories', () => {
+      testRepoPath = setupTestRepo('automatic_exclude_dirs');
+
+      // Create files with taylored blocks
+      createFileAndCommit(testRepoPath, 'file1.js', '// Root file\n// <taylored 1>\n// Block 1 content\n// </taylored>', 'Add file1.js');
+
+      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'file2.js'), '// Excluded dir1 file\n// <taylored 2>\n// Block 2 content\n// </taylored>', 'Add file2.js in excluded_dir1');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), '// Sub Excluded dir1 file\n// <taylored 5>\n// Block 5 content\n// </taylored>', 'Add file_in_sub.js in excluded_dir1/sub_excluded_dir');
+
+      createFileAndCommit(testRepoPath, path.join('not_excluded_dir', 'file3.js'), '// Not excluded dir file\n// <taylored 3>\n// Block 3 content\n// </taylored>', 'Add file3.js in not_excluded_dir');
+
+      createFileAndCommit(testRepoPath, path.join('excluded_dir2', 'file4.js'), '// Excluded dir2 file\n// <taylored 4>\n// Block 4 content\n// </taylored>', 'Add file4.js in excluded_dir2');
+
+      // Run the taylored command with --exclude
+      // Assuming 'main' is the default branch after setupTestRepo
+      const result = runTayloredCommand(testRepoPath, '--automatic js main --exclude excluded_dir1,excluded_dir2');
+
+      expect(result.status).toBe(0);
+      // Check stderr for any unexpected errors, though stdout will have processing messages
+      // Allow for "Successfully created" messages but not errors.
+      const relevantStderr = result.stderr.split('\n').filter(line => !line.startsWith('Processing block') && !line.startsWith('Successfully created')).join('\n');
+      expect(relevantStderr).toBe('');
+
+
+      const tayloredBaseDir = path.join(testRepoPath, TAYLORED_DIR_NAME);
+
+      // Assertions for created files
+      expect(fs.existsSync(path.join(tayloredBaseDir, `1${TAYLORED_FILE_EXTENSION}`))).toBe(true);
+      const content1 = fs.readFileSync(path.join(tayloredBaseDir, `1${TAYLORED_FILE_EXTENSION}`), 'utf8');
+      expect(content1).toContain('+// <taylored 1>');
+
+      expect(fs.existsSync(path.join(tayloredBaseDir, `3${TAYLORED_FILE_EXTENSION}`))).toBe(true);
+      const content3 = fs.readFileSync(path.join(tayloredBaseDir, `3${TAYLORED_FILE_EXTENSION}`), 'utf8');
+      expect(content3).toContain('+// <taylored 3>');
+
+      // Assertions for NOT created files
+      expect(fs.existsSync(path.join(tayloredBaseDir, `2${TAYLORED_FILE_EXTENSION}`))).toBe(false); // From excluded_dir1
+      expect(fs.existsSync(path.join(tayloredBaseDir, `5${TAYLORED_FILE_EXTENSION}`))).toBe(false); // From excluded_dir1/sub_excluded_dir
+      expect(fs.existsSync(path.join(tayloredBaseDir, `4${TAYLORED_FILE_EXTENSION}`))).toBe(false); // From excluded_dir2
+
+      // Verify stdout contains messages for processed blocks (1 and 3)
+      const expectedSuccessMessage1 = path.join(testRepoPath, TAYLORED_DIR_NAME, `1${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage1}`);
+      const expectedSuccessMessage3 = path.join(testRepoPath, TAYLORED_DIR_NAME, `3${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage3}`);
+
+      // Verify stdout does NOT contain messages for excluded blocks (2, 4, 5)
+      const unexpectedSuccessMessage2 = path.join(testRepoPath, TAYLORED_DIR_NAME, `2${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).not.toContain(`Successfully created ${unexpectedSuccessMessage2}`);
+      const unexpectedSuccessMessage4 = path.join(testRepoPath, TAYLORED_DIR_NAME, `4${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).not.toContain(`Successfully created ${unexpectedSuccessMessage4}`);
+      const unexpectedSuccessMessage5 = path.join(testRepoPath, TAYLORED_DIR_NAME, `5${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).not.toContain(`Successfully created ${unexpectedSuccessMessage5}`);
+
+      // Verify original files are untouched
+      expect(fs.readFileSync(path.join(testRepoPath, 'file1.js'), 'utf8')).toContain('// <taylored 1>');
+      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir1', 'file2.js'), 'utf8')).toContain('// <taylored 2>');
+      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), 'utf8')).toContain('// <taylored 5>');
+      expect(fs.readFileSync(path.join(testRepoPath, 'not_excluded_dir', 'file3.js'), 'utf8')).toContain('// <taylored 3>');
+      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir2', 'file4.js'), 'utf8')).toContain('// <taylored 4>');
+
+      // Verify no temporary branches are left
+      const branches = execSync('git branch', { cwd: testRepoPath, encoding: 'utf8' });
+      expect(branches).not.toContain('temp-taylored-');
+      const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
+      expect(currentBranch).toBe('main');
+    });
+
+    test('Exclude with non-existent directory: should not error and process other files', () => {
+      testRepoPath = setupTestRepo('automatic_exclude_non_existent');
+      createFileAndCommit(testRepoPath, 'real_file.js', '// <taylored 77>\n// Block 77\n// </taylored>', 'Add real_file.js');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main --exclude non_existent_dir,another_fake');
+
+      expect(result.status).toBe(0);
+      const relevantStderr = result.stderr.split('\n').filter(line => !line.startsWith('Processing block') && !line.startsWith('Successfully created')).join('\n');
+      expect(relevantStderr).toBe('');
+
+
+      const tayloredBaseDir = path.join(testRepoPath, TAYLORED_DIR_NAME);
+      expect(fs.existsSync(path.join(tayloredBaseDir, `77${TAYLORED_FILE_EXTENSION}`))).toBe(true);
+      const expectedSuccessMessage77 = path.join(testRepoPath, TAYLORED_DIR_NAME, `77${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage77}`);
+    });
+
+    test('Exclude with empty string: should process all files (no exclusion)', () => {
+      testRepoPath = setupTestRepo('automatic_exclude_empty_string');
+      createFileAndCommit(testRepoPath, 'fileA.js', '// <taylored 88>\n// Block 88\n// </taylored>', 'Add fileA.js');
+      createFileAndCommit(testRepoPath, path.join('dir_b', 'fileB.js'), '// <taylored 99>\n// Block 99\n// </taylored>', 'Add fileB.js');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main --exclude ""');
+
+      expect(result.status).toBe(0);
+      const relevantStderr = result.stderr.split('\n').filter(line => !line.startsWith('Processing block') && !line.startsWith('Successfully created')).join('\n');
+      expect(relevantStderr).toBe('');
+
+      const tayloredBaseDir = path.join(testRepoPath, TAYLORED_DIR_NAME);
+      expect(fs.existsSync(path.join(tayloredBaseDir, `88${TAYLORED_FILE_EXTENSION}`))).toBe(true);
+      expect(fs.existsSync(path.join(tayloredBaseDir, `99${TAYLORED_FILE_EXTENSION}`))).toBe(true);
+
+      const expectedSuccessMessage88 = path.join(testRepoPath, TAYLORED_DIR_NAME, `88${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage88}`);
+      const expectedSuccessMessage99 = path.join(testRepoPath, TAYLORED_DIR_NAME, `99${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage99}`);
+    });
+  });
 });

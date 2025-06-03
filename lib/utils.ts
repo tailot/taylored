@@ -25,7 +25,7 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
     console.error(`  taylored --verify-remove <taylored_file_name>`);
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
-    console.error(`  taylored --automatic <EXTENSIONS> <branch_name>`);
+    console.error(`  taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
     console.error(`  taylored --offset <taylored_file_name> [--message "Custom commit message"]`);
     console.error(`  taylored --data <taylored_file_name>`);
 
@@ -37,6 +37,7 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`  <branch_name>             : Branch name. Used by --save (target for diff) and --automatic (target for comparison).`);
         console.error(`                            Output for --save: ${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}`);
         console.error(`  <EXTENSIONS>              : File extension(s) to scan (e.g., 'ts' or 'ts,js,py'). Used by --automatic.`);
+        console.error(`  <DIR_LIST>                : Optional. Comma-separated list of directory names to exclude (e.g., 'dist,build,test'). Used by --automatic with --exclude.`);
         console.error("\nOptions:");
         console.error(`  --add                     : Apply changes from '${TAYLORED_DIR_NAME}/<file_name>' to current directory.`);
         console.error(`  --remove                  : Revert changes from '${TAYLORED_DIR_NAME}/<file_name>' in current directory.`);
@@ -45,7 +46,12 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`  --save                    : Generate diff file into '${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}'.`);
         console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
         console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
-        console.error(`  --automatic <EXTENSIONS> <branch_name> : Automatically search for taylored blocks in files with specified <EXTENSIONS> (e.g., .js, .ts, .py) using <branch_name> as the target for comparison, and create taylored files from them. Markers: <taylored NUMERO> and </taylored> (where NUMERO is an integer).`);
+        console.error(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>] :`);
+        console.error(`                            Automatically search for taylored blocks in files with specified <EXTENSIONS>`);
+        console.error(`                            (e.g., .js, .ts, .py) using <branch_name> as the target for comparison,`);
+        console.error(`                            and create taylored files from them. Markers: <taylored NUMERO> and </taylored>`);
+        console.error(`                            (where NUMERO is an integer).`);
+        console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);
         console.error(`  --data                    : Extract and print message from a taylored file. Prints empty string if not found.`);

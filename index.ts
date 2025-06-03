@@ -109,18 +109,24 @@ async function main(): Promise<void> {
             await handleDataOperation(argument, CWD);
         }
         else if (mode === '--automatic') {
-            if (rawArgs.length !== 2) {
-                printUsageAndExit("CRITICAL ERROR: --automatic option requires exactly one <EXTENSION> argument (e.g., .ts, js, py).");
+            if (rawArgs.length !== 3) {
+                printUsageAndExit("CRITICAL ERROR: --automatic option requires exactly two arguments: <EXTENSIONS> and <branch_name>.");
             }
-            argument = rawArgs[1]; // This will be the extension
-            if (argument.startsWith('--')) {
-                printUsageAndExit(`CRITICAL ERROR: Invalid extension '${argument}' after --automatic. It cannot start with '--'.`);
+            const extensionsInput = rawArgs[1];
+            const branchNameArgument = rawArgs[2];
+
+            if (extensionsInput.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid extensions input '${extensionsInput}' after --automatic. It cannot start with '--'.`);
             }
             // Basic validation for extension format
-            if (argument.includes(path.sep) || argument.includes('/') || argument.includes('\\')) {
-                printUsageAndExit(`CRITICAL ERROR: <EXTENSION> ('${argument}') must be a simple extension string (e.g., 'ts', '.py') without path separators.`);
+            if (extensionsInput.includes(path.sep) || extensionsInput.includes('/') || extensionsInput.includes('\\')) {
+                printUsageAndExit(`CRITICAL ERROR: <EXTENSIONS> ('${extensionsInput}') must be a simple extension string (e.g., 'ts,js,py') without path separators.`);
             }
-            await handleAutomaticOperation(argument, CWD);
+
+            if (branchNameArgument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchNameArgument}' after --automatic <EXTENSIONS>. It cannot start with '--'.`);
+            }
+            await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD);
         }
         else {
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];

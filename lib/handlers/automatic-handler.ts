@@ -24,7 +24,7 @@ async function findFilesRecursive(dir: string, ext: string, allFiles: string[] =
     return allFiles;
 }
 
-export async function handleAutomaticOperation(extensionsInput: string, CWD: string): Promise<void> {
+export async function handleAutomaticOperation(extensionsInput: string, branchName: string, CWD: string): Promise<void> {
     let originalBranchName: string;
     try {
         originalBranchName = execSync('git rev-parse --abbrev-ref HEAD', { cwd: CWD, ...execOpts }).trim();
@@ -149,7 +149,7 @@ export async function handleAutomaticOperation(extensionsInput: string, CWD: str
                 await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
                 execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
                 execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
-                await handleSaveOperation('main', CWD); 
+                await handleSaveOperation(branchName, CWD);
                 await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
                 console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
                 totalBlocksProcessed++;

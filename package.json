@@ -24,7 +24,20 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",
+    "test:e2e:core:list": "jest --runInBand tests/e2e/core/list.test.ts",
+    "test:e2e:core:verify-add": "jest --runInBand tests/e2e/core/verify-add.test.ts",
+    "test:e2e:core:add": "jest --runInBand tests/e2e/core/add.test.ts",
+    "test:e2e:core:verify-remove": "jest --runInBand tests/e2e/core/verify-remove.test.ts",
+    "test:e2e:core:remove": "jest --runInBand tests/e2e/core/remove.test.ts",
+    "test:e2e:core:save": "jest --runInBand tests/e2e/core/save.test.ts",
+    "test:e2e:core:offset": "jest --runInBand tests/e2e/core/offset.test.ts",
+    "test:e2e:core": "jest --runInBand tests/e2e/core/",
+    "test:e2e:automatic:compute": "jest --runInBand tests/e2e/automatic-compute.test.ts",
+    "test:e2e:automatic:git": "jest --runInBand tests/e2e/automatic-git.test.ts",
+    "test:e2e:automatic": "jest --runInBand tests/e2e/automatic-compute.test.ts tests/e2e/automatic-git.test.ts",
+    "test:e2e": "jest --runInBand tests/e2e/"
   },
   "dependencies": {
     "fs-extra": "^11.3.0",

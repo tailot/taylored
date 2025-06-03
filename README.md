@@ -195,7 +195,14 @@ Here are the commands you can use with Taylored:
 
     The `--automatic` mode supports a powerful feature to generate content dynamically. By adding a `compute="CHARS_TO_STRIP"` attribute to a `<taylored NUMERO>` tag, you can instruct Taylored to execute the content within the tag as a Node.js script.
 
-    `<taylored 1 compute="/*">/*#!/usr/bin/env node\nconsole.log("Hello from dynamic script!\nThe current date is: " + new Date().toLocaleDateString());*\/</taylored>`
+    ```javascript
+      //<taylored 1 compute="/*,*/">
+          /*
+          #!/usr/bin/env node
+          console.log("Hello from dynamic script! The current date is: " + new Date().toLocaleDateString());
+          *\
+     //</taylored>
+    ```
 
     The `#!/usr/bin/env node` line at the beginning of the script is a common convention called a 'shebang'. It tells the system to execute the script using the `node` interpreter found in the user's environment, making the script portable across different setups.
 

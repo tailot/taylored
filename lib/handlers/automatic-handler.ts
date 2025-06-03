@@ -106,7 +106,7 @@ export async function handleAutomaticOperation(
 
     console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
-    const blockRegex = /<taylored\s+(\d+)(?:\s+compute=["']([^"']*)["'])?>([\s\S]*?)<\/taylored>/g;
+    const blockRegex = /[^\n]*?<taylored\s+(\d+)(?:\s+compute=["']([^"']*)["'])?>([\s\S]*?)[^\n]*?<\/taylored>/g;
     let totalBlocksProcessed = 0;
 
     for (const originalFilePath of allFilesToScan) {
@@ -150,7 +150,7 @@ export async function handleAutomaticOperation(
                 // Ensure intermediateMainTayloredPath does not exist for compute, as it's not used.
                 try {
                     await fs.access(intermediateMainTayloredPath);
-                    // If it exists, it's an issue, perhaps from a previous failed run or misuse.
+                    // istanbul ignore next
                     const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} exists for a compute block. This file should not be present. Please remove or rename it.`;
                     console.error(message);
                     throw new Error(message);
@@ -161,65 +161,140 @@ export async function handleAutomaticOperation(
                 }
 
 
-                let actualScriptContent = scriptContent;
-                if (computeCharsToStrip && computeCharsToStrip.length > 0) {
-                    actualScriptContent = scriptContent.startsWith(computeCharsToStrip)
-                        ? scriptContent.substring(computeCharsToStrip.length)
-                        : scriptContent;
+                let actualScriptContent: string;
+                if (computeCharsToStrip !== undefined && computeCharsToStrip.length > 0) {
+                    // Logica di compute modificata:
+                    // Rimuove tutte le occorrenze di ciascun pattern specificato in 'computeCharsToStrip'.
+                    let processedContent = scriptContent.trim(); // Inizia trimmando il contenuto del blocco
+                    const patterns = computeCharsToStrip.split(',');
+
+                    for (const pattern of patterns) {
+                        const trimmedPattern = pattern.trim(); // Trimma il pattern stesso per rimuovere eventuali spazi bianchi circostanti
+                        if (trimmedPattern.length > 0) {
+                            // Rimuove tutte le occorrenze del trimmedPattern.
+                            // String.prototype.replaceAll() è disponibile in Node.js v15.0.0+.
+                            // Se è richiesta compatibilità con versioni precedenti, si potrebbe usare:
+                            // processedContent = processedContent.split(trimmedPattern).join('');
+                            processedContent = processedContent.replaceAll(trimmedPattern, '');
+                        }
+                    }
+                    actualScriptContent = processedContent.trim(); // Trimma il risultato finale
+                } else {
+                    // Nessun compute o compute vuoto: usa il contenuto del blocco, trimmato.
+                    actualScriptContent = scriptContent.trim();
                 }
 
-                const tempScriptPath = path.join(CWD, `taylored-temp-script-${Date.now()}.js`);
+                // Create temp script file without extension, relying on shebang
+                const tempScriptPath = path.join(CWD, `taylored-temp-script-${Date.now()}`);
                 await fs.writeFile(tempScriptPath, actualScriptContent);
 
                 let scriptResult = '';
                 try {
-                    scriptResult = execSync(`node "${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8' });
-                } catch (execError: any) {
-                    console.error(`ERROR: Script execution failed for block ${numero} in ${originalFilePath}. Error: ${execError.message}`);
-                    // Decide if to throw, continue, or how to handle script errors
-                    // For now, let's let it throw to stop the process for this block
-                    throw execError;
+                    // Add execute permission to the temporary script file before execution
+                    await fs.chmod(tempScriptPath, 0o755); // rwxr-xr-x
+
+                    // Execute the temporary script directly, relying on its shebang
+                    scriptResult = execSync(`"${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8', stdio: 'pipe' });
+
+                } catch (error: any) {
+                    // Differentiate error source for better logging
+                    // istanbul ignore next
+                    if (typeof error.status === 'number' || error.stderr || error.stdout) {
+                        // This is likely an error from execSync
+                        // istanbul ignore next
+                        console.error(`ERROR: Script execution failed for block ${numero} in ${originalFilePath}. Error: ${error.message}`);
+                        if (error.stderr) console.error("STDERR:\n" + error.stderr);
+                        if (error.stdout) console.error("STDOUT:\n" + error.stdout);
+                    } else {
+                        // This is likely an error from fs.chmod
+                        console.error(`ERROR: Failed to set execute permissions on temporary script file '${tempScriptPath}'. Details: ${error.message}`);
+                    }
+                    throw error; // Re-throw the error to stop processing for this block
                 } finally {
-                    await fs.unlink(tempScriptPath); // Clean up temp script file
+                    // Clean up temp script file, regardless of success or failure of the try block
+                    try {
+                        await fs.unlink(tempScriptPath);
+                    } catch (unlinkError: any) {
+                        // istanbul ignore next
+                        console.warn(`Warning: Failed to delete temporary script file '${tempScriptPath}' during cleanup. Details: ${unlinkError.message}`);
+                    }
                 }
 
-                const originalFileContent = await fs.readFile(originalFilePath, 'utf-8');
-                const modifiedFileContent = originalFileContent.replace(scriptContentWithTags, scriptResult);
+                // New git-based diffing logic for compute blocks
+                const relativeOriginalFilePath = path.relative(CWD, originalFilePath);
+                const tempComputeBranchName = `temp-taylored-compute-${numero}-${Date.now()}`;
 
-                const tempOriginalFilePath = path.join(CWD, `taylored-temp-original-${numero}-${Date.now()}.${path.extname(originalFilePath).slice(1)}`);
-                const tempModifiedFilePath = path.join(CWD, `taylored-temp-modified-${numero}-${Date.now()}.${path.extname(originalFilePath).slice(1)}`);
-
-                await fs.writeFile(tempOriginalFilePath, originalFileContent);
-                await fs.writeFile(tempModifiedFilePath, modifiedFileContent);
-
-                const diffCommand = `git diff --no-index --no-prefix "${tempOriginalFilePath}" "${tempModifiedFilePath}"`;
                 try {
-                    const diffOutput = execSync(diffCommand, { cwd: CWD, encoding: 'utf8' });
-                    await fs.writeFile(targetTayloredFilePath, diffOutput);
-                    console.log(`Successfully created ${targetTayloredFilePath} for computed block ${numero} from ${originalFilePath}`);
+                    // 1. Create a temporary branch from the current originalBranchName
+                    execSync(`git checkout -b "${tempComputeBranchName}" "${originalBranchName}"`, { cwd: CWD, ...execOpts });
+
+                    // 2. On this temporary branch, modify the file:
+                    const contentOnTempBranch = await fs.readFile(originalFilePath, 'utf-8');
+                    const contentWithScriptResult = contentOnTempBranch.replace(scriptContentWithTags, scriptResult);
+                    await fs.writeFile(originalFilePath, contentWithScriptResult);
+
+                    // 3. Commit this change on the temporary branch
+                    execSync(`git add "${relativeOriginalFilePath}"`, { cwd: CWD, ...execOpts });
+                    execSync(`git commit --no-verify -m "AUTO: Apply computed block ${numero} for ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
+
+                    // 4. Generate the diff between the target branchName and HEAD of our temporary branch
+                    const diffAgainstBranchCommand = `git diff --exit-code "${branchName}" HEAD -- "${relativeOriginalFilePath}"`;
+                    let diffOutputCommandResult: string;
+
+                    try {
+                        diffOutputCommandResult = execSync(diffAgainstBranchCommand, { cwd: CWD, encoding: 'utf8', stdio: 'pipe' });
+                        // No differences found if execSync doesn't throw
+                        await fs.writeFile(targetTayloredFilePath, "");
+                        console.log(`No difference found for computed block ${numero} from ${originalFilePath} when compared against branch '${branchName}'. Empty taylored file created: ${targetTayloredFilePath}`);
+                    } catch (e: any) {
+                        // If git diff finds differences, it exits with 1, execSync throws.
+                        if (e.status === 1 && typeof e.stdout === 'string') {
+                            diffOutputCommandResult = e.stdout;
+                            await fs.writeFile(targetTayloredFilePath, diffOutputCommandResult);
+                            console.log(`Successfully created ${targetTayloredFilePath} for computed block ${numero} from ${originalFilePath} (using branch diff against '${branchName}')`);
+                        } else {
+                            // Actual error from git diff
+                            // istanbul ignore next
+                            console.error(`CRITICAL ERROR: Failed to generate diff for computed block ${numero} from ${originalFilePath} against branch '${branchName}'.`);
+                            if (e.message) console.error(`  Error message: ${e.message}`);
+                            if (e.stderr) console.error("  STDERR:\n" + e.stderr.toString().trim());
+                            if (e.stdout) console.error("  STDOUT:\n" + e.stdout.toString().trim());
+                            throw e; // Re-throw the actual error
+                        }
+                    }
                     totalBlocksProcessed++;
-                } catch (diffError: any) {
-                    // If git diff returns exit code 1, it means there are differences.
-                    // For other exit codes, it's an error.
-                    if (diffError.status === 1 && diffError.stdout) {
-                         await fs.writeFile(targetTayloredFilePath, diffError.stdout); // Save the diff output
-                         console.log(`Successfully created ${targetTayloredFilePath} for computed block ${numero} from ${originalFilePath} (diff with changes)`);
-                         totalBlocksProcessed++;
-                    } else if (diffError.status === 0) { // No differences
-                         await fs.writeFile(targetTayloredFilePath, ""); // Write empty diff
-                         console.log(`No difference found for computed block ${numero} from ${originalFilePath}. Empty taylored file created: ${targetTayloredFilePath}`);
-                         totalBlocksProcessed++;
-                    }
-                    else {
-                        console.error(`CRITICAL ERROR: Failed to generate diff for computed block ${numero} from ${originalFilePath}.`);
-                        console.error(`Error message: ${diffError.message}`);
-                        if (diffError.stderr) console.error("STDERR:\n" + diffError.stderr);
-                        if (diffError.stdout) console.error("STDOUT:\n" + diffError.stdout);
-                        throw diffError;
-                    }
+
+                } catch (error: any) {
+                    // istanbul ignore next
+                    console.error(`CRITICAL ERROR: Failed to process computed block ${numero} from ${originalFilePath} using branch diff method.`);
+                    if (error.message) console.error(`  Error message: ${error.message}`);
+                    if (error.stderr) console.error("  STDERR:\n" + error.stderr.toString().trim());
+                    if (error.stdout) console.error("  STDOUT:\n" + error.stdout.toString().trim());
+                    throw error; // Propagate error to stop processing for this block/file
                 } finally {
-                    await fs.unlink(tempOriginalFilePath);
-                    await fs.unlink(tempModifiedFilePath);
+                    // Clean up: switch back to original branch and delete temporary branch
+                    const currentBranchAfterOps = execSync('git rev-parse --abbrev-ref HEAD', { cwd: CWD, ...execOpts }).trim();
+                    if (currentBranchAfterOps === tempComputeBranchName) {
+                        execSync(`git checkout -q "${originalBranchName}"`, { cwd: CWD, stdio: 'ignore' });
+                    } else if (currentBranchAfterOps !== originalBranchName) {
+                        // istanbul ignore next
+                        console.warn(`Warning: Unexpected current branch '${currentBranchAfterOps}' during cleanup for computed block. Attempting to return to '${originalBranchName}'.`);
+                        try {
+                            execSync(`git checkout -q "${originalBranchName}"`, { cwd: CWD, stdio: 'ignore' });
+                        } catch (coErr: any) {
+                             console.warn(`Warning: Failed to checkout original branch '${originalBranchName}' during cleanup. Current branch: ${currentBranchAfterOps}. Error: ${coErr.message}`);
+                        }
+                    }
+                    try {
+                        const branchesRaw = execSync('git branch', { cwd: CWD, ...execOpts });
+                        const branchesList = branchesRaw.split('\n').map(b => b.trim().replace(/^\* /, ''));
+                        if (branchesList.includes(tempComputeBranchName)) {
+                             execSync(`git branch -q -D "${tempComputeBranchName}"`, { cwd: CWD, stdio: 'ignore' });
+                        }
+                    } catch (deleteBranchError: any) {
+                        // istanbul ignore next
+                        console.warn(`Warning: Failed to delete temporary branch '${tempComputeBranchName}' during cleanup for computed block. May require manual cleanup. ${deleteBranchError.message}`);
+                    }
                 }
             } else {
                 // Existing non-compute logic - wrapped correctly now
@@ -284,7 +359,7 @@ export async function handleAutomaticOperation(
                         await fs.unlink(intermediateMainTayloredPath);
                     } catch (e) { /* File doesn't exist or can't be accessed, ignore */ }
                 }
-            } // This closes the `if (computeCharsToStrip === undefined)` block
+            } // This closes the `if (computeCharsToStrip !== undefined)` block, NOT the `else` for non-compute
         }
     }
 

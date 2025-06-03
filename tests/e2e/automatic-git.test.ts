@@ -212,6 +212,66 @@ describe('Automatic Command (Git Workflow)', () => {
         const content3 = fs.readFileSync(path.join(testRepoPath, TAYLORED_DIR_NAME, `3${TAYLORED_FILE_EXTENSION}`), 'utf8');
         expect(content3).toContain('+// <taylored 3>const utilTwo = 2;'); // Corrected assertion
     });
+
+    test('Multiple Extensions: Correctly extracts blocks from files with different specified extensions', () => {
+      testRepoPath = setupTestRepo('successful_multiple_extensions');
+      const tsContent = `// TS file
+// <taylored 101>
+const tsVar: string = "typescript";
+// </taylored>
+console.log(tsVar);`;
+      createFileAndCommit(testRepoPath, 'src/app.ts', tsContent, 'Add app.ts with block 101');
+
+      const jsContent = `// JS file
+// <taylored 102>
+var jsVar = "javascript";
+// </taylored>
+console.log(jsVar);`;
+      createFileAndCommit(testRepoPath, 'src/component.js', jsContent, 'Add component.js with block 102');
+
+      // Run taylored for both .ts and .js extensions
+      const result = runTayloredCommand(testRepoPath, '--automatic ts,js');
+
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+
+      const expectedSuccessMessage101 = path.join(testRepoPath, TAYLORED_DIR_NAME, `101${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage101}`);
+      const expectedSuccessMessage102 = path.join(testRepoPath, TAYLORED_DIR_NAME, `102${TAYLORED_FILE_EXTENSION}`);
+      expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage102}`);
+
+      const tayloredFilePath101 = path.join(testRepoPath, TAYLORED_DIR_NAME, `101${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath101)).toBe(true);
+      const tayloredContent101 = normalizeLineEndings(fs.readFileSync(tayloredFilePath101, 'utf8'));
+      expect(tayloredContent101).toMatch(/--- a\/src\/app.ts/);
+      expect(tayloredContent101).toMatch(/\+\+\+ b\/src\/app.ts/);
+      expect(tayloredContent101).toContain(`+// <taylored 101>`);
+      expect(tayloredContent101).toContain(`+const tsVar: string = "typescript";`);
+      expect(tayloredContent101).toContain(`+// </taylored>`);
+      expect(tayloredContent101).toContain(` console.log(tsVar);`);
+
+      const tayloredFilePath102 = path.join(testRepoPath, TAYLORED_DIR_NAME, `102${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath102)).toBe(true);
+      const tayloredContent102 = normalizeLineEndings(fs.readFileSync(tayloredFilePath102, 'utf8'));
+      expect(tayloredContent102).toMatch(/--- a\/src\/component.js/);
+      expect(tayloredContent102).toMatch(/\+\+\+ b\/src\/component.js/);
+      expect(tayloredContent102).toContain(`+// <taylored 102>`);
+      expect(tayloredContent102).toContain(`+var jsVar = "javascript";`);
+      expect(tayloredContent102).toContain(`+// </taylored>`);
+      expect(tayloredContent102).toContain(` console.log(jsVar);`);
+
+      // Verify original files are untouched
+      const originalTsFileContent = normalizeLineEndings(fs.readFileSync(path.join(testRepoPath, 'src/app.ts'), 'utf8'));
+      expect(originalTsFileContent).toBe(normalizeLineEndings(tsContent));
+      const originalJsFileContent = normalizeLineEndings(fs.readFileSync(path.join(testRepoPath, 'src/component.js'), 'utf8'));
+      expect(originalJsFileContent).toBe(normalizeLineEndings(jsContent));
+
+      // Verify no temporary branches are left
+      const branches = execSync('git branch', { cwd: testRepoPath, encoding: 'utf8' });
+      expect(branches).not.toContain('temp-taylored-');
+      const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
+      expect(currentBranch).toBe('main');
+    });
   });
 
   describe('Edge Cases and Error Handling', () => {

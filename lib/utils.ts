@@ -50,7 +50,12 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`                            Automatically search for taylored blocks in files with specified <EXTENSIONS>`);
         console.error(`                            (e.g., .js, .ts, .py) using <branch_name> as the target for comparison,`);
         console.error(`                            and create taylored files from them. Markers: <taylored NUMERO> and </taylored>`);
-        console.error(`                            (where NUMERO is an integer).`);
+        console.error(`                            (e.g., <taylored 1> or <taylored 1 compute="strip_chars">).`);
+        console.error(`                            The optional 'compute="<value>"' attribute within the <taylored> tag allows`);
+        console.error(`                            the enclosed content to be executed as a Node.js script. The <value> is a`);
+        console.error(`                            string of characters to strip from the beginning of the script. The script's`);
+        console.error(`                            stdout replaces the original block in the generated patch.`);
+        console.error(`                            (NUMERO is an integer).`);
         console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
         console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);

@@ -197,9 +197,38 @@ Here are the commands you can use with Taylored:
 
     **Markers**:
     *   Start marker: `<taylored NUMERO>` (e.g., `<taylored 1>`, `<taylored 42>`). `NUMERO` is an integer that becomes the name of the output `.taylored` file (e.g., `1.taylored`).
+        *   **Optional `compute` attribute**: The start marker can include an optional `compute` attribute: `<taylored NUMERO compute="PREFIX_TO_STRIP">`.
+            *   **Purpose**: When the `compute` attribute is present, the content *within* the taylored block is treated as a script. This script is executed using Node.js (`node -e "script content"`), and its standard output becomes the content that replaces the original block in the generated diff.
+            *   **`compute` attribute's value**: This is a string of characters that will be stripped from the very beginning of the script content before it's executed. This is useful for including comments (like `//` or `/*`) or even a shebang (like `#!/usr/bin/env node`) within the taylored block in your source file for context or direct execution, without those characters being part of the script passed to `node -e`. If the prefix is not found at the start of the content, no stripping occurs for that part.
+            *   **Output**: The `.taylored/NUMERO.taylored` file will contain a diff that, when applied, replaces the original taylored block (including markers and the script) with the standard output of the executed script.
+            *   **No `compute` attribute**: If the `compute` attribute is not used, the entire block, including the markers and the content within them, is treated as literal text. The generated `.taylored/NUMERO.taylored` file will contain a diff to add this literal text.
     *   End marker: `</taylored>`
 
     It's important to note that **taylored markers affect the entire line they are on.** If markers are placed on a line containing code or comments, the entire line, including the code and/or comments, will be considered part of the taylored block.
+
+    **Example of `compute` attribute:**
+
+    Consider the following block in a source file:
+    ```javascript
+    // File: script.js
+    // <taylored 20 compute="/*">
+    /*#!/usr/bin/env node
+    // This is a script to be executed.
+    const message = "Hello from computed block!";
+    process.stdout.write(message);
+    */
+    // </taylored>
+    ```
+    When `taylored --automatic js main` processes this block:
+    1. The `compute="/*"` attribute is recognized.
+    2. The prefix `/*` is stripped from the beginning of the content:
+       `#!/usr/bin/env node\n// This is a script to be executed.\nconst message = "Hello from computed block!";\nprocess.stdout.write(message);\n*/`
+       becomes
+       `#!/usr/bin/env node\n// This is a script to be executed.\nconst message = "Hello from computed block!";\nprocess.stdout.write(message);\n*/`
+       (Note: only the *leading* `/*` is stripped. The trailing `*/` remains part of the script passed to Node.js, which is valid in JavaScript as a multi-line comment if not stripped by the prefix itself).
+    3. The resulting script is executed by Node.js (e.g., `node -e "#!/usr/bin/env node\n// This is a script...\nprocess.stdout.write(message);\n*/"`).
+    4. The standard output of this script ("Hello from computed block!") will be used as the content.
+    5. The generated `.taylored/20.taylored` file will contain a diff that, when applied, replaces the entire original taylored block (from `// <taylored 20...>` to `// </taylored>`) with "Hello from computed block!".
 
     **Example of markers on the same line:**
 
@@ -278,14 +307,24 @@ Here are the commands you can use with Taylored:
 * **Listing:** `taylored --list` simply lists files matching `*.taylored` in the `.taylored/` directory.
 * **Offsetting:** `taylored --offset <file> [--message "Custom Text"]` uses a sophisticated approach (`lib/git-patch-offset-updater.js`). **It first checks for uncommitted changes in the repository; if any exist, the command will exit.** Otherwise, it attempts to apply/revert the patch on a temporary branch, generates a new patch from this state against the `main` branch, and then replaces the original `.taylored/<file>` with this new, offset-adjusted patch. If the `--message` option is used, this message is intended for the `Subject:` line of the *output* `.taylored` file. Temporary commits made during the process use a default internal message. This can help when the original patch fails to apply due to context changes (lines shifted up or down).
 * **Data Extraction:** `taylored --data <file>` reads the content of the specified `.taylored` file and uses a parsing logic (similar to the one used internally by `--offset` when no custom message is given) to find and extract a commit message, typically from the "Subject:" line of a patch file. It prints this message or an empty string if no message is found.
-* **Automatic Extraction (Git Workflow):** `taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]` requires a clean Git state. It scans files matching the specified extensions, skipping any directories listed in `--exclude` (and their subdirectories), as well as the default exclusions (`.git`, `.taylored`). For each taylored block found (delimiters: `<taylored NUMERO>` and `</taylored>`):
+    *   Automatic Extraction (Git Workflow): `taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]` requires a clean Git state. It scans files matching the specified extensions, skipping any directories listed in `--exclude` (and their subdirectories), as well as the default exclusions (`.git`, `.taylored`). For each taylored block found (delimiters: `<taylored NUMERO ...>` and `</taylored>`):
     1. It creates a temporary branch.
-    2. In this branch, it removes the block from the source file and commits this change.
-    3. It then generates a diff by comparing `HEAD` (the temporary branch with the block removed) to the `<branch_name>` specified in the command. This diff represents the addition of the block.
+        2. **Block Processing**:
+            *   If the `compute="<...>" `attribute is present in the `<taylored NUMERO compute="...">` marker:
+                *   The content within the block is extracted.
+                *   The specified prefix in `compute` (if any) is stripped from the beginning of this content.
+                *   The remaining content is executed as a Node.js script (`node -e "script_content"`).
+                *   The standard output of this script is captured.
+                *   In the temporary branch, the *entire original taylored block* (from markers to content) is replaced with this captured standard output. This change (replacement) is then committed.
+            *   If the `compute` attribute is *not* present:
+                *   In the temporary branch, the *entire original taylored block* (markers and content) is removed from the source file. This removal is committed.
+        3. **Diff Generation**: It then generates a diff by comparing `HEAD` (the state on the temporary branch after block processing) to the `<branch_name>` specified in the command.
+            *   If `compute` was used, this diff represents the change from the original block to the script's output.
+            *   If `compute` was not used, this diff represents the addition of the original block.
     4. This diff is initially saved as `.taylored/main.taylored` (a temporary name) by an internal call that effectively performs a save operation against your specified `<branch_name>`.
     5. The file `.taylored/main.taylored` is renamed to `.taylored/NUMERO.taylored`.
     6. The temporary branch is deleted, and the original branch is restored. The source files on the original branch are not modified by this process.
-    This ensures that each `.taylored/NUMERO.taylored` file is a proper Git diff.
+    This ensures that each `.taylored/NUMERO.taylored` file is a proper Git diff reflecting either the computed output or the literal block content.
 
 ## Contributing
 

@@ -106,7 +106,7 @@ export async function handleAutomaticOperation(
 
     console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
-    const blockRegex = /<taylored (\d+)>([\s\S]*?)<\/taylored>/g;
+    const blockRegex = / <taylored\s+(\d+)(?:\s+compute="([^"]*)")?>([\s\S]*?)<\/taylored>/g;
     let totalBlocksProcessed = 0;
 
     for (const originalFilePath of allFilesToScan) {
@@ -125,12 +125,14 @@ export async function handleAutomaticOperation(
 
         for (const match of matches) {
             const numero = match[1];
+            const computeStripChars = match[2]; // Value of compute="xxx"
+            const originalInnerContent = match[3]; // Content inside the taylored block
             const fullMatchText = match[0];
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
             const targetTayloredFilePath = path.join(tayloredDir, targetTayloredFileName);
             const intermediateMainTayloredPath = path.join(tayloredDir, `main${TAYLORED_FILE_EXTENSION}`);
 
-            console.log(`Processing block ${numero} from ${originalFilePath}...`);
+            console.log(`Processing block ${numero} from ${originalFilePath}${computeStripChars ? ` with compute="${computeStripChars}"` : ''}...`);
             try {
                 await fs.access(intermediateMainTayloredPath);
                 const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it.`;
@@ -159,16 +161,46 @@ export async function handleAutomaticOperation(
             const matchLinesCount = fullMatchText.split('\n').length;
             const tempBranchName = `temp-taylored-${numero}-${Date.now()}`;
             
+            let contentToReplaceOriginalBlockWith: string;
+            let isComputed = false;
+
+            if (computeStripChars) {
+                isComputed = true;
+                let scriptToExecute = originalInnerContent;
+                if (computeStripChars && scriptToExecute.startsWith(computeStripChars)) {
+                    scriptToExecute = scriptToExecute.substring(computeStripChars.length);
+                }
+                try {
+                    contentToReplaceOriginalBlockWith = execSync(`node -e "${scriptToExecute.replace(/"/g, '\\"')}"`, { cwd: CWD, ...execOpts }).trim();
+                } catch (execError: any) {
+                    console.error(`Error executing script in block ${numero} from ${originalFilePath}: ${execError.message}`);
+                    // We might want to decide if we should throw execError or allow processing of other blocks
+                    // For now, let's rethrow to make it a critical error for this block
+                    throw execError;
+                }
+            } else {
+                // No compute attribute, the block will be removed for diff purposes
+                contentToReplaceOriginalBlockWith = "";
+            }
+
             try {
                 execSync(`git checkout -b ${tempBranchName}`, { cwd: CWD, ...execOpts });
                 const currentFileLines = (await fs.readFile(originalFilePath, 'utf-8')).split('\n');
-                currentFileLines.splice(startLineNum - 1, matchLinesCount); 
+
+                if (isComputed) {
+                    const replacementLines = contentToReplaceOriginalBlockWith.split('\n');
+                    currentFileLines.splice(startLineNum - 1, matchLinesCount, ...replacementLines);
+                } else {
+                    // Block is simply removed for diff generation
+                    currentFileLines.splice(startLineNum - 1, matchLinesCount);
+                }
                 await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
+
                 execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
-                execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
-                await handleSaveOperation(branchName, CWD);
+                execSync(`git commit -m "Temporary: Process block ${numero} from ${path.basename(originalFilePath)}${isComputed ? ' (computed)' : ''}"`, { cwd: CWD, ...execOpts });
+                await handleSaveOperation(branchName, CWD); // This will save the diff
                 await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
-                console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
+                console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}${isComputed ? ' (computed content)' : ''}`);
                 totalBlocksProcessed++;
             } catch (error: any) {
                 console.error(`CRITICAL ERROR: Failed to process block ${numero} from ${originalFilePath}.`);

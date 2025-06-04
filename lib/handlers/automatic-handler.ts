@@ -3,7 +3,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execSync, ExecSyncOptionsWithStringEncoding } from 'child_process';
+import { execSync, ExecSyncOptionsWithStringEncoding, spawn } from 'child_process';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 import { handleSaveOperation } from './save-handler';
 
@@ -194,20 +194,50 @@ export async function handleAutomaticOperation(
                     await fs.chmod(tempScriptPath, 0o755); // rwxr-xr-x
 
                     // Execute the temporary script directly, relying on its shebang
-                    scriptResult = execSync(`"${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8', stdio: 'pipe' });
+                    scriptResult = await new Promise<string>((resolve, reject) => {
+                        const child = spawn(tempScriptPath, [], { cwd: CWD, stdio: 'pipe', shell: true });
+                        let scriptOutput = '';
+                        let scriptErrorOutput = '';
+
+                        child.stdout.on('data', (data) => {
+                            scriptOutput += data.toString();
+                            process.stdout.write(data);
+                        });
+
+                        child.stderr.on('data', (data) => {
+                            scriptErrorOutput += data.toString();
+                            process.stderr.write(data);
+                        });
+
+                        child.on('error', (err) => {
+                            reject(err);
+                        });
+
+                        child.on('close', (code) => {
+                            if (code === 0) {
+                                resolve(scriptOutput);
+                            } else {
+                                const error = new Error(`Script failed with code ${code}`) as any;
+                                error.status = code;
+                                error.stdout = scriptOutput;
+                                error.stderr = scriptErrorOutput;
+                                reject(error);
+                            }
+                        });
+                    });
 
                 } catch (error: any) {
                     // Differentiate error source for better logging
                     // istanbul ignore next
-                    if (typeof error.status === 'number' || error.stderr || error.stdout) {
-                        // This is likely an error from execSync
+                    if (error.status !== undefined || error.stderr !== undefined || error.stdout !== undefined) {
+                        // This is likely an error from the script execution (spawn)
                         // istanbul ignore next
                         console.error(`ERROR: Script execution failed for block ${numero} in ${originalFilePath}. Error: ${error.message}`);
                         if (error.stderr) console.error("STDERR:\n" + error.stderr);
                         if (error.stdout) console.error("STDOUT:\n" + error.stdout);
                     } else {
-                        // This is likely an error from fs.chmod
-                        console.error(`ERROR: Failed to set execute permissions on temporary script file '${tempScriptPath}'. Details: ${error.message}`);
+                        // This is likely an error from fs.chmod or other fs operations
+                        console.error(`ERROR: Failed to set execute permissions or other FS issue on temporary script file '${tempScriptPath}'. Details: ${error.message}`);
                     }
                     throw error; // Re-throw the error to stop processing for this block
                 } finally {

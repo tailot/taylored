@@ -329,17 +329,6 @@ export async function handleAutomaticOperation(
             } else {
                 // Existing non-compute logic - wrapped correctly now
                 try {
-                    await fs.access(intermediateMainTayloredPath);
-                    const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it.`;
-                    console.error(message);
-                    throw new Error(message);
-                } catch (error: any) {
-                    if (error.code !== 'ENOENT') {
-                        throw error;
-                    }
-                }
-
-                try {
                     await fs.access(targetTayloredFilePath);
                     const message = `CRITICAL ERROR: Target file ${targetTayloredFilePath} already exists. Please remove or rename it.`;
                     console.error(message);
@@ -363,8 +352,7 @@ export async function handleAutomaticOperation(
                     await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
                     execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
                     execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
-                    await handleSaveOperation(branchName, CWD);
-                    await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
+                    await handleSaveOperation(branchName, CWD, numero);
                     console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
                     totalBlocksProcessed++;
                 } catch (error: any) {
@@ -384,10 +372,6 @@ export async function handleAutomaticOperation(
                     } catch (deleteBranchError: any) {
                         console.warn(`Warning: Failed to delete temporary branch '${tempBranchName}' during cleanup. May require manual cleanup. ${deleteBranchError.message}`);
                     }
-                    try {
-                        await fs.access(intermediateMainTayloredPath);
-                        await fs.unlink(intermediateMainTayloredPath);
-                    } catch (e) { /* File doesn't exist or can't be accessed, ignore */ }
                 }
             } // This closes the `if (computeCharsToStrip !== undefined)` block, NOT the `else` for non-compute
         }

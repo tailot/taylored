@@ -97,26 +97,6 @@ describe('Automatic Command (Git Workflow)', () => {
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("CRITICAL ERROR: Uncommitted changes or untracked files in the repository.");
     });
-    
-    test('Intermediate .taylored/main.taylored Must Not Exist: Fails if it exists', () => {
-      testRepoPath = setupTestRepo('main_taylored_exists');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored number="1">\n// block\n// </taylored>', 'Add app.ts');
-      
-      const tayloredDirPath = path.join(testRepoPath, TAYLORED_DIR_NAME);
-      fs.mkdirSync(tayloredDirPath, { recursive: true });
-      // Create AND commit the conflicting file to pass the "dirty repo" check
-      createFileAndCommit(testRepoPath, path.join(TAYLORED_DIR_NAME, `main${TAYLORED_FILE_EXTENSION}`), 'dummy content', 'add main.taylored');
-            
-      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
-      if (result.status === 0) {
-        console.log("Test 'Intermediate .taylored/main.taylored Must Not Exist' unexpectedly got status 0.");
-        console.log("STDOUT:", result.stdout);
-        console.log("STDERR:", result.stderr);
-      }
-      // Application should exit with non-zero status on this critical error.
-      expect(result.status).not.toBe(0); 
-      expect(result.stderr).toMatch(/CRITICAL ERROR: Intermediate file .*main\.taylored already exists/);
-    });
 
     test('Target .taylored/NUMERO.taylored Must Not Exist: Fails if it exists', () => {
       testRepoPath = setupTestRepo('numero_taylored_exists');

@@ -8,9 +8,12 @@ import { getAndAnalyzeDiff } from '../utils';
  * Handles the --save operation: generates a .taylored file from a branch diff.
  * @param branchName The name of the branch to diff against HEAD.
  * @param CWD The current working directory (Git repository root).
+ * @param outputFileNameOverride Optional override for the output file name.
  */
-export async function handleSaveOperation(branchName: string, CWD: string): Promise<void> {
-    const outputFileName = `${branchName.replace(/[/\\]/g, '-')}${TAYLORED_FILE_EXTENSION}`;
+export async function handleSaveOperation(branchName: string, CWD: string, outputFileNameOverride?: string): Promise<void> {
+    const outputFileName = outputFileNameOverride
+        ? `${outputFileNameOverride}${TAYLORED_FILE_EXTENSION}`
+        : `${branchName.replace(/[/\\]/g, '-')}${TAYLORED_FILE_EXTENSION}`;
     const targetDirectoryPath = path.join(CWD, TAYLORED_DIR_NAME);
     const resolvedOutputFileName = path.join(targetDirectoryPath, outputFileName);
 

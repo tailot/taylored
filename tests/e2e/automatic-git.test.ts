@@ -100,7 +100,7 @@ describe('Automatic Command (Git Workflow)', () => {
     
     test('Intermediate .taylored/main.taylored Must Not Exist: Fails if it exists', () => {
       testRepoPath = setupTestRepo('main_taylored_exists');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
+      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored number="1">\n// block\n// </taylored>', 'Add app.ts');
       
       const tayloredDirPath = path.join(testRepoPath, TAYLORED_DIR_NAME);
       fs.mkdirSync(tayloredDirPath, { recursive: true });
@@ -120,7 +120,7 @@ describe('Automatic Command (Git Workflow)', () => {
 
     test('Target .taylored/NUMERO.taylored Must Not Exist: Fails if it exists', () => {
       testRepoPath = setupTestRepo('numero_taylored_exists');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
+      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored number="1">\n// block\n// </taylored>', 'Add app.ts');
 
       const tayloredDirPath = path.join(testRepoPath, TAYLORED_DIR_NAME);
       fs.mkdirSync(tayloredDirPath, { recursive: true });
@@ -150,7 +150,7 @@ describe('Automatic Command (Git Workflow)', () => {
     test('Single Block: Correctly extracts and creates .taylored file', () => {
       testRepoPath = setupTestRepo('successful_single_block');
       const appTsContent = `// Line 1
-// <taylored 42>
+// <taylored number="42">
 // This is block 42
 // It has two lines
 // </taylored>
@@ -170,7 +170,7 @@ describe('Automatic Command (Git Workflow)', () => {
       const tayloredContent = normalizeLineEndings(fs.readFileSync(tayloredFilePath, 'utf8'));
       expect(tayloredContent).toMatch(/--- a\/src\/app.ts/);
       expect(tayloredContent).toMatch(/\+\+\+ b\/src\/app.ts/);
-      expect(tayloredContent).toContain(`+// <taylored 42>`);
+      expect(tayloredContent).toContain(`+// <taylored number="42">`);
       expect(tayloredContent).toContain(`+// This is block 42`);
       expect(tayloredContent).toContain(`+// It has two lines`);
       expect(tayloredContent).toContain(`+// </taylored>`);
@@ -189,10 +189,10 @@ describe('Automatic Command (Git Workflow)', () => {
 
     test('Multiple Blocks: Correctly extracts all blocks', () => {
         testRepoPath = setupTestRepo('successful_multiple_blocks');
-        const serviceJsContent = `// Service Start\n// <taylored 1>const service = "alpha";\n// </taylored>\n// Service End`;
+        const serviceJsContent = `// Service Start\n// <taylored number="1">const service = "alpha";\n// </taylored>\n// Service End`;
         createFileAndCommit(testRepoPath, 'src/service.js', serviceJsContent, 'Add service.js');
         
-        const utilsJsContent = `// Utils Start\n// <taylored 2>const utilOne = 1;\n// </taylored>\n// Middle Code\n// <taylored 3>const utilTwo = 2;\n// </taylored>\n// Utils End`;
+        const utilsJsContent = `// Utils Start\n// <taylored number="2">const utilOne = 1;\n// </taylored>\n// Middle Code\n// <taylored number="3">const utilTwo = 2;\n// </taylored>\n// Utils End`;
         createFileAndCommit(testRepoPath, 'src/utils.js', utilsJsContent, 'Add utils.js');
 
         const result = runTayloredCommand(testRepoPath, '--automatic js main');
@@ -204,26 +204,26 @@ describe('Automatic Command (Git Workflow)', () => {
         expect(fs.existsSync(path.join(testRepoPath, TAYLORED_DIR_NAME, `3${TAYLORED_FILE_EXTENSION}`))).toBe(true);
         
         const content1 = fs.readFileSync(path.join(testRepoPath, TAYLORED_DIR_NAME, `1${TAYLORED_FILE_EXTENSION}`), 'utf8');
-        expect(content1).toContain('+// <taylored 1>const service = "alpha";'); // Corrected assertion
+        expect(content1).toContain('+// <taylored number="1">const service = "alpha";'); // Corrected assertion
         
         const content2 = fs.readFileSync(path.join(testRepoPath, TAYLORED_DIR_NAME, `2${TAYLORED_FILE_EXTENSION}`), 'utf8');
-        expect(content2).toContain('+// <taylored 2>const utilOne = 1;'); // Corrected assertion
+        expect(content2).toContain('+// <taylored number="2">const utilOne = 1;'); // Corrected assertion
         
         const content3 = fs.readFileSync(path.join(testRepoPath, TAYLORED_DIR_NAME, `3${TAYLORED_FILE_EXTENSION}`), 'utf8');
-        expect(content3).toContain('+// <taylored 3>const utilTwo = 2;'); // Corrected assertion
+        expect(content3).toContain('+// <taylored number="3">const utilTwo = 2;'); // Corrected assertion
     });
 
     test('Multiple Extensions: Correctly extracts blocks from files with different specified extensions', () => {
       testRepoPath = setupTestRepo('successful_multiple_extensions');
       const tsContent = `// TS file
-// <taylored 101>
+// <taylored number="101">
 const tsVar: string = "typescript";
 // </taylored>
 console.log(tsVar);`;
       createFileAndCommit(testRepoPath, 'src/app.ts', tsContent, 'Add app.ts with block 101');
 
       const jsContent = `// JS file
-// <taylored 102>
+// <taylored number="102">
 var jsVar = "javascript";
 // </taylored>
 console.log(jsVar);`;
@@ -245,7 +245,7 @@ console.log(jsVar);`;
       const tayloredContent101 = normalizeLineEndings(fs.readFileSync(tayloredFilePath101, 'utf8'));
       expect(tayloredContent101).toMatch(/--- a\/src\/app.ts/);
       expect(tayloredContent101).toMatch(/\+\+\+ b\/src\/app.ts/);
-      expect(tayloredContent101).toContain(`+// <taylored 101>`);
+      expect(tayloredContent101).toContain(`+// <taylored number="101">`);
       expect(tayloredContent101).toContain(`+const tsVar: string = "typescript";`);
       expect(tayloredContent101).toContain(`+// </taylored>`);
       expect(tayloredContent101).toContain(` console.log(tsVar);`);
@@ -255,7 +255,7 @@ console.log(jsVar);`;
       const tayloredContent102 = normalizeLineEndings(fs.readFileSync(tayloredFilePath102, 'utf8'));
       expect(tayloredContent102).toMatch(/--- a\/src\/component.js/);
       expect(tayloredContent102).toMatch(/\+\+\+ b\/src\/component.js/);
-      expect(tayloredContent102).toContain(`+// <taylored 102>`);
+      expect(tayloredContent102).toContain(`+// <taylored number="102">`);
       expect(tayloredContent102).toContain(`+var jsVar = "javascript";`);
       expect(tayloredContent102).toContain(`+// </taylored>`);
       expect(tayloredContent102).toContain(` console.log(jsVar);`);
@@ -296,7 +296,7 @@ console.log(jsVar);`;
 
     test('Error during handleSaveOperation (e.g., specified branch missing)', () => {
       testRepoPath = setupTestRepo('error_save_non_existent_branch');
-      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored 1>\n// block\n// </taylored>', 'Add app.ts');
+      createFileAndCommit(testRepoPath, 'src/app.ts', '// File content\n// <taylored number="1">\n// block\n// </taylored>', 'Add app.ts');
 
       // Ensure main branch exists and is not the one we are making non-existent
       const initialBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
@@ -337,14 +337,14 @@ console.log(jsVar);`;
       testRepoPath = setupTestRepo('automatic_exclude_dirs');
 
       // Create files with taylored blocks, ensuring all end with a newline
-      createFileAndCommit(testRepoPath, 'file1.js', '// Root file\n// <taylored 1>\n// Block 1 content\n// </taylored>\n', 'Add file1.js');
+      createFileAndCommit(testRepoPath, 'file1.js', '// Root file\n// <taylored number="1">\n// Block 1 content\n// </taylored>\n', 'Add file1.js');
 
-      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'file2.js'), '// Excluded dir1 file\n// <taylored 2>\n// Block 2 content\n// </taylored>\n', 'Add file2.js in excluded_dir1');
-      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), '// Sub Excluded dir1 file\n// <taylored 5>\n// Block 5 content\n// </taylored>\n', 'Add file_in_sub.js in excluded_dir1/sub_excluded_dir');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'file2.js'), '// Excluded dir1 file\n// <taylored number="2">\n// Block 2 content\n// </taylored>\n', 'Add file2.js in excluded_dir1');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), '// Sub Excluded dir1 file\n// <taylored number="5">\n// Block 5 content\n// </taylored>\n', 'Add file_in_sub.js in excluded_dir1/sub_excluded_dir');
 
-      createFileAndCommit(testRepoPath, path.join('not_excluded_dir', 'file3.js'), '// Not excluded dir file\n// <taylored 3>\n// Block 3 content\n// </taylored>\n', 'Add file3.js in not_excluded_dir');
+      createFileAndCommit(testRepoPath, path.join('not_excluded_dir', 'file3.js'), '// Not excluded dir file\n// <taylored number="3">\n// Block 3 content\n// </taylored>\n', 'Add file3.js in not_excluded_dir');
 
-      createFileAndCommit(testRepoPath, path.join('excluded_dir2', 'file4.js'), '// Excluded dir2 file\n// <taylored 4>\n// Block 4 content\n// </taylored>\n', 'Add file4.js in excluded_dir2');
+      createFileAndCommit(testRepoPath, path.join('excluded_dir2', 'file4.js'), '// Excluded dir2 file\n// <taylored number="4">\n// Block 4 content\n// </taylored>\n', 'Add file4.js in excluded_dir2');
 
       // Run the taylored command with --exclude
       // Assuming 'main' is the default branch after setupTestRepo
@@ -362,11 +362,11 @@ console.log(jsVar);`;
       // Assertions for created files
       expect(fs.existsSync(path.join(tayloredBaseDir, `1${TAYLORED_FILE_EXTENSION}`))).toBe(true);
       const content1 = fs.readFileSync(path.join(tayloredBaseDir, `1${TAYLORED_FILE_EXTENSION}`), 'utf8');
-      expect(content1).toContain('+// <taylored 1>');
+      expect(content1).toContain('+// <taylored number="1">');
 
       expect(fs.existsSync(path.join(tayloredBaseDir, `3${TAYLORED_FILE_EXTENSION}`))).toBe(true);
       const content3 = fs.readFileSync(path.join(tayloredBaseDir, `3${TAYLORED_FILE_EXTENSION}`), 'utf8');
-      expect(content3).toContain('+// <taylored 3>');
+      expect(content3).toContain('+// <taylored number="3">');
 
       // Assertions for NOT created files
       expect(fs.existsSync(path.join(tayloredBaseDir, `2${TAYLORED_FILE_EXTENSION}`))).toBe(false); // From excluded_dir1
@@ -388,11 +388,11 @@ console.log(jsVar);`;
       expect(result.stdout).not.toContain(`Successfully created ${unexpectedSuccessMessage5}`);
 
       // Verify original files are untouched
-      expect(fs.readFileSync(path.join(testRepoPath, 'file1.js'), 'utf8')).toContain('// <taylored 1>');
-      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir1', 'file2.js'), 'utf8')).toContain('// <taylored 2>');
-      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), 'utf8')).toContain('// <taylored 5>');
-      expect(fs.readFileSync(path.join(testRepoPath, 'not_excluded_dir', 'file3.js'), 'utf8')).toContain('// <taylored 3>');
-      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir2', 'file4.js'), 'utf8')).toContain('// <taylored 4>');
+      expect(fs.readFileSync(path.join(testRepoPath, 'file1.js'), 'utf8')).toContain('// <taylored number="1">');
+      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir1', 'file2.js'), 'utf8')).toContain('// <taylored number="2">');
+      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir1', 'sub_excluded_dir', 'file_in_sub.js'), 'utf8')).toContain('// <taylored number="5">');
+      expect(fs.readFileSync(path.join(testRepoPath, 'not_excluded_dir', 'file3.js'), 'utf8')).toContain('// <taylored number="3">');
+      expect(fs.readFileSync(path.join(testRepoPath, 'excluded_dir2', 'file4.js'), 'utf8')).toContain('// <taylored number="4">');
 
       // Verify no temporary branches are left
       const branches = execSync('git branch', { cwd: testRepoPath, encoding: 'utf8' });
@@ -403,7 +403,7 @@ console.log(jsVar);`;
 
     test('Exclude with non-existent directory: should not error and process other files', () => {
       testRepoPath = setupTestRepo('automatic_exclude_non_existent');
-      createFileAndCommit(testRepoPath, 'real_file.js', '// <taylored 77>\n// Block 77\n// </taylored>', 'Add real_file.js');
+      createFileAndCommit(testRepoPath, 'real_file.js', '// <taylored number="77">\n// Block 77\n// </taylored>', 'Add real_file.js');
 
       const result = runTayloredCommand(testRepoPath, '--automatic js main --exclude non_existent_dir,another_fake');
 
@@ -420,8 +420,8 @@ console.log(jsVar);`;
 
     test('Exclude with empty string: should process all files (no exclusion)', () => {
       testRepoPath = setupTestRepo('automatic_exclude_empty_string');
-      createFileAndCommit(testRepoPath, 'fileA.js', '// <taylored 88>\n// Block 88\n// </taylored>', 'Add fileA.js');
-      createFileAndCommit(testRepoPath, path.join('dir_b', 'fileB.js'), '// <taylored 99>\n// Block 99\n// </taylored>', 'Add fileB.js');
+      createFileAndCommit(testRepoPath, 'fileA.js', '// <taylored number="88">\n// Block 88\n// </taylored>', 'Add fileA.js');
+      createFileAndCommit(testRepoPath, path.join('dir_b', 'fileB.js'), '// <taylored number="99">\n// Block 99\n// </taylored>', 'Add fileB.js');
 
       const result = runTayloredCommand(testRepoPath, '--automatic js main --exclude ""');
 
@@ -437,6 +437,188 @@ console.log(jsVar);`;
       expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage88}`);
       const expectedSuccessMessage99 = path.join(testRepoPath, TAYLORED_DIR_NAME, `99${TAYLORED_FILE_EXTENSION}`);
       expect(result.stdout).toContain(`Successfully created ${expectedSuccessMessage99}`);
+    });
+  });
+
+  describe('New number Attribute and Old Format Handling', () => {
+    let testRepoPath: string;
+    afterEach(() => {
+        if (testRepoPath && fs.existsSync(testRepoPath)) {
+            fs.rmSync(testRepoPath, { recursive: true, force: true });
+        }
+    });
+
+    test('Successfully parses new `number` attribute', () => {
+      testRepoPath = setupTestRepo('new_number_attribute');
+      const fileContent = `// File with new number attribute
+// <taylored number="789">
+// Simple content for block 789
+// </taylored>
+// After block`;
+      createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with number="789"');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `789${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(true);
+      const tayloredContent = normalizeLineEndings(fs.readFileSync(tayloredFilePath, 'utf8'));
+      expect(tayloredContent).toContain('+// <taylored number="789">');
+      expect(tayloredContent).toContain('+// Simple content for block 789');
+      expect(result.stdout).toContain(`Successfully created ${tayloredFilePath}`);
+    });
+
+    test('Successfully parses `number` attribute with `compute`', () => {
+      testRepoPath = setupTestRepo('new_number_with_compute');
+      const scriptContentForCompute = `#!/usr/bin/env node
+console.log("Computed output for 790");`;
+      const fileContent = `// File with new number attribute and compute
+// <taylored number="790" compute="/*,*/">
+/*
+${scriptContentForCompute}
+*/
+// </taylored>
+// After compute block`;
+      createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with number="790" and compute');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `790${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(true);
+      const tayloredContent = normalizeLineEndings(fs.readFileSync(tayloredFilePath, 'utf8'));
+      expect(tayloredContent).toContain('+Computed output for 790');
+      expect(tayloredContent).toContain('-// <taylored number="790" compute="/*,*/">'); // Check it's removed
+      expect(tayloredContent).not.toContain('+// <taylored number="790" compute="/*,*/">'); // Check it's not added back
+      expect(result.stdout).toContain(`Successfully created ${tayloredFilePath}`);
+    });
+
+    test('Ignores block with old positional number format', () => {
+      testRepoPath = setupTestRepo('old_format_ignored');
+      const fileContent = `// File with old format
+// <taylored 111>
+// Old format content
+// </taylored>
+// After old block`;
+      createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with old format 111');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0); // Command should succeed
+      expect(result.stderr).toBe('');
+
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `111${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(false); // File should NOT be created
+      expect(result.stdout).toContain("No taylored blocks found matching the criteria");
+    });
+
+    test('Ignores block with missing `number` attribute but with `compute`', () => {
+      testRepoPath = setupTestRepo('missing_number_with_compute');
+      const fileContent = `// File with compute but no number
+// <taylored compute="/*,*/">
+/*
+#!/usr/bin/env node
+console.log("This should not be processed");
+*/
+// </taylored>
+// After block`;
+      createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with compute, no number');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      // No taylored files should be created as the regex won't match
+      const tayloredDirContents = fs.readdirSync(path.join(testRepoPath, TAYLORED_DIR_NAME));
+      expect(tayloredDirContents.length).toBe(0);
+      expect(result.stdout).toContain("No taylored blocks found matching the criteria");
+    });
+
+    test('Ignores block with empty `number` attribute', () => {
+      testRepoPath = setupTestRepo('empty_number_attribute');
+      const fileContent = `// File with empty number attribute
+// <taylored number="">
+// Content for empty number
+// </taylored>
+// After block`;
+      createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with number=""');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      const tayloredDirContents = fs.readdirSync(path.join(testRepoPath, TAYLORED_DIR_NAME));
+      expect(tayloredDirContents.length).toBe(0);
+      expect(result.stdout).toContain("No taylored blocks found matching the criteria");
+    });
+
+    test('Ignores block with non-numeric `number` attribute', () => {
+      testRepoPath = setupTestRepo('non_numeric_number_attribute');
+      const fileContent = `// File with non-numeric number attribute
+// <taylored number="abc">
+// Content for non-numeric number
+// </taylored>
+// After block`;
+      createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with number="abc"');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      const tayloredDirContents = fs.readdirSync(path.join(testRepoPath, TAYLORED_DIR_NAME));
+      expect(tayloredDirContents.length).toBe(0);
+      expect(result.stdout).toContain("No taylored blocks found matching the criteria");
+    });
+
+    test('Mixed content - processes new format, ignores old format in same file', () => {
+      testRepoPath = setupTestRepo('mixed_formats_in_file');
+      const scriptContentForCompute = `#!/usr/bin/env node
+console.log("Computed content for 203");`;
+      const fileContent = `// Start of file
+// <taylored number="201">
+// New format valid content for 201
+// </taylored>
+// Middle line 1
+// <taylored 202>
+// Old format invalid content for 202
+// </taylored>
+// Middle line 2
+// <taylored number="203" compute="/*,*/">
+/*
+${scriptContentForCompute}
+*/
+// </taylored>
+// End of file`;
+      createFileAndCommit(testRepoPath, 'src/mixed.js', fileContent, 'Add mixed.js with various formats');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+
+      const tayloredDir = path.join(testRepoPath, TAYLORED_DIR_NAME);
+
+      // Check for 201.taylored (new format, no compute)
+      const filePath201 = path.join(tayloredDir, `201${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(filePath201)).toBe(true);
+      const content201 = normalizeLineEndings(fs.readFileSync(filePath201, 'utf8'));
+      expect(content201).toContain('+// <taylored number="201">');
+      expect(content201).toContain('+// New format valid content for 201');
+      expect(result.stdout).toContain(`Successfully created ${filePath201}`);
+
+      // Check for 203.taylored (new format, with compute)
+      const filePath203 = path.join(tayloredDir, `203${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(filePath203)).toBe(true);
+      const content203 = normalizeLineEndings(fs.readFileSync(filePath203, 'utf8'));
+      expect(content203).toContain('+Computed content for 203');
+      expect(content203).toContain('-// <taylored number="203" compute="/*,*/">'); // Check it's removed
+      expect(content203).not.toContain('+// <taylored number="203" compute="/*,*/">'); // Check it's not added back
+      expect(result.stdout).toContain(`Successfully created ${filePath203}`);
+
+      // Check that 202.taylored was NOT created (old format)
+      const filePath202 = path.join(tayloredDir, `202${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(filePath202)).toBe(false);
+      expect(result.stdout).not.toContain(`202${TAYLORED_FILE_EXTENSION}`);
+
+
+      expect(result.stdout).toContain("Successfully created 2 taylored file(s).");
     });
   });
 });

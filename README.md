@@ -194,7 +194,7 @@ Scans files with specified `<EXTENSIONS>` for taylored blocks and creates indivi
 The `--automatic` mode allows dynamic content generation within taylored blocks using the `compute` attribute.
 
 ```html
-<taylored NUMERO compute="CHARS_TO_STRIP_PATTERNS">
+<taylored number="NUMERO" compute="CHARS_TO_STRIP_PATTERNS">
   <!-- Executable Node.js script content -->
 </taylored>
 ```
@@ -211,7 +211,7 @@ This enables dynamic code or text generation that becomes part of a standard Tay
 **Example with `compute`**:
 ```javascript
 // File: src/dynamicModule.js
-// <taylored 1 compute="/*,*/">
+// <taylored number="1" compute="/*,*/">
 /*
 #!/usr/bin/env node
 // This script generates dynamic content
@@ -231,7 +231,7 @@ Running `taylored --automatic js main` would:
 The `#!/usr/bin/env node` shebang makes the script directly executable if Node.js is in the system's PATH.
 
 ##### Markers and Exclusions
-* **Start Marker**: `<taylored NUMERO [compute="..."]>` (e.g., `<taylored 1>`, `<taylored 42 compute="stripThis">`). `NUMERO` is an integer used for the output filename (e.g., `1.taylored`).
+* **Start Marker**: `<taylored number="NUMERO" [compute="..."]>` (e.g., `<taylored number="1">`, `<taylored number="42" compute="stripThis">`). `NUMERO` is an integer used for the output filename (e.g., `1.taylored`). The previous positional format for specifying the number (e.g., `<taylored 123>`) is no longer supported; the `number` attribute is now required.
 * **End Marker**: `</taylored>`
 * **Important**: Taylored markers affect the **entire line** they are on. Any code or comments on the same line as a marker will be included in the taylored block.
 

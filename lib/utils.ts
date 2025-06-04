@@ -49,15 +49,17 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>] :`);
         console.error(`                            Automatically search for taylored blocks in files with specified <EXTENSIONS>`);
         console.error(`                            (e.g., .js, .ts, .py) using <branch_name> as the target for comparison,`);
-        console.error(`                            and create taylored files from them. Markers: <taylored NUMERO> and </taylored>`);
+        console.error(`                            and create taylored files from them. Markers: <taylored number="NUMERO"> and </taylored>`);
         console.error(`                            (where NUMERO is an integer).`);
-        console.error(`                            The <taylored NUMERO> tag can optionally include a 'compute="CHARS_TO_STRIP"' attribute.`);
+        console.error(`                            The <taylored number="NUMERO"> tag can optionally include a 'compute="CHARS_TO_STRIP_PATTERNS"' attribute.`);
         console.error(`                            If 'compute' is present, the content within the taylored block is executed as a Node.js script.`);
-        console.error(`                            'CHARS_TO_STRIP' are characters removed from the beginning of the script before execution.`);
+        console.error(`                            'CHARS_TO_STRIP_PATTERNS' is an optional comma-separated string of patterns. Before execution, Taylored removes all occurrences of each specified pattern from the script content.`);
         console.error(`                            The script's standard output then replaces the entire taylored block (from \\\`<taylored ...>\\\` to \\\`</taylored>\\\`) in the generated patch.`);
         console.error(`                            This means the dynamic content or calculation result is saved as a standard diff, which can then be applied or reverted using Taylored's \\\`--add\\\` or \\\`--remove\\\` commands.`);
-        console.error(`                            Example: <taylored 1 compute="/*">/*#!/usr/bin/env node
-console.log("Computed value: " + (Math.random() * 100).toFixed(0));*\/</taylored>\`);`);
+        console.error(`                            Example: <taylored number="1" compute="/*,*/">/*
+#!/usr/bin/env node
+console.log("Computed value: " + (Math.random() * 100).toFixed(0));
+*\/</taylored>\`);`);
         console.error(`                            (The \\\`#!/usr/bin/env node\\\` shebang makes the script directly executable in environments where Node.js is in the system's PATH.)`);
         console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
         console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);

@@ -106,7 +106,7 @@ export async function handleAutomaticOperation(
 
     console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
-    const blockRegex = /[^\n]*?<taylored\s+(\d+)(?:\s+compute=["']([^"']*)["'])?>([\s\S]*?)[^\n]*?<\/taylored>/g;
+    const blockRegex = /[^\n]*?<taylored\s+number=["'](\d+)["'](?:\s+compute=["']([^"']*)["'])?>([\s\S]*?)[^\n]*?<\/taylored>/g;
     let totalBlocksProcessed = 0;
 
     for (const originalFilePath of allFilesToScan) {

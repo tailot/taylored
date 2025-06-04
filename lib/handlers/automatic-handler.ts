@@ -190,11 +190,8 @@ export async function handleAutomaticOperation(
 
                 let scriptResult = '';
                 try {
-                    // Add execute permission to the temporary script file before execution
-                    await fs.chmod(tempScriptPath, 0o755); // rwxr-xr-x
-
                     // Execute the temporary script directly, relying on its shebang
-                    scriptResult = execSync(`"${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8', stdio: 'pipe' });
+                    scriptResult = execSync(`node "${tempScriptPath}"`, { cwd: CWD, encoding: 'utf8', stdio: 'pipe' });
 
                 } catch (error: any) {
                     // Differentiate error source for better logging

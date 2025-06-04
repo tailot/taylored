@@ -163,24 +163,24 @@ export async function handleAutomaticOperation(
 
                 let actualScriptContent: string;
                 if (computeCharsToStrip !== undefined && computeCharsToStrip.length > 0) {
-                    // Logica di compute modificata:
-                    // Rimuove tutte le occorrenze di ciascun pattern specificato in 'computeCharsToStrip'.
-                    let processedContent = scriptContent.trim(); // Inizia trimmando il contenuto del blocco
+                    // Modified compute logic:
+                    // Removes all occurrences of each pattern specified in 'computeCharsToStrip'.
+                    let processedContent = scriptContent.trim(); // Start by trimming the block content
                     const patterns = computeCharsToStrip.split(',');
 
                     for (const pattern of patterns) {
-                        const trimmedPattern = pattern.trim(); // Trimma il pattern stesso per rimuovere eventuali spazi bianchi circostanti
+                        const trimmedPattern = pattern.trim(); // Trim the pattern itself to remove any surrounding whitespace
                         if (trimmedPattern.length > 0) {
-                            // Rimuove tutte le occorrenze del trimmedPattern.
-                            // String.prototype.replaceAll() è disponibile in Node.js v15.0.0+.
-                            // Se è richiesta compatibilità con versioni precedenti, si potrebbe usare:
+                            // Removes all occurrences of the trimmedPattern.
+                            // String.prototype.replaceAll() is available in Node.js v15.0.0+.
+                            // If compatibility with older versions is required, you could use:
                             // processedContent = processedContent.split(trimmedPattern).join('');
                             processedContent = processedContent.replaceAll(trimmedPattern, '');
                         }
                     }
-                    actualScriptContent = processedContent.trim(); // Trimma il risultato finale
+                    actualScriptContent = processedContent.trim(); // Trim the final result
                 } else {
-                    // Nessun compute o compute vuoto: usa il contenuto del blocco, trimmato.
+                    // No compute or empty compute: use the content of the block, trimmed.
                     actualScriptContent = scriptContent.trim();
                 }
 

@@ -471,8 +471,8 @@ console.log(jsVar);`;
 
     test('Successfully parses `number` attribute with `compute`', () => {
       testRepoPath = setupTestRepo('new_number_with_compute');
-      const scriptContentForCompute = `#!/usr/bin/env node
-console.log("Computed output for 790");`;
+      const scriptContentForCompute = `#!/bin/bash
+echo "Computed output for 790"`;
       const fileContent = `// File with new number attribute and compute
 // <taylored number="790" compute="/*,*/">
 /*
@@ -570,8 +570,8 @@ console.log("This should not be processed");
 
     test('Mixed content - processes new format, ignores old format in same file', () => {
       testRepoPath = setupTestRepo('mixed_formats_in_file');
-      const scriptContentForCompute = `#!/usr/bin/env node
-console.log("Computed content for 203");`;
+      const scriptContentForCompute = `#!/bin/bash
+echo "Computed content for 203"`;
       const fileContent = `// Start of file
 // <taylored number="201">
 // New format valid content for 201

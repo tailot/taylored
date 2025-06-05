@@ -73,7 +73,11 @@ console.log("Computed value: " + (Math.random() * 100).toFixed(0));
         console.error(`  taylored --offset my_feature_patch`);
         console.error(`  taylored --data my_feature_patch`);
     }
+    if (!errorMessage) {
+        process.exit(0);
+    }
     process.exit(1);
+
 }
 
 /**

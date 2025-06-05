@@ -56,7 +56,7 @@ The recommended way to install Taylored is globally via npm, making the `taylore
 npm install -g taylored
 ```
 
-Ensure you have Node.js and npm installed. After installation, run `taylored --help` for a list of commands.
+Ensure you have Node.js and npm installed. After installation, run `taylored` for a list of commands.
 
 ### Development Setup
 

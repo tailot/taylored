@@ -13,9 +13,8 @@ import { handleApplyOperation } from './lib/apply-logic';
 import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';
 import { handleOffsetCommand } from './lib/handlers/offset-handler';
-import { handleDataOperation } from './lib/handlers/data-handler';
 import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
-import { resolveTayloredFileName, printUsageAndExit, getAndAnalyzeDiff } from './lib/utils';
+import { resolveTayloredFileName, printUsageAndExit } from './lib/utils';
 
 /**
  * Main function to parse arguments and dispatch to handlers.
@@ -31,10 +30,10 @@ async function main(): Promise<void> {
 
     const mode = rawArgs[0];
     let argument: string | undefined;
-    let customMessage: string | undefined;
+    let branchName: string | undefined;
 
     // List of modes that require a .git directory check
-    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--data', '--automatic'];
+    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--automatic'];
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
         try {
@@ -42,7 +41,6 @@ async function main(): Promise<void> {
             if (!gitDirStats.isDirectory()) {
                 printUsageAndExit(`CRITICAL ERROR: A '.git' entity exists at '${gitDirPath}', but it is not a directory. This script must be run from the root of a Git repository.`);
             }
-            // The empty if (mode !== '--data') {} block was here. It has been removed.
         } catch (error: any) {
             if (error.code === 'ENOENT') {
                 printUsageAndExit(`CRITICAL ERROR: No '.git' directory found in '${CWD}'. This script must be run from the root of a Git repository.`);
@@ -79,34 +77,30 @@ async function main(): Promise<void> {
                 printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${argument}') must be a simple filename without path separators. It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
             }
 
-            if (rawArgs.length > 2) {
-                if (rawArgs[2] === '--message') {
-                    if (rawArgs.length > 3 && rawArgs[3] && !rawArgs[3].startsWith('--')) {
-                        customMessage = rawArgs[3];
-                    } else {
-                        printUsageAndExit("CRITICAL ERROR: --message option for --offset requires a message string argument.");
-                    }
-                } else {
-                     printUsageAndExit(`CRITICAL ERROR: Unknown argument or incorrect usage after --offset <file_name>. Expected optional --message "text", got '${rawArgs[2]}'.`);
+            // Reset for current command processing
+            branchName = undefined;
+            let currentArgIndex = 2; // Index for arguments after <taylored_file_name>
+
+            // Check for optional branch name (rawArgs[currentArgIndex])
+            if (rawArgs.length > currentArgIndex && !rawArgs[currentArgIndex].startsWith('--')) {
+                branchName = rawArgs[currentArgIndex];
+                // Basic validation for branch name.
+                // Git branch names can be complex, but we prevent it from looking like an option.
+                if (branchName.startsWith('--')) {
+                     printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchName}' provided for --offset. It cannot start with '--'.`);
                 }
+                currentArgIndex++;
             }
-             if (rawArgs.length > 4) {
-                printUsageAndExit("CRITICAL ERROR: Too many arguments for --offset command.");
+
+            // Check for too many arguments (or unexpected ones like --message)
+            if (rawArgs.length > currentArgIndex) {
+                // If there's an argument and it starts with '--', it's an unknown option.
+                // If it doesn't start with '--', it's an unexpected positional argument after branchName.
+                printUsageAndExit(`CRITICAL ERROR: Unknown or unexpected argument '${rawArgs[currentArgIndex]}' for --offset. Expected optional [BRANCH_NAME] only.`);
             }
-            await handleOffsetCommand(argument, CWD, customMessage);
-        }
-        else if (mode === '--data') {
-            if (rawArgs.length !== 2) {
-                printUsageAndExit("CRITICAL ERROR: --data option requires exactly one <taylored_file_name> argument.");
-            }
-            argument = rawArgs[1];
-            if (argument.startsWith('--')) {
-                printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${argument}' after --data. It cannot start with '--'.`);
-            }
-            if (argument.includes(path.sep) || argument.includes('/') || argument.includes('\\')) {
-                printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${argument}') must be a simple filename without path separators. It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
-            }
-            await handleDataOperation(argument, CWD);
+
+
+            await handleOffsetCommand(argument, CWD, branchName);
         }
         else if (mode === '--automatic') {
             let extensionsInput: string;

@@ -5,7 +5,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithStringEncoding, spawn } from 'child_process';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
-import { handleSaveOperation } from './save-handler';
+import { analyzeDiffContent } from '../utils'; // Changed from handleSaveOperation
 
 const execOpts: ExecSyncOptionsWithStringEncoding = { encoding: 'utf8', stdio: 'pipe' };
 
@@ -106,7 +106,8 @@ export async function handleAutomaticOperation(
 
     console.log(`Found ${allFilesToScan.length} file(s) with specified extensions. Processing...`);
 
-    const blockRegex = /[^\n]*?<taylored\s+number=["'](\d+)["']([^>]*)>([\s\S]*?)[^\n]*?<\/taylored>/g;
+    // Corrected regex to properly capture number, other attributes, and content
+    const blockRegex = /[^\n]*?<taylored\s+number="(\d+)"([^>]*)>([\s\S]*?)[^\n]*?<\/taylored>/g;
     let totalBlocksProcessed = 0;
     const asyncScriptPromises: Promise<void>[] = [];
 
@@ -133,7 +134,7 @@ export async function handleAutomaticOperation(
             const computeMatch = attributesString.match(/compute=["']([^"']*)["']/);
             const computeCharsToStrip = computeMatch ? computeMatch[1] : undefined;
 
-            const asyncMatch = attributesString.match(/async=["'](true|false)["']/);
+            const asyncMatch = attributesString.match(/async=["'](true|false)["']/); // Capture 'true' or 'false' within single or double quotes
             const asyncFlag = asyncMatch ? asyncMatch[1] === 'true' : false;
 
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
@@ -244,6 +245,12 @@ export async function handleAutomaticOperation(
 
                     try {
                         execSync(`git checkout -b "${tempComputeBranchName}" "${currentOriginalBranchName}"`, { cwd: currentCWD, ...execOpts });
+                        
+                        // Create and add .gitignore to the temporary compute branch
+                        const gitignorePath = path.join(currentCWD, '.gitignore');
+                        await fs.writeFile(gitignorePath, TAYLORED_DIR_NAME + '\n');
+                        execSync(`git add .gitignore`, { cwd: currentCWD, ...execOpts });
+                        
                         const contentOnTempBranch = await fs.readFile(currentOriginalFilePath, 'utf-8');
                         const contentWithScriptResult = contentOnTempBranch.replace(currentScriptContentWithTags, scriptResult);
                         await fs.writeFile(currentOriginalFilePath, contentWithScriptResult);
@@ -438,6 +445,12 @@ export async function handleAutomaticOperation(
                         // 1. Create a temporary branch from the current originalBranchName
                         execSync(`git checkout -b "${tempComputeBranchName}" "${originalBranchName}"`, { cwd: CWD, ...execOpts });
 
+                            // Create and add .gitignore to the temporary compute branch (sync)
+                            const gitignorePath = path.join(CWD, '.gitignore');
+                            await fs.writeFile(gitignorePath, TAYLORED_DIR_NAME + '\n');
+                            execSync(`git add .gitignore`, { cwd: CWD, ...execOpts });
+
+
                         // 2. On this temporary branch, modify the file:
                         const contentOnTempBranch = await fs.readFile(originalFilePath, 'utf-8');
                         const contentWithScriptResult = contentOnTempBranch.replace(scriptContentWithTags, scriptResult);
@@ -509,17 +522,23 @@ export async function handleAutomaticOperation(
                 }
             } else {
                 // Existing non-compute logic - wrapped correctly now
+                const actualIntermediateFileName = `${branchName.replace(/[/\\]/g, '-')}${TAYLORED_FILE_EXTENSION}`;
+                const actualIntermediateFilePath = path.join(tayloredDir, actualIntermediateFileName);
+
+                // Pre-check 1: Ensure the intermediate file that handleSaveOperation WILL create/overwrite doesn't exist unexpectedly.
                 try {
-                    await fs.access(intermediateMainTayloredPath);
-                    const message = `CRITICAL ERROR: Intermediate file ${intermediateMainTayloredPath} already exists. Please remove or rename it.`;
+                    await fs.access(actualIntermediateFilePath);
+                    const message = `CRITICAL ERROR: Intermediate file ${actualIntermediateFilePath} (derived from branch name '${branchName}') already exists. 'handleSaveOperation' would overwrite this file. Please remove or rename it to ensure a clean state.`;
                     console.error(message);
                     throw new Error(message);
                 } catch (error: any) {
-                    if (error.code !== 'ENOENT') {
+                    if (error.code !== 'ENOENT') { // If any error other than "file not found", re-throw.
                         throw error;
                     }
+                    // ENOENT is good, means it's clean.
                 }
 
+                // Pre-check 2: Ensure the final target file doesn't exist (this was already correctly in place)
                 try {
                     await fs.access(targetTayloredFilePath);
                     const message = `CRITICAL ERROR: Target file ${targetTayloredFilePath} already exists. Please remove or rename it.`;
@@ -539,20 +558,64 @@ export async function handleAutomaticOperation(
 
                 try {
                     execSync(`git checkout -b ${tempBranchName}`, { cwd: CWD, ...execOpts });
+
+                    // Create and add .gitignore to the temporary non-compute branch
+                    const gitignorePath = path.join(CWD, '.gitignore');
+                    await fs.writeFile(gitignorePath, TAYLORED_DIR_NAME + '\n');
+                    execSync(`git add .gitignore`, { cwd: CWD, ...execOpts });
+
                     const currentFileLines = (await fs.readFile(originalFilePath, 'utf-8')).split('\n');
                     currentFileLines.splice(startLineNum - 1, matchLinesCount);
                     await fs.writeFile(originalFilePath, currentFileLines.join('\n'));
                     execSync(`git add "${originalFilePath}"`, { cwd: CWD, ...execOpts });
                     execSync(`git commit -m "Temporary: Remove block ${numero} from ${path.basename(originalFilePath)}"`, { cwd: CWD, ...execOpts });
-                    await handleSaveOperation(branchName, CWD);
-                    await fs.rename(intermediateMainTayloredPath, targetTayloredFilePath);
-                    console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath}`);
+
+                    // Generate diff against originalBranchName for non-compute blocks
+                    const relativeOriginalFilePath = path.relative(CWD, originalFilePath);
+                    const diffCommand = `git diff --exit-code "${originalBranchName}" HEAD -- "${relativeOriginalFilePath}"`;
+                    let diffContentForFile = ""; // Default to empty if no diff
+
+                    try {
+                        execSync(diffCommand, { cwd: CWD, encoding: 'utf8', stdio: 'pipe' });
+                        // No diff found (exit code 0)
+                    } catch (e: any) {
+                        if (e.status === 1 && typeof e.stdout === 'string') {
+                            diffContentForFile = e.stdout; // Differences found
+                        } else {
+                            console.error(`CRITICAL ERROR: Failed to generate diff for non-compute block ${numero} (removal vs original branch '${originalBranchName}').`);
+                            if (e.message) console.error(`  Error message: ${e.message}`);
+                            if (e.stderr) console.error("  STDERR:\n" + e.stderr.toString().trim());
+                            if (e.stdout) console.error("  STDOUT:\n" + e.stdout.toString().trim());
+                            throw e;
+                        }
+                    }
+
+                    const analysis = analyzeDiffContent(diffContentForFile);
+                    if (!analysis.success) {
+                        console.error(`CRITICAL ERROR: Failed to analyze diff content for non-compute block ${numero}. ${analysis.errorMessage}`);
+                        throw new Error(`Diff analysis failed for non-compute block ${numero}.`);
+                    }
+
+                    if (analysis.isPure && (analysis.deletions > 0 && analysis.additions === 0)) {
+                        await fs.writeFile(targetTayloredFilePath, diffContentForFile);
+                        console.log(`Successfully created ${targetTayloredFilePath} for block ${numero} from ${originalFilePath} (block removal vs original branch '${originalBranchName}')`);
+                    } else if (analysis.isPure && analysis.additions === 0 && analysis.deletions === 0) {
+                        await fs.writeFile(targetTayloredFilePath, "");
+                        console.log(`Block removal for ${numero} in ${originalFilePath} resulted in no textual changes against original branch '${originalBranchName}'. Empty taylored file created: ${targetTayloredFilePath}`);
+                    } else {
+                        console.error(`CRITICAL ERROR: Diff for non-compute block ${numero} (removal vs original branch '${originalBranchName}') was not as expected (purely deletions or no change).`);
+                        console.error(`  Additions: ${analysis.additions}, Deletions: ${analysis.deletions}, IsPure: ${analysis.isPure}`);
+                        // Avoid printing huge diffs to console
+                        const maxDiffPreviewLength = 1000;
+                        const diffPreview = diffContentForFile.length > maxDiffPreviewLength ? diffContentForFile.substring(0, maxDiffPreviewLength) + "\n... (diff truncated)" : diffContentForFile;
+                        if (diffContentForFile.trim()) console.error(`  Diff content:\n${diffPreview}`);
+                        throw new Error(`Unexpected diff characteristics for non-compute block ${numero}.`);
+                    }
                     totalBlocksProcessed++;
                 } catch (error: any) {
                     console.error(`CRITICAL ERROR: Failed to process block ${numero} from ${originalFilePath}.`);
-                    console.error(`Error message: ${error.message}`);
-                    if (error.stderr) console.error("STDERR:\n" + error.stderr);
-                    if (error.stdout) console.error("STDOUT:\n" + error.stdout);
+                    if (error.message && !error.message.includes("Unexpected diff characteristics")) console.error(`Error message: ${error.message}`); // Avoid duplicate message
+                    // STDERR/STDOUT might be from a command that failed before diffing
                     throw error;
                 } finally {
                     try {
@@ -565,10 +628,6 @@ export async function handleAutomaticOperation(
                     } catch (deleteBranchError: any) {
                         console.warn(`Warning: Failed to delete temporary branch '${tempBranchName}' during cleanup. May require manual cleanup. ${deleteBranchError.message}`);
                     }
-                    try {
-                        await fs.access(intermediateMainTayloredPath);
-                        await fs.unlink(intermediateMainTayloredPath);
-                    } catch (e) { /* File doesn't exist or can't be accessed, ignore */ }
                 }
             } // This closes the `if (computeCharsToStrip !== undefined)` block, NOT the `else` for non-compute
         }
@@ -580,11 +639,15 @@ export async function handleAutomaticOperation(
         let succeededCount = 0;
         let failedCount = 0;
         results.forEach((result, index) => {
+            // Construct a more informative block identifier if possible.
+            // This requires access to 'numero' which is not directly in scope here.
+            // For now, using index.
+            const blockIdentifier = `async block (index ${index})`; // Placeholder
             if (result.status === 'fulfilled') {
-                console.log(`Asynchronous task for block ${index + 1} completed successfully.`);
+                console.log(`Asynchronous task for ${blockIdentifier} completed successfully.`);
                 succeededCount++;
             } else {
-                console.error(`Asynchronous task for block ${index + 1} failed: ${result.reason}`);
+                console.error(`Asynchronous task for ${blockIdentifier} failed: ${result.reason}`);
                 failedCount++;
             }
         });

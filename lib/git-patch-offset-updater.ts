@@ -117,23 +117,36 @@ function parsePatchHunks(patchContent: string | null | undefined): HunkHeaderInf
  * @returns Patch content with the message embedded, or an empty string if the diffBody is effectively empty.
  */
 function embedMessageInContent(diffBody: string, message: string | null): string {
-    const trimmedDiffBody = diffBody.trim();
+    const trimmedDiffBody = diffBody.trim(); // Trim whitespace from the diff body
 
-    if (trimmedDiffBody === "") {
-        return ""; 
-    }
-
-    let contentWithPotentialMessage = diffBody;
-
-    if (message) { 
+    // If there's a message, it takes precedence.
+    // A patch/commit can exist with only a message and no actual code changes.
+    if (message) { // Check if message is not null and not an empty string
         const subjectLine = `Subject: [PATCH] ${message}`;
-        contentWithPotentialMessage = `${subjectLine}\n\n${diffBody}`;
+        let content = subjectLine;
+
+        // Append the trimmed diff body only if it's not empty
+        if (trimmedDiffBody) {
+            content += `\n\n${trimmedDiffBody}`;
+        }
+
+        // Ensure a final newline
+        if (!content.endsWith('\n')) {
+            content += '\n';
+        }
+        return content;
     }
 
-    if (contentWithPotentialMessage !== "" && !contentWithPotentialMessage.endsWith('\n')) {
-        contentWithPotentialMessage += '\n';
+    // If no message (null or empty string), return the trimmed diff body (if any) with a final newline,
+    // or an empty string if the trimmed diff body is empty.
+    if (trimmedDiffBody === "") {
+        return "";
     }
-    return contentWithPotentialMessage;
+    let content = trimmedDiffBody;
+    if (!content.endsWith('\n')) {
+        content += '\n';
+    }
+    return content;
 }
 
 /**
@@ -144,12 +157,22 @@ function embedMessageInContent(diffBody: string, message: string | null): string
 function getActualDiffBody(patchFileContent: string): string {
     const lines = patchFileContent.split('\n');
     if (lines.length > 0 && lines[0].startsWith('Subject: [PATCH]')) {
-        if (lines.length > 1 && lines[1] === '') { 
-            return lines.slice(2).join('\n'); 
+        // Find the first blank line after the Subject line
+        let firstBlankLineIndex = -1;
+        for (let i = 1; i < lines.length; i++) {
+            if (lines[i].trim() === '') {
+                firstBlankLineIndex = i;
+                break;
+            }
         }
-        return ""; 
+        // If a blank line is found and there's content after it, return that content
+        if (firstBlankLineIndex !== -1 && firstBlankLineIndex + 1 < lines.length) {
+            return lines.slice(firstBlankLineIndex + 1).join('\n');
+        }
+        // If no blank line is found after Subject, or no content after it, assume empty diff body
+        return "";
     }
-    return patchFileContent; 
+    return patchFileContent; // No Subject line, return the whole content
 }
 
 
@@ -160,22 +183,24 @@ interface SimplifiedUpdatePatchOffsetsResult {
 async function updatePatchOffsets(
     patchFileName: string,
     repoRoot: string,
-    customCommitMessage?: string
+    _customCommitMessage?: string, // Parameter kept for signature compatibility if called elsewhere, but ignored.
+    branchName?: string
 ): Promise<SimplifiedUpdatePatchOffsetsResult> {
+    const baseBranch = branchName || 'main'; // Usa il branchName fornito o 'main' come default
+
     const statusResult = await execGit(repoRoot, ['status', '--porcelain']);
     if (statusResult.stdout.trim() !== '') {
         throw new Error("CRITICAL ERROR: Uncommitted changes detected in the repository. Please commit or stash them before running --offset.\n" + statusResult.stdout);
     }
-
     const absolutePatchFilePath = path.join(repoRoot, TAYLORED_DIR_NAME, patchFileName);
 
     if (!fs.existsSync(absolutePatchFilePath) || !fs.statSync(absolutePatchFilePath).isFile()) {
         throw new Error(`Patch file '${absolutePatchFilePath}' not found or is not a file.`);
     }
-
-    const mainBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', 'main'], { allowFailure: true, ignoreStderr: true });
-    if (!mainBranchExistsResult.success) {
-        throw new GitExecutionError("CRITICAL ERROR: The 'main' branch does not exist in the repository. Cannot calculate diff against 'main'.", mainBranchExistsResult.error);
+    
+    const baseBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', baseBranch], { allowFailure: true, ignoreStderr: true });
+    if (!baseBranchExistsResult.success) {
+        throw new GitExecutionError(`CRITICAL ERROR: The base branch '${baseBranch}' does not exist in the repository. Cannot calculate diff against '${baseBranch}'.`, baseBranchExistsResult.error);
     }
 
     let originalBranchOrCommit: string = '';
@@ -226,20 +251,17 @@ async function updatePatchOffsets(
             const tayloredDirPath = path.join(repoRoot, TAYLORED_DIR_NAME);
             await fs.ensureDir(tayloredDirPath);
 
-            const diffCmdResult = await execGit(repoRoot, ['diff', 'main', 'HEAD'], { allowFailure: true });
+            const diffCmdResult = await execGit(repoRoot, ['diff', baseBranch, 'HEAD'], { allowFailure: true });
 
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
             const rawNewDiffContent = diffCmdResult.stdout || "";
 
-            let effectiveMessageToEmbed: string | null = null;
-            if (customCommitMessage) {
-                effectiveMessageToEmbed = customCommitMessage;
-            } else {
-                effectiveMessageToEmbed = extractMessageFromPatch(originalPatchContent);
-            }
+            // Custom commit message is no longer supported for --offset.
+            // Always extract from the original patch if present.
+            const effectiveMessageToEmbed: string | null = extractMessageFromPatch(originalPatchContent);
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
-                console.error(`ERROR: Execution of 'git diff main HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`);
+                console.error(`ERROR: Execution of 'git diff ${baseBranch} HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`);
                 if (diffCmdResult.stderr) console.error(`  Stderr: ${diffCmdResult.stderr}`);
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);

@@ -26,8 +26,7 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
     console.error(`  taylored --save <branch_name>`);
     console.error(`  taylored --list`);
     console.error(`  taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
-    console.error(`  taylored --offset <taylored_file_name> [--message "Custom commit message"]`);
-    console.error(`  taylored --data <taylored_file_name>`);
+    console.error(`  taylored --offset <taylored_file_name> [BRANCH_NAME]`);
 
     if (detailed || errorMessage) {
         console.error("\nArguments:");
@@ -37,6 +36,7 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`  <branch_name>             : Branch name. Used by --save (target for diff) and --automatic (target for comparison).`);
         console.error(`                            Output for --save: ${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}`);
         console.error(`  <EXTENSIONS>              : File extension(s) to scan (e.g., 'ts' or 'ts,js,py'). Used by --automatic.`);
+        console.error(`  [BRANCH_NAME]             : Optional. Branch name to use as a base for --offset. Defaults to 'main'.`);
         console.error(`  <DIR_LIST>                : Optional. Comma-separated list of directory names to exclude (e.g., 'dist,build,test'). Used by --automatic with --exclude.`);
         console.error("\nOptions:");
         console.error(`  --add                     : Apply changes from '${TAYLORED_DIR_NAME}/<file_name>' to current directory.`);
@@ -58,26 +58,59 @@ export function printUsageAndExit(errorMessage?: string, detailed: boolean = fal
         console.error(`                            This means the dynamic content or calculation result is saved as a standard diff, which can then be applied or reverted using Taylored's \\\`--add\\\` or \\\`--remove\\\` commands.`);
         console.error(`                            Example: <taylored number="1" compute="/*,*/">/*
 #!/usr/bin/env node
-console.log("Computed value: " + (Math.random() * 100).toFixed(0));
+console.log("Computed value: " + (Math.random() * 100).toFixed(0)); //NOSONAR
 *\/</taylored>\`);`);
         console.error(`                            (The \\\`#!/usr/bin/env node\\\` shebang makes the script directly executable in environments where Node.js is in the system's PATH.)`);
         console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
-        console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'.`);
-        console.error(`  --message "Custom Text"   : Optional. Used with --offset. A warning is shown as this is not used by the new offset logic.`);
-        console.error(`  --data                    : Extract and print message from a taylored file. Prints empty string if not found.`);
+        console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'. Optionally specify a branch to diff against.`);
         console.error("\nNote:");
         console.error(`  All commands must be run from the root of a Git repository.`);
         console.error("\nExamples:");
         console.error(`  taylored --add my_changes`);
         console.error(`  taylored --save feature/new-design`);
-        console.error(`  taylored --offset my_feature_patch`);
-        console.error(`  taylored --data my_feature_patch`);
+    console.error(`  taylored --offset my_feature_patch develop`);
     }
     if (!errorMessage) {
         process.exit(0);
     }
     process.exit(1);
 
+}
+
+/**
+ * Analyzes diff content string to determine additions, deletions, and purity.
+ * @param diffOutput The string output from a diff command.
+ * @returns An object containing additions, deletions, purity, success status, and an optional error message.
+ */
+export function analyzeDiffContent(diffOutput: string | undefined): { additions: number; deletions: number; isPure: boolean; success: boolean; errorMessage?: string } {
+    let additions = 0;
+    let deletions = 0;
+    let isPure = false;
+    let success = true;
+    let errorMessage: string | undefined;
+
+    if (typeof diffOutput === 'string') {
+        if (diffOutput.trim() === "") { // Handle empty diff string as no changes
+            isPure = true; // No changes is pure
+            // additions and deletions remain 0
+        } else {
+            try {
+                const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
+                for (const file of parsedDiffFiles) {
+                    additions += file.additions;
+                    deletions += file.deletions;
+                }
+                isPure = (additions > 0 && deletions === 0) || (deletions > 0 && additions === 0) || (additions === 0 && deletions === 0);
+            } catch (parseError: any) {
+                errorMessage = `Failed to parse diff output. Error: ${parseError.message}`;
+                success = false;
+            }
+        }
+    } else { // Should ideally not be called with undefined, but handle defensively
+        errorMessage = `Diff output was unexpectedly undefined.`;
+        success = false;
+    }
+    return { additions, deletions, isPure, success, errorMessage };
 }
 
 /**
@@ -90,49 +123,48 @@ export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput
     const command = `git diff HEAD "${branchName.replace(/"/g, '\\"')}"`; // Basic quoting for branch name
     let diffOutput: string | undefined;
     let errorMessage: string | undefined;
-    let success = false;
+    let commandSuccess = false;
     let additions = 0;
     let deletions = 0;
     let isPure = false;
 
     try {
         diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
-        success = true;
+        commandSuccess = true; // Command succeeded, implies diffOutput is valid (even if empty)
     } catch (error: any) {
-        // If execSync throws, the command is considered to have failed.
-        errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
-        if (error.status) { // status is the exit code
-            errorMessage += ` Exit status: ${error.status}.`;
-        }
-        // stderr usually contains the actual error message from git
-        if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-            errorMessage += ` Git stderr: ${error.stderr.trim()}.`;
-        } else if (error.message) { // Fallback if stderr is not informative
-            errorMessage += ` Error message: ${error.message}.`;
-        }
-        errorMessage += ` Attempted command: ${command}.`;
-        success = false;
-        // diffOutput remains undefined because the command failed
-    }
-
-    if (success && typeof diffOutput === 'string') {
-        try {
-            const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
-            for (const file of parsedDiffFiles) {
-                additions += file.additions;
-                deletions += file.deletions;
+        if (error.status === 1 && typeof error.stdout === 'string') {
+            // git diff found differences and exited with 1. This is not an error for getAndAnalyzeDiff's purpose.
+            diffOutput = error.stdout;
+            commandSuccess = true;
+        } else {
+            // Actual error from execSync or git diff
+            errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
+            if (error.status) { errorMessage += ` Exit status: ${error.status}.`; }
+            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
+                errorMessage += ` Git stderr: ${error.stderr.trim()}.`;
+            } else if (error.message) {
+                errorMessage += ` Error message: ${error.message}.`;
             }
-            isPure = (additions > 0 && deletions === 0) || (deletions > 0 && additions === 0) || (additions === 0 && deletions === 0);
-        } catch (parseError: any) {
-            errorMessage = `CRITICAL ERROR: Failed to parse diff output for branch '${branchName}'. Error: ${parseError.message}`;
-            success = false;
+            errorMessage += ` Attempted command: ${command}.`;
+            commandSuccess = false;
+            // diffOutput remains undefined
         }
-    } else if (success && typeof diffOutput !== 'string') {
-        errorMessage = `CRITICAL ERROR: Diff output for branch '${branchName}' was unexpectedly undefined despite initial success.`;
-        success = false;
     }
 
-    return { diffOutput, additions, deletions, isPure, errorMessage, success };
+    if (commandSuccess) { // diffOutput could be an empty string (no diff) or the diff content
+        const analysis = analyzeDiffContent(diffOutput); // diffOutput is defined if commandSuccess is true
+        if (analysis.success) {
+            additions = analysis.additions;
+            deletions = analysis.deletions;
+            isPure = analysis.isPure;
+        } else {
+            errorMessage = (errorMessage ? errorMessage + "\n" : "") + `CRITICAL ERROR: Post-diff analysis failed. ${analysis.errorMessage}`;
+            commandSuccess = false; // Mark overall success as false if parsing/analysis fails
+        }
+    }
+    // If !commandSuccess initially, diffOutput is undefined. additions, deletions, isPure remain 0, false.
+
+    return { diffOutput, additions, deletions, isPure, errorMessage, success: commandSuccess };
 }
 
 export function extractMessageFromPatch(patchContent: string | null | undefined): string | null {

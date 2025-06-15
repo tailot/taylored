@@ -12,7 +12,6 @@ A key feature is Taylored's intelligent plugin generation:
 
 Taylored also provides robust tools for patch lifecycle management:
 * `--offset`: Updates patch offsets to keep them applicable as your codebase evolves. It can embed a custom `Subject:` line in the updated `.taylored` file.
-* `--data`: Extracts commit messages embedded within `.taylored` files.
 
 ## Table of Contents
 
@@ -23,17 +22,6 @@ Taylored also provides robust tools for patch lifecycle management:
 3.  [Usage](#usage)
     * [Prerequisites](#prerequisites)
     * [Available Commands](#available-commands)
-        * [Save Changes: `taylored --save`](#save-changes-taylored---save-branch_name)
-        * [Apply Changes: `taylored --add`](#apply-changes-taylored---add-taylored_file_name)
-        * [Remove Changes: `taylored --remove`](#remove-changes-taylored---remove-taylored_file_name)
-        * [Verify Application: `taylored --verify-add`](#verify-application-taylored---verify-add-taylored_file_name)
-        * [Verify Removal: `taylored --verify-remove`](#verify-removal-taylored---verify-remove-taylored_file_name)
-        * [List Plugins: `taylored --list`](#list-plugins-taylored---list)
-        * [Update Offsets: `taylored --offset`](#update-offsets-taylored---offset-taylored_file_name---message-custom-commit-message)
-        * [Extract Data: `taylored --data`](#extract-data-taylored---data-taylored_file_name)
-        * [Automatic Extraction: `taylored --automatic`](#automatic-extraction-taylored---automatic-extensions-branch_name---exclude-dir_list)
-            * [Dynamic Content with `compute`](#dynamic-content-with-compute)
-            * [Markers and Exclusions](#markers-and-exclusions)
 4.  [How It Works (Under the Hood)](#how-it-works-under-the-hood)
 5.  [Contributing](#contributing)
 6.  [License](#license)
@@ -150,24 +138,16 @@ Displays all `.taylored` files found in the `.taylored/` directory.
     taylored --list
     ```
 
-#### Update Offsets: `taylored --offset <taylored_file_name> [--message "Custom commit message"]`
+#### Update Offsets: `taylored --offset <taylored_file_name> [BRANCH_NAME]`
 Updates line number offsets within the specified `.taylored` file to ensure it applies cleanly to the current repository state.
 * **Prerequisite**: No uncommitted changes in the Git working directory.
-* If `--message` is provided, its value is used for the `Subject: [PATCH] Your Custom Message` line in the *output* `.taylored` file. If omitted, Taylored attempts to preserve an existing message from the input patch.
+* Optionally, a `[BRANCH_NAME]` can be specified to calculate the offset against a branch other than `main`.
 * The file is updated in place.
 
     *Example:*
     ```bash
     taylored --offset my_feature_patch
-    taylored --offset my_feature_patch.taylored --message "Refactor: Adjust patch for latest API"
-    ```
-
-#### Extract Data: `taylored --data <taylored_file_name>`
-Reads the specified `.taylored` file and prints its embedded commit message (typically from a `Subject:` line) to standard output. Prints an empty string if no message is found.
-
-    *Example:*
-    ```bash
-    taylored --data my_feature_patch
+    taylored --offset my_feature_patch.taylored develop
     ```
 
 #### Automatic Extraction: `taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`
@@ -213,8 +193,8 @@ The `--automatic` mode allows dynamic content generation within taylored blocks 
 This enables dynamic code or text generation that becomes part of a standard Taylored patch, versionable and manageable like any other code change.
 
 **Considerations for `async="true"`:**
-*   Running a large number of computationally intensive scripts in parallel might be resource-heavy on your system.
-*   Asynchronous scripts should ideally be self-contained. Their execution order relative to other asynchronous scripts is not guaranteed, so they should not depend on the side effects of other concurrently running async scripts.
+* Running a large number of computationally intensive scripts in parallel might be resource-heavy on your system.
+* Asynchronous scripts should ideally be self-contained. Their execution order relative to other asynchronous scripts is not guaranteed, so they should not depend on the side effects of other concurrently running async scripts.
 
 **Example with `compute` (and optional `async`)**:
 ```javascript
@@ -225,7 +205,7 @@ This enables dynamic code or text generation that becomes part of a standard Tay
 // This script generates dynamic content (potentially slowly)
 await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async work
 const randomNumber = Math.floor(Math.random() * 100);
-console.log(`const dynamicValue = ${randomNumber}; // Generated at ${new Date().toISOString()}`);
+console.log(\`const dynamicValue = \${randomNumber}; // Generated at \${new Date().toISOString()}\`);
 */
 // </taylored>
 ```
@@ -291,8 +271,7 @@ This process creates `.taylored/15.taylored` containing a Git diff. Applying thi
 * **`--add`/`--remove`**: Uses `git apply` (with `-R` for remove).
 * **`--verify-add`/`--verify-remove`**: Uses `git apply --check` (with `-R` for verify-remove).
 * **`--list`**: Lists `*.taylored` files in the `.taylored/` directory.
-* **`--offset`**: Operates on a temporary branch. It attempts to apply/revert the patch, then generates a new diff against the `main` branch, replacing the original `.taylored` file. Requires a clean working directory.
-* **`--data`**: Parses the `.taylored` file to extract a commit message, typically from a `Subject:` line.
+* **`--offset`**: Operates on a temporary branch. It attempts to apply/revert the patch, then generates a new diff against the `main` branch (or specified branch), replacing the original `.taylored` file. Requires a clean working directory.
 * **`--automatic`**: Requires a clean Git state. For each block:
     1.  Creates a temporary branch.
     2.  Removes the block and commits this change on the temporary branch.
@@ -302,7 +281,7 @@ This process creates `.taylored/15.taylored` containing a Git diff. Applying thi
 
 ## Contributing
 
-Contributions are highly welcome! Please feel free to submit pull requests or open issues on the [GitHub repository](https://github.com/tailot/taylored).
+Contributions are highly welcome! Please feel free to submit pull requests or open issues on the GitHub repository.
 
 1.  Fork the repository.
 2.  Create your feature branch (`git checkout -b feature/YourAmazingFeature`).

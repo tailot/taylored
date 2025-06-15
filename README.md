@@ -191,10 +191,10 @@ Scans files with specified `<EXTENSIONS>` for taylored blocks and creates indivi
     5.  The temporary branch is deleted, and the original branch is restored. Source files on the original branch remain untouched.
 
 ##### Dynamic Content with `compute`
-The `--automatic` mode allows dynamic content generation within taylored blocks using the `compute` attribute.
+The `--automatic` mode allows dynamic content generation within taylored blocks using the `compute` attribute. You can also control whether these scripts are executed synchronously or asynchronously.
 
 ```html
-<taylored number="NUMERO" compute="CHARS_TO_STRIP_PATTERNS">
+<taylored number="NUMERO" compute="CHARS_TO_STRIP_PATTERNS" [async="true|false"]>
   <!-- Executable Node.js script content -->
 </taylored>
 ```
@@ -203,18 +203,27 @@ The `--automatic` mode allows dynamic content generation within taylored blocks 
     * Signals that the block's content is an executable Node.js script.
     * `CHARS_TO_STRIP_PATTERNS` is an optional comma-separated string of patterns (e.g., `/*,*/`). Before execution, Taylored removes **all occurrences** of each specified pattern from the script content. This is useful for embedding scripts within comment structures.
         For example, `compute="/*,*/"` would remove all `/*` and all `*/` sequences from the script.
-* **Script Execution**: The processed script content is executed via Node.js.
-* **Patch Generation**: The standard output (stdout) from the script replaces the *entire* original `<taylored ... compute="...">...</taylored>` block in the generated patch.
+* **`async="true|false"`** (Optional):
+    * `async="true"`: If specified, the Node.js script for this block will be processed asynchronously. If multiple blocks are marked `async="true"`, their script executions may run in parallel. This can speed up the `--automatic` process if scripts involve time-consuming operations (e.g., I/O, network requests).
+    * `async="false"` or attribute omitted: The script will be executed synchronously (default behavior). The `--automatic` process will wait for each such script to complete before moving to the next block.
+* **Script Execution**: The processed script content is executed via Node.js. Taylored waits for all scripts (synchronous and asynchronous) to complete before finishing the `--automatic` command.
+* **Patch Generation**: The standard output (stdout) from the script replaces the *entire* original `<taylored ... compute="..." [async="..."]>...</taylored>` block in the generated patch.
+* **Error Handling for Async Scripts**: If a script running with `async="true"` fails (e.g., exits with a non-zero status code), the error will be logged, and a `.taylored` file for that specific block will not be created. However, this will not stop other synchronous or asynchronous blocks from being processed.
 
 This enables dynamic code or text generation that becomes part of a standard Taylored patch, versionable and manageable like any other code change.
 
-**Example with `compute`**:
+**Considerations for `async="true"`:**
+*   Running a large number of computationally intensive scripts in parallel might be resource-heavy on your system.
+*   Asynchronous scripts should ideally be self-contained. Their execution order relative to other asynchronous scripts is not guaranteed, so they should not depend on the side effects of other concurrently running async scripts.
+
+**Example with `compute` (and optional `async`)**:
 ```javascript
 // File: src/dynamicModule.js
-// <taylored number="1" compute="/*,*/">
+// <taylored number="1" compute="/*,*/" async="true"> // This script will run asynchronously
 /*
 #!/usr/bin/env node
-// This script generates dynamic content
+// This script generates dynamic content (potentially slowly)
+await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async work
 const randomNumber = Math.floor(Math.random() * 100);
 console.log(`const dynamicValue = ${randomNumber}; // Generated at ${new Date().toISOString()}`);
 */
@@ -224,9 +233,9 @@ console.log(`const dynamicValue = ${randomNumber}; // Generated at ${new Date().
 Running `taylored --automatic js main` would:
 1.  Extract the script content between the markers.
 2.  Remove `/*` and `*/` due to `compute="/*,*/"`.
-3.  Execute the script: `#!/usr/bin/env node ... console.log(...)`.
-4.  Capture its stdout (e.g., `const dynamicValue = 42; // Generated at 2023-10-27T10:00:00.000Z`).
-5.  Create `.taylored/1.taylored` containing a diff that replaces the original `<taylored...compute...>` block with this stdout.
+3.  Execute the script (asynchronously if `async="true"` is present).
+4.  Capture its stdout (e.g., `const dynamicValue = 42; // Generated at ${new Date().toISOString()}`).
+5.  Create `.taylored/1.taylored` containing a diff that replaces the original `<taylored...>` block with this stdout.
 
 The `#!/usr/bin/env node` shebang makes the script directly executable if Node.js is in the system's PATH.
 

@@ -495,6 +495,49 @@ ${scriptContentForCompute}
       expect(result.stdout).toContain(`Successfully created ${tayloredFilePath}`);
     });
 
+    test('Successfully parses `number` attribute with `compute` and `async="true"`', () => {
+      testRepoPath = setupTestRepo('new_number_compute_async_true');
+      const scriptContentForCompute = `#!/bin/bash
+# Simulate some work
+sleep 0.1
+echo "Async computed output for 791"`;
+      const fileContent = `// File with new number, compute, and async="true"
+// <taylored number="791" compute="/*,*/" async="true">
+/*
+${scriptContentForCompute}
+*/
+// </taylored>
+// After async compute block`;
+      createFileAndCommit(testRepoPath, 'src/app_async.js', fileContent, 'Add app_async.js with number="791", compute, async="true"');
+
+      const result = runTayloredCommand(testRepoPath, '--automatic js main');
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `791${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(true);
+      const tayloredContent = normalizeLineEndings(fs.readFileSync(tayloredFilePath, 'utf8'));
+      expect(tayloredContent).toContain('+Async computed output for 791');
+      expect(tayloredContent).toContain('-// <taylored number="791" compute="/*,*/" async="true">');
+      expect(tayloredContent).not.toContain('+// <taylored number="791" compute="/*,*/" async="true">');
+
+      // Check for async specific log messages
+      expect(result.stdout).toContain(`Asynchronously processing computed block 791 from ${path.join(testRepoPath, 'src', 'app_async.js')}`);
+      expect(result.stdout).toContain('Executing 1 asynchronous compute block(s) in parallel...');
+      expect(result.stdout).toContain(`Successfully created ${tayloredFilePath}`); // This log comes from within processComputeBlock
+      expect(result.stdout).toContain('All asynchronous tasks have completed. Succeeded: 1, Failed: 0.');
+      expect(result.stdout).toContain('Finished processing. Initiated 1 taylored block(s). See async summary for completion details.');
+
+      const originalFileContent = normalizeLineEndings(fs.readFileSync(path.join(testRepoPath, 'src/app_async.js'), 'utf8'));
+      expect(originalFileContent).toBe(normalizeLineEndings(fileContent));
+
+      const branches = execSync('git branch', { cwd: testRepoPath, encoding: 'utf8' });
+      expect(branches).not.toContain('temp-taylored-compute-');
+      const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
+      expect(currentBranch).toBe('main');
+    });
+
     test('Ignores block with old positional number format', () => {
       testRepoPath = setupTestRepo('old_format_ignored');
       const fileContent = `// File with old format

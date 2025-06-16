@@ -1,0 +1,13 @@
+{
+  "name": "taysell-backend",
+  "version": "1.0.0",
+  "description": "Taysell Backend-in-a-Box",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "sqlite3": "^5.0.2"
+  }
+}

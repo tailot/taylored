@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000" # Map host port (from .env or default 3000) to container port 80
+    volumes:
+      - /usr/src/app/node_modules # Use node_modules from the image, not the host
+      - ./db:/usr/src/app/db # Persist SQLite database
+    env_file:
+      - .env
+    restart: unless-stopped

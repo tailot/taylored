@@ -33,4 +33,12 @@ npm install -g taylored
 
 Ensure you have Node.js and npm installed. After installation, run `taylored` for a list of commands.
 
-For more detailed information on commands, advanced usage, development setup, and contributing, please see our [Comprehensive Documentation](DOCUMENTATION.md).
+## Project Templates
+
+Taylored can be used to manage various project templates. One such template is:
+
+*   **Backend-in-a-Box**: A Node.js Express application template designed for selling digital patches. It now includes PayPal integration for payment processing, allowing developers to easily monetize their creations. Features include secure patch delivery, webhook handling, and database integration for purchase tracking.
+    *   **Key Setup**: Requires configuration of PayPal API credentials, a webhook, and a patch encryption key via environment variables. Encrypted patch files must be placed in the `patches/` directory.
+    *   For full setup instructions, API details, and all environment variables, please see the "Backend-in-a-Box" section in our [Comprehensive Documentation](DOCUMENTATION.md).
+
+For more detailed information on Taylored commands, advanced usage, development setup, and contributing, please see our [Comprehensive Documentation](DOCUMENTATION.md).

@@ -15,12 +15,9 @@ RUN npm install
 # Bundle app source
 COPY . .
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
-
 # Define environment variable
 ENV NODE_ENV production
-ENV PORT 80
+ENV PORT 3000
 ENV DB_PATH ./db/taysell.sqlite
 
 # Create a non-root user and switch to it
@@ -28,6 +25,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Ensure the db directory exists and is writable by the appuser
 RUN mkdir -p ./db && chown appuser:appgroup ./db
+RUN mkdir -p ./patches && chown appuser:appgroup ./patches
 
 USER appuser
 

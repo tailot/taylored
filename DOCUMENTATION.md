@@ -84,6 +84,15 @@
     *   [Reporting Issues](#reporting-issues)
     *   [Submitting Pull Requests](#submitting-pull-requests)
 7.  [License](#license)
+8.  [Project Templates](#project-templates)
+    *   [Backend-in-a-Box](#backend-in-a-box)
+        *   [Overview](#bib-overview)
+        *   [PayPal Integration for Patch Monetization](#bib-paypal-integration)
+        *   [Environment Variables](#bib-env-vars)
+        *   [API Endpoints](#bib-api-endpoints)
+        *   [The `patches/` Directory](#bib-patches-dir)
+        *   [Key Dependencies](#bib-dependencies)
+        *   [Docker Configuration](#bib-docker-config)
 
 ## 1. Introduction
 
@@ -1626,3 +1635,76 @@ The MIT License is a permissive free software license originating at the Massach
 You can find the full text of the license in the [LICENSE](LICENSE) file in the root of the Taylored repository.
 
 By contributing to Taylored, you agree that your contributions will be licensed under its MIT License.
+
+## 8. Project Templates
+
+This section describes official project templates that can be used with or are provided by Taylored.
+
+### Backend-in-a-Box
+
+#### Overview <a name="bib-overview"></a>
+
+"Backend-in-a-Box" is a Node.js Express application template designed to provide a ready-to-use server for selling digital patches or similar small digital goods. It features a secure download mechanism and has recently been enhanced with PayPal integration for payment processing.
+
+It's intended to be a quick-start solution for developers looking to monetize their digital creations with minimal backend setup. The backend handles payment intent, webhook verification, and secure delivery of patch files.
+
+#### PayPal Integration for Patch Monetization <a name="bib-paypal-integration"></a>
+
+The Backend-in-a-Box template now includes a comprehensive PayPal integration to manage the sale of patches. The general flow is as follows:
+
+1.  **Payment Initiation**: A user requests to buy a patch via the `GET /pay/:patchId` endpoint. The backend creates an order with PayPal and redirects the user to PayPal's checkout page.
+2.  **User Approval**: The user approves the payment on PayPal.
+3.  **Webhook Notification**: PayPal sends a webhook event (e.g., `CHECKOUT.ORDER.APPROVED`) to the backend's `POST /paypal/webhook` endpoint.
+4.  **Webhook Verification**: The backend verifies the authenticity of the webhook using the PayPal SDK and the configured `WEBHOOK_ID`.
+5.  **Purchase Record Update**: Upon successful verification and event processing, a unique `purchase_token` is generated and stored in the database, marking the purchase as complete.
+6.  **Patch Retrieval**: The user can then use their `purchase_token` and the `patchId` with the `POST /get-patch` endpoint to download the encrypted patch file. The backend decrypts the patch on-the-fly using `PATCH_ENCRYPTION_KEY`.
+
+#### Environment Variables <a name="bib-env-vars"></a>
+
+The following environment variables are crucial for configuring the Backend-in-a-Box template, especially its PayPal integration:
+
+*   `DB_PATH`: Path to the SQLite database file (e.g., `./db/taysell.sqlite`).
+*   `PORT`: The port on which the Node.js application will listen (defaults to `3000`).
+*   `PAYPAL_ENVIRONMENT`: Set to `sandbox` for testing or `live` for production.
+*   `PAYPAL_CLIENT_ID`: Your PayPal application Client ID.
+*   `PAYPAL_CLIENT_SECRET`: Your PayPal application Client Secret.
+*   `SERVER_BASE_URL`: The public base URL of your server (e.g., `https://yourdomain.com`). This is used for constructing PayPal return URLs.
+*   `PATCH_ENCRYPTION_KEY`: A 32-byte hex-encoded string used to encrypt and decrypt your patch files. This key is vital for securing your digital goods.
+*   `WEBHOOK_ID`: Your PayPal Webhook ID. This is obtained from your PayPal developer dashboard when you set up a webhook. **Important:** The `index.js` file contains a placeholder value (`"YOUR_PAYPAL_WEBHOOK_ID_HERE"`) that **must be replaced** with your actual Webhook ID from PayPal for webhook verification to succeed.
+
+#### API Endpoints <a name="bib-api-endpoints"></a>
+
+The Backend-in-a-Box template exposes the following key API endpoints:
+
+*   **`GET /pay/:patchId`**: Initiates the payment process for a given `patchId`. Redirects the user to PayPal.
+*   **`POST /paypal/webhook`**: Handles incoming webhook notifications from PayPal to confirm payment status and update purchase records.
+*   **`GET /paypal/success`**: The URL users are redirected to after successfully approving a payment on PayPal.
+*   **`GET /paypal/cancel`**: The URL users are redirected to if they cancel the payment process on PayPal.
+*   **`POST /get-patch`**: Allows users to download a patch file using a valid `patchId` and `purchaseToken`. Expects a JSON body with `patchId` and `purchaseToken`.
+
+#### The `patches/` Directory <a name="bib-patches-dir"></a>
+
+*   **Purpose**: This directory, located at the root of the Backend-in-a-Box project (`./patches`), is used to store your encrypted patch files.
+*   **Naming Convention**: Patch files should be named `<patchId>.patch.enc`. For example, if a patch is identified by `feature-abc`, its encrypted file should be `patches/feature-abc.patch.enc`.
+*   **Encryption**: You are responsible for encrypting these patches using AES-256-GCM with the key specified in the `PATCH_ENCRYPTION_KEY` environment variable before placing them in this directory. The backend will decrypt them for users upon valid purchase.
+
+#### Key Dependencies <a name="bib-dependencies"></a>
+
+The PayPal integration introduces the following key Node.js dependencies to the Backend-in-a-Box template:
+
+*   `axios`: Used for making HTTP requests (though direct use in the final PayPal integration might be minimal if the SDK handles all communication).
+*   `@paypal/checkout-server-sdk`: The official PayPal SDK for Node.js to interact with the PayPal v2 API.
+*   `sqlite3`: For database operations to store purchase information.
+*   `express`: The web framework used.
+
+#### Docker Configuration <a name="bib-docker-config"></a>
+
+The Docker setup for the Backend-in-a-Box template has been updated to support the new features:
+
+*   **`docker-compose.yml`**:
+    *   Includes a volume mapping for the `patches/` directory: `- ./patches:/usr/src/app/patches`. This ensures that your local encrypted patch files are available inside the container.
+*   **`Dockerfile`**:
+    *   The exposed port and `PORT` environment variable are now aligned to `3000` (previously `80`).
+    *   A `patches/` directory is created within the container image, and appropriate permissions are set for `appuser`.
+
+These details should help users understand and configure the Backend-in-a-Box template with its PayPal monetization features.

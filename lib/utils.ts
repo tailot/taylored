@@ -14,67 +14,34 @@ export function resolveTayloredFileName(userInputFileName: string): string {
     return userInputFileName + TAYLORED_FILE_EXTENSION;
 }
 
-export function printUsageAndExit(errorMessage?: string, detailed: boolean = false): void {
-    if (errorMessage) {
-        console.error(`\n${errorMessage}`);
+export function printUsageAndExit(message?: string, printFullUsage: boolean = false): void {
+    if (message) {
+        console.error(message);
     }
-    console.error("\nUsage:");
-    console.error(`  taylored --add <taylored_file_name>`);
-    console.error(`  taylored --remove <taylored_file_name>`);
-    console.error(`  taylored --verify-add <taylored_file_name>`);
-    console.error(`  taylored --verify-remove <taylored_file_name>`);
-    console.error(`  taylored --save <branch_name>`);
-    console.error(`  taylored --list`);
-    console.error(`  taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
-    console.error(`  taylored --offset <taylored_file_name> [BRANCH_NAME]`);
+    if (printFullUsage || message) { // Always print usage if there's a message
+        console.log(`
+Usage: taylored <option> [arguments]`);
+        console.log(`
+Core Patching Commands (require to be run in a Git repository root):`);
+        console.log(`  --add <taylored_file_name>          Applies the patch.`);
+        console.log(`  --remove <taylored_file_name>       Reverses the patch.`);
+        console.log(`  --verify-add <taylored_file_name>   Verifies if the patch can be applied.`);
+        console.log(`  --verify-remove <taylored_file_name> Verifies if the patch can be reversed.`);
+        console.log(`  --save <branch_name>                Creates a patch from changes in <branch_name>.`);
+        console.log(`  --list                              Lists all applied patches.`);
+        console.log(`  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.`);
+        console.log(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
+        console.log(`                                      Automatically computes and applies line offsets for patches based on Git history.`);
 
-    if (detailed || errorMessage) {
-        console.error("\nArguments:");
-        console.error(`  <taylored_file_name>      : Name of the taylored file (e.g., 'my_patch' or 'my_patch${TAYLORED_FILE_EXTENSION}').`);
-        console.error(`                            If the '${TAYLORED_FILE_EXTENSION}' extension is omitted, it will be automatically appended.`);
-        console.error(`                            Assumed to be in the '${TAYLORED_DIR_NAME}/' directory. Used by apply/remove/verify/offset/data modes.`);
-        console.error(`  <branch_name>             : Branch name. Used by --save (target for diff) and --automatic (target for comparison).`);
-        console.error(`                            Output for --save: ${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}`);
-        console.error(`  <EXTENSIONS>              : File extension(s) to scan (e.g., 'ts' or 'ts,js,py'). Used by --automatic.`);
-        console.error(`  [BRANCH_NAME]             : Optional. Branch name to use as a base for --offset. Defaults to 'main'.`);
-        console.error(`  <DIR_LIST>                : Optional. Comma-separated list of directory names to exclude (e.g., 'dist,build,test'). Used by --automatic with --exclude.`);
-        console.error("\nOptions:");
-        console.error(`  --add                     : Apply changes from '${TAYLORED_DIR_NAME}/<file_name>' to current directory.`);
-        console.error(`  --remove                  : Revert changes from '${TAYLORED_DIR_NAME}/<file_name>' in current directory.`);
-        console.error(`  --verify-add              : Dry-run apply from '${TAYLORED_DIR_NAME}/<file_name>'.`);
-        console.error(`  --verify-remove           : Dry-run revert from '${TAYLORED_DIR_NAME}/<file_name>'.`);
-        console.error(`  --save                    : Generate diff file into '${TAYLORED_DIR_NAME}/<branch_name_sanitized>${TAYLORED_FILE_EXTENSION}'.`);
-        console.error(`                            (File saved only if diff is all additions or all deletions of lines).`);
-        console.error(`  --list                    : List all ${TAYLORED_FILE_EXTENSION} files in the '${TAYLORED_DIR_NAME}/' directory.`);
-        console.error(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>] :`);
-        console.error(`                            Automatically search for taylored blocks in files with specified <EXTENSIONS>`);
-        console.error(`                            (e.g., .js, .ts, .py) using <branch_name> as the target for comparison,`);
-        console.error(`                            and create taylored files from them. Markers: <taylored number="NUMERO"> and </taylored>`);
-        console.error(`                            (where NUMERO is an integer).`);
-        console.error(`                            The <taylored number="NUMERO"> tag can optionally include a 'compute="CHARS_TO_STRIP_PATTERNS"' attribute.`);
-        console.error(`                            If 'compute' is present, the content within the taylored block is executed as a Node.js script.`);
-        console.error(`                            'CHARS_TO_STRIP_PATTERNS' is an optional comma-separated string of patterns. Before execution, Taylored removes all occurrences of each specified pattern from the script content.`);
-        console.error(`                            The script's standard output then replaces the entire taylored block (from \\\`<taylored ...>\\\` to \\\`</taylored>\\\`) in the generated patch.`);
-        console.error(`                            This means the dynamic content or calculation result is saved as a standard diff, which can then be applied or reverted using Taylored's \\\`--add\\\` or \\\`--remove\\\` commands.`);
-        console.error(`                            Example: <taylored number="1" compute="/*,*/">/*
-#!/usr/bin/env node
-console.log("Computed value: " + (Math.random() * 100).toFixed(0)); //NOSONAR
-*\/</taylored>\`);`);
-        console.error(`                            (The \\\`#!/usr/bin/env node\\\` shebang makes the script directly executable in environments where Node.js is in the system's PATH.)`);
-        console.error(`                            If --exclude is provided, specified directories (and their subdirectories) will be ignored.`);
-        console.error(`  --offset                  : Update offsets for a given patch file in '${TAYLORED_DIR_NAME}/'. Optionally specify a branch to diff against.`);
-        console.error("\nNote:");
-        console.error(`  All commands must be run from the root of a Git repository.`);
-        console.error("\nExamples:");
-        console.error(`  taylored --add my_changes`);
-        console.error(`  taylored --save feature/new-design`);
-    console.error(`  taylored --offset my_feature_patch develop`);
-    }
-    if (!errorMessage) {
-        process.exit(0);
+        console.log(`
+Taysell Monetization Commands:`);
+        console.log(`  setup-backend                       Sets up the Taysell 'Backend-in-a-Box'.`);
+        console.log(`  create-taysell <file.taylored> [--price <price>] [--desc "description"]`);
+        console.log(`                                      Creates a .taysell package for selling a patch.`);
+        console.log(`  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.`);
+        // Add more details for each command as needed
     }
     process.exit(1);
-
 }
 
 /**

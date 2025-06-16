@@ -73,6 +73,20 @@
             *   [Excluding Directories](#excluding-directories)
             *   [Example 6: Using `compute` with Python](#example-6-using-compute-with-python)
             *   [Example 7: Using `compute` with a Shell Script](#example-7-using-compute-with-a-shell-script)
+    *   [`taylored setup-backend`](#taylored-setup-backend)
+        *   [Purpose](#purpose-setup-backend)
+        *   [Process](#process-setup-backend)
+        *   [Usage Example](#usage-example-setup-backend)
+    *   [`taylored create-taysell <file.taylored> [--price <price>] [--desc "description"]`](#taylored-create-taysell-filetaylored---price-price---desc-description)
+        *   [Purpose](#purpose-create-taysell)
+        *   [Arguments](#arguments-create-taysell)
+        *   [Process](#process-create-taysell)
+        *   [Usage Example](#usage-example-create-taysell)
+    *   [`taylored --buy <file.taysell> [--dry-run]`](#taylored---buy-filetaysell---dry-run)
+        *   [Purpose](#purpose-buy)
+        *   [Arguments](#arguments-buy)
+        *   [Process](#process-buy)
+        *   [Usage Example](#usage-example-buy)
 5.  [How It Works (Under the Hood)](#how-it-works-under-the-hood)
     *   [`--save`](#how-save-works)
     *   [`--add` / `--remove`](#how-add-remove-works)
@@ -84,6 +98,15 @@
     *   [Reporting Issues](#reporting-issues)
     *   [Submitting Pull Requests](#submitting-pull-requests)
 7.  [License](#license)
+8.  [Project Templates](#project-templates)
+    *   [Backend-in-a-Box](#backend-in-a-box)
+        *   [Overview](#bib-overview)
+        *   [PayPal Integration for Patch Monetization](#bib-paypal-integration)
+        *   [Environment Variables](#bib-env-vars)
+        *   [API Endpoints](#bib-api-endpoints)
+        *   [The `patches/` Directory](#bib-patches-dir)
+        *   [Key Dependencies](#bib-dependencies)
+        *   [Docker Configuration](#bib-docker-config)
 
 ## 1. Introduction
 
@@ -1421,6 +1444,166 @@ The `taylored --automatic` command will wait for all synchronous scripts and all
 
 The `taylored --automatic` command is a sophisticated feature that combines code scanning, Git automation, and optional dynamic content generation to provide a flexible way of managing code as plugins. Careful use of markers, the `compute` attribute, and exclusions is key to leveraging its full potential.
 
+---
+
+### `taylored setup-backend`
+
+#### Purpose (`setup-backend`)<a name="purpose-setup-backend"></a>
+
+The `taylored setup-backend` command initializes the "Backend-in-a-Box" server, a prerequisite for using the Taysell commercial patch distribution system. This server handles payment processing (via PayPal) and secure patch delivery.
+
+#### Process (`setup-backend`)<a name="process-setup-backend"></a>
+
+1.  **Docker Check**: Verifies if Docker is installed and accessible on the system, as Docker is required to run the backend server.
+2.  **Copy Template Files**: Copies the `templates/backend-in-a-box` directory from the Taylored installation into a new `taysell-server` directory in the current working directory.
+3.  **Interactive Configuration**: Prompts the user for necessary configuration details. In non-interactive environments (like test suites), it may use predefined default values. The prompts include:
+    *   **PayPal Environment**: `sandbox` or `production`.
+    *   **PayPal Client ID**: Your PayPal application's Client ID.
+    *   **PayPal Client Secret**: Your PayPal application's Client Secret.
+    *   **Public Server URL**: The publicly accessible URL where your Taysell server will be hosted (e.g., `https://your-taysell-server.com`).
+    *   **Patch Encryption Key**: A strong secret key (recommended 32+ characters) used to encrypt your commercial patches. This key is critical for security.
+    *   **Local Server Port**: The local port on which the Dockerized server will run (e.g., `3000`).
+4.  **Create `.env` File**: Generates a `.env` file within the `taysell-server` directory, populating it with the configuration values provided by the user. This file is used by Docker Compose to configure the server environment.
+5.  **Instructions**: Provides the user with instructions on how to start the server:
+    ```bash
+    cd taysell-server
+    docker-compose up --build -d
+    ```
+
+#### Usage Example (`setup-backend`)<a name="usage-example-setup-backend"></a>
+
+```bash
+taylored setup-backend
+```
+Follow the interactive prompts to configure your backend server.
+
+---
+
+### `taylored create-taysell <file.taylored> [--price <price>] [--desc "description"]`
+
+#### Purpose (`create-taysell`)<a name="purpose-create-taysell"></a>
+
+The `taylored create-taysell <file.taylored>` command is used to package an existing non-commercial `.taylored` patch file for commercial distribution through the Taysell system. It encrypts the patch content and generates a corresponding `.taysell` metadata file that your customers will use with the `taylored --buy` command.
+
+#### Arguments (`create-taysell`)<a name="arguments-create-taysell"></a>
+
+*   **`<file.taylored>` (Required)**:
+    *   **Description**: The path to the source (non-commercial) `.taylored` patch file that you want to prepare for sale.
+    *   **Example**: `my-feature.taylored`, `../patches/another-fix.taylored`
+
+*   **`--price <price>` (Optional)**:
+    *   **Description**: Specifies the price for the patch. If not provided, you will be prompted for it.
+    *   **Format**: A string representing the price, e.g., `"9.99"`, `"0.50"`.
+    *   **Example**: `--price "19.95"`
+
+*   **`--desc "description"` (Optional)**:
+    *   **Description**: Provides a description for the patch. If not provided, or if an empty string is given, you will be prompted for it.
+    *   **Format**: A string, typically enclosed in quotes if it contains spaces.
+    *   **Example**: `--desc "This patch adds advanced analytics capabilities."`
+
+#### Process (`create-taysell`)<a name="process-create-taysell"></a>
+
+1.  **Input Validation**: Checks if the input `<file.taylored>` exists and is a valid Taylored patch file.
+2.  **Backend Configuration Retrieval**:
+    *   Attempts to read `SERVER_BASE_URL` and `PATCH_ENCRYPTION_KEY` from the `.env` file located at `taysell-server/.env` (relative to the current working directory). This assumes you have already run `taylored setup-backend`.
+    *   If `taysell-server/.env` is not found or these variables are missing, it will prompt the user to enter them. The `PATCH_ENCRYPTION_KEY` is crucial for encrypting the patch.
+3.  **Interactive Prompts**: Gathers necessary metadata for the commercial patch. Uses command-line arguments (`--price`, `--desc`) as defaults if provided. In non-interactive environments, it may use predefined defaults.
+    *   **Commercial Name**: A user-friendly name for the patch (e.g., "Advanced Data Exporter").
+    *   **Description**: A detailed description of the patch's functionality (uses `--desc` value if available).
+    *   **Unique Patch ID**: A unique identifier for this patch (e.g., `adv-data-export-v1`). Allows auto-generation based on the name or manual input. This ID will be part of the URLs and filenames.
+    *   **Required `taylored` CLI Version**: The minimum version of the `taylored` CLI required to apply this patch (e.g., `>=6.8.21`).
+    *   **Price**: The selling price of the patch (uses `--price` value if available).
+    *   **Currency Code**: The currency for the price (e.g., "USD", "EUR", "GBP").
+    *   **Seller Information**:
+        *   Seller Name (e.g., "My Company LLC")
+        *   Seller Website (e.g., "https://www.mycompany.com")
+        *   Seller Contact Email (e.g., "support@mycompany.com")
+4.  **Patch Encryption**:
+    *   Reads the content of the input `<file.taylored>`.
+    *   Encrypts this content using AES-256-GCM with the `PATCH_ENCRYPTION_KEY`.
+    *   Saves the encrypted content to a new file named `<file_basename>.taylored.encrypted` (e.g., if input was `my-feature.taylored`, output is `my-feature.taylored.encrypted`).
+5.  **Generate `.taysell` Metadata File**:
+    *   Creates a JSON metadata file named `<file_basename>.taysell` (e.g., `my-feature.taysell`). This file contains:
+        *   `taysellVersion`: The version of the Taysell metadata format (e.g., "1.0").
+        *   `patchId`: The unique patch ID provided by the user.
+        *   `sellerInfo`: An object with `name`, `website`, and `contact` for the seller.
+        *   `metadata`: An object with `name` (commercial name), `description`, and `tayloredVersion` (required CLI version).
+        *   `endpoints`:
+            *   `initiatePaymentUrl`: Constructed as `${SERVER_BASE_URL}/pay/${patchId}`.
+            *   `getPatchUrl`: Constructed as `${SERVER_BASE_URL}/get-patch`.
+        *   `payment`: An object with `price` and `currency`.
+6.  **User Instructions**:
+    *   Informs the user that the encrypted patch (e.g., `my-feature.taylored.encrypted`) needs to be uploaded to their Taysell server's `patches/` directory. The filename on the server should match `<patchId>.patch.enc` (e.g., `adv-data-export-v1.patch.enc`).
+    *   Advises the user to distribute the generated `.taysell` metadata file (e.g., `my-feature.taysell`) to their customers. This is the file customers will use with `taylored --buy`.
+
+#### Usage Example (`create-taysell`)<a name="usage-example-create-taysell"></a>
+
+```bash
+taylored create-taysell my-super-feature.taylored --price "4.99" --desc "This patch adds an amazing new super feature to the application."
+```
+This command will then interactively ask for other details like Patch ID, seller info, etc., using the provided price and description as defaults.
+
+---
+
+### `taylored --buy <file.taysell> [--dry-run]`
+
+#### Purpose (`--buy`)<a name="purpose-buy"></a>
+
+The `taylored --buy <file.taysell>` command initiates the purchase process for a commercial patch defined in a `.taysell` metadata file. Upon successful payment verification, it securely downloads the patch from the seller's Taysell server and applies it to the user's local Git repository.
+
+#### Arguments (`--buy`)<a name="arguments-buy"></a>
+
+*   **`<file.taysell>` (Required)**:
+    *   **Description**: Path to the `.taysell` metadata file received from the patch seller. This file contains all necessary information to initiate the purchase and download the patch.
+    *   **Example**: `awesome-feature.taysell`, `../downloads/plugin-for-x.taysell`
+
+*   **`--dry-run` (Optional)**:
+    *   **Description**: If this flag is provided, the command will simulate the entire purchase and download process, including fetching the patch content from the server after successful payment polling. However, it will **not** save the patch to the local `.taylored/` directory and will **not** apply it to the repository. Instead, it will print the received patch content to the console. This is useful for inspecting the patch content or testing the purchase flow without making changes to the local project.
+    *   **Example**: `taylored --buy awesome-feature.taysell --dry-run`
+
+#### Process (`--buy`)<a name="process-buy"></a>
+
+1.  **Input Validation**:
+    *   Checks if the input `<file.taysell>` exists and is a valid JSON file.
+    *   Validates the content of the `.taysell` file, ensuring required fields like `patchId`, `endpoints.initiatePaymentUrl`, and `endpoints.getPatchUrl` are present.
+    *   Critically, verifies that `endpoints.getPatchUrl` uses `https://` for security.
+2.  **User Confirmation**: Prompts the user to confirm if they want to proceed with purchasing the patch, displaying details like the patch name and seller information from the `.taysell` file.
+3.  **Session ID Generation**: Generates a cryptographically strong unique `cliSessionId` (UUID v4). This ID is used to link the CLI session with the web browser payment session.
+4.  **Browser Interaction**:
+    *   Constructs the payment initiation URL: `${endpoints.initiatePaymentUrl}?cliSessionId=<generated_cliSessionId>`.
+    *   Opens the user's default web browser to this URL. The user then completes the payment process on the seller's Taysell server (which typically redirects to PayPal).
+    *   If the browser cannot be opened automatically, it prints the URL to the console and instructs the user to copy-paste it.
+5.  **Payment Polling**:
+    *   While the user is interacting with the browser, the CLI starts polling a `/check-purchase/<cliSessionId>` endpoint on the seller's Taysell server (the base URL is derived from `endpoints.initiatePaymentUrl`).
+    *   It polls periodically (e.g., every 2.5 seconds) for a predefined timeout period (e.g., 10 minutes).
+    *   The server endpoint will return a `purchaseToken` and verify the `patchId` once the payment is successfully approved and processed via PayPal webhook on the server side.
+6.  **Patch Download**:
+    *   Once the `purchaseToken` (and matching `patchId`) is received from the polling endpoint, the CLI makes a secure POST request to the `endpoints.getPatchUrl` specified in the `.taysell` file.
+    *   The request body includes the `patchId` and the received `purchaseToken`.
+    *   The seller's server validates these details and, if correct, responds with the decrypted patch content.
+7.  **Patch Handling**:
+    *   **If `--dry-run` is specified**:
+        *   The received patch content is printed to the console.
+        *   The patch is **not** saved to disk.
+        *   The patch is **not** applied to the repository.
+    *   **If `--dry-run` is NOT specified (default behavior)**:
+        *   The received patch content is saved into the local `.taylored/` directory. The filename is derived from the `patchId` (e.g., `<patchId_sanitized>.taylored`).
+        *   The command then automatically calls the equivalent of `taylored --add <saved_patch_file>` to apply the newly downloaded and saved patch to the user's current working directory.
+        *   The user is informed of the successful purchase, download, and application.
+8.  **Error Handling**: If any step fails (e.g., polling times out, payment is not confirmed, download fails, `.taysell` file is invalid), the command exits with an appropriate error message.
+
+#### Usage Example (`--buy`)<a name="usage-example-buy"></a>
+
+To purchase and apply a patch:
+```bash
+taylored --buy professional-exporter.taysell
+```
+
+To test the purchase flow and view patch content without applying:
+```bash
+taylored --buy professional-exporter.taysell --dry-run
+```
+
 ## 5. How It Works (Under the Hood)
 
 This section delves into the technical details of how Taylored performs its operations, primarily by orchestrating various Git commands. Understanding these underlying mechanisms can be helpful for advanced users and for troubleshooting. All operations are expected to be run from the root of a Git repository.
@@ -1626,3 +1809,76 @@ The MIT License is a permissive free software license originating at the Massach
 You can find the full text of the license in the [LICENSE](LICENSE) file in the root of the Taylored repository.
 
 By contributing to Taylored, you agree that your contributions will be licensed under its MIT License.
+
+## 8. Project Templates
+
+This section describes official project templates that can be used with or are provided by Taylored.
+
+### Backend-in-a-Box
+
+#### Overview <a name="bib-overview"></a>
+
+"Backend-in-a-Box" is a Node.js Express application template designed to provide a ready-to-use server for selling digital patches or similar small digital goods. It features a secure download mechanism and has recently been enhanced with PayPal integration for payment processing.
+
+It's intended to be a quick-start solution for developers looking to monetize their digital creations with minimal backend setup. The backend handles payment intent, webhook verification, and secure delivery of patch files.
+
+#### PayPal Integration for Patch Monetization <a name="bib-paypal-integration"></a>
+
+The Backend-in-a-Box template now includes a comprehensive PayPal integration to manage the sale of patches. The general flow is as follows:
+
+1.  **Payment Initiation**: A user requests to buy a patch via the `GET /pay/:patchId` endpoint. The backend creates an order with PayPal and redirects the user to PayPal's checkout page.
+2.  **User Approval**: The user approves the payment on PayPal.
+3.  **Webhook Notification**: PayPal sends a webhook event (e.g., `CHECKOUT.ORDER.APPROVED`) to the backend's `POST /paypal/webhook` endpoint.
+4.  **Webhook Verification**: The backend verifies the authenticity of the webhook using the PayPal SDK and the configured `WEBHOOK_ID`.
+5.  **Purchase Record Update**: Upon successful verification and event processing, a unique `purchase_token` is generated and stored in the database, marking the purchase as complete.
+6.  **Patch Retrieval**: The user can then use their `purchase_token` and the `patchId` with the `POST /get-patch` endpoint to download the encrypted patch file. The backend decrypts the patch on-the-fly using `PATCH_ENCRYPTION_KEY`.
+
+#### Environment Variables <a name="bib-env-vars"></a>
+
+The following environment variables are crucial for configuring the Backend-in-a-Box template, especially its PayPal integration:
+
+*   `DB_PATH`: Path to the SQLite database file (e.g., `./db/taysell.sqlite`).
+*   `PORT`: The port on which the Node.js application will listen (defaults to `3000`).
+*   `PAYPAL_ENVIRONMENT`: Set to `sandbox` for testing or `live` for production.
+*   `PAYPAL_CLIENT_ID`: Your PayPal application Client ID.
+*   `PAYPAL_CLIENT_SECRET`: Your PayPal application Client Secret.
+*   `SERVER_BASE_URL`: The public base URL of your server (e.g., `https://yourdomain.com`). This is used for constructing PayPal return URLs.
+*   `PATCH_ENCRYPTION_KEY`: A 32-byte hex-encoded string used to encrypt and decrypt your patch files. This key is vital for securing your digital goods.
+*   `WEBHOOK_ID`: Your PayPal Webhook ID. This is obtained from your PayPal developer dashboard when you set up a webhook. **Important:** The `index.js` file contains a placeholder value (`"YOUR_PAYPAL_WEBHOOK_ID_HERE"`) that **must be replaced** with your actual Webhook ID from PayPal for webhook verification to succeed.
+
+#### API Endpoints <a name="bib-api-endpoints"></a>
+
+The Backend-in-a-Box template exposes the following key API endpoints:
+
+*   **`GET /pay/:patchId`**: Initiates the payment process for a given `patchId`. Redirects the user to PayPal.
+*   **`POST /paypal/webhook`**: Handles incoming webhook notifications from PayPal to confirm payment status and update purchase records.
+*   **`GET /paypal/success`**: The URL users are redirected to after successfully approving a payment on PayPal.
+*   **`GET /paypal/cancel`**: The URL users are redirected to if they cancel the payment process on PayPal.
+*   **`POST /get-patch`**: Allows users to download a patch file using a valid `patchId` and `purchaseToken`. Expects a JSON body with `patchId` and `purchaseToken`.
+
+#### The `patches/` Directory <a name="bib-patches-dir"></a>
+
+*   **Purpose**: This directory, located at the root of the Backend-in-a-Box project (`./patches`), is used to store your encrypted patch files.
+*   **Naming Convention**: Patch files should be named `<patchId>.patch.enc`. For example, if a patch is identified by `feature-abc`, its encrypted file should be `patches/feature-abc.patch.enc`.
+*   **Encryption**: You are responsible for encrypting these patches using AES-256-GCM with the key specified in the `PATCH_ENCRYPTION_KEY` environment variable before placing them in this directory. The backend will decrypt them for users upon valid purchase.
+
+#### Key Dependencies <a name="bib-dependencies"></a>
+
+The PayPal integration introduces the following key Node.js dependencies to the Backend-in-a-Box template:
+
+*   `axios`: Used for making HTTP requests (though direct use in the final PayPal integration might be minimal if the SDK handles all communication).
+*   `@paypal/checkout-server-sdk`: The official PayPal SDK for Node.js to interact with the PayPal v2 API.
+*   `sqlite3`: For database operations to store purchase information.
+*   `express`: The web framework used.
+
+#### Docker Configuration <a name="bib-docker-config"></a>
+
+The Docker setup for the Backend-in-a-Box template has been updated to support the new features:
+
+*   **`docker-compose.yml`**:
+    *   Includes a volume mapping for the `patches/` directory: `- ./patches:/usr/src/app/patches`. This ensures that your local encrypted patch files are available inside the container.
+*   **`Dockerfile`**:
+    *   The exposed port and `PORT` environment variable are now aligned to `3000` (previously `80`).
+    *   A `patches/` directory is created within the container image, and appropriate permissions are set for `appuser`.
+
+These details should help users understand and configure the Backend-in-a-Box template with its PayPal monetization features.

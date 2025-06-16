@@ -1,0 +1,15 @@
+{
+  "name": "taysell-backend",
+  "version": "1.0.0",
+  "description": "Taysell Backend-in-a-Box",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@paypal/checkout-server-sdk": "^1.0.3",
+    "axios": "^1.6.8",
+    "sqlite3": "^5.0.2",
+    "uuid": "^11.1.0"
+  }
+}

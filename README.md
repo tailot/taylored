@@ -20,6 +20,7 @@ Taylored also provides robust tools for patch lifecycle management:
 * **Git-Powered**: Leverages Git's robust diffing and applying capabilities.
 * **Automation**: Automatically extract and manage tagged code blocks as individual patches.
 * **Dynamic Content**: Generate parts of your patches dynamically using executable script blocks.
+* **Monetization**: Easily package and sell your `.taylored` plugins, or acquire plugins from others to enhance your projects, leveraging the Taysell backend integration.
 
 ## Installation
 
@@ -33,4 +34,11 @@ npm install -g taylored
 
 Ensure you have Node.js and npm installed. After installation, run `taylored` for a list of commands.
 
-For more detailed information on commands, advanced usage, development setup, and contributing, please see our [Comprehensive Documentation](DOCUMENTATION.md).
+## Project Templates
+
+Taylored can be used to manage various project templates. One such template is:
+
+*   **Backend-in-a-Box**: A Node.js Express application template designed for selling digital patches. It now includes PayPal integration for payment processing, allowing developers to easily monetize their creations. Features include secure patch delivery, webhook handling, and database integration for purchase tracking. Taylored now includes direct CLI support for monetizing these patches through the `setup-backend`, `create-taysell`, and `taylored --buy` commands, streamlining the process from server setup to patch sales and acquisition.
+    *   **Key Setup**: Requires configuration of PayPal API credentials, a webhook, and a patch encryption key via environment variables. Encrypted patch files must be placed in the `patches/` directory.
+
+For more detailed information on Taylored commands, advanced usage, development setup, and contributing, please see our [Comprehensive Documentation](DOCUMENTATION.md).

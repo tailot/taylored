@@ -186,7 +186,7 @@ async function updatePatchOffsets(
     _customCommitMessage?: string, // Parameter kept for signature compatibility if called elsewhere, but ignored.
     branchName?: string
 ): Promise<SimplifiedUpdatePatchOffsetsResult> {
-    const baseBranch = branchName || 'main'; // Usa il branchName fornito o 'main' come default
+    const baseBranch = branchName || 'main'; // Use the provided branchName or 'main' as default
 
     const statusResult = await execGit(repoRoot, ['status', '--porcelain']);
     if (statusResult.stdout.trim() !== '') {

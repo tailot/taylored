@@ -1,167 +1,196 @@
-// Copyright (c) 2025 tailot@gmail.com
-// SPDX-License-Identifier: MIT
-
-// lib/handlers/buy-handler.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import inquirer from 'inquirer';
-// import open from 'open'; // Changed to dynamic import
-import * as https from 'https'; // Keep this
-// Import the new validator and types from taysell-utils
-import { decryptAES256GCM, validateTaysellFileContent, TaysellFile } from '../taysell-utils';
+import inquirer from 'inquirer'; // Parzialmente sostituito dalla logica del server locale
+import * as https from 'https';
+import { validateTaysellFileContent, TaysellFile } from '../taysell-utils';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 import { handleApplyOperation } from '../apply-logic';
 import { printUsageAndExit } from '../utils';
 
-// Remove local interfaces for TaysellFile structure as they are now imported or part of TaysellFile from utils
+// Importazioni per il micro-server locale
+import * as express from 'express';
+import { v4 as uuidv4 } from 'uuid'; // Per generare ID di sessione unici
+import open from 'open'; // Per aprire l'URL nel browser
 
-export async function handleBuyCommand(
-    taysellFilePath: string,
-    isDryRun: boolean,
-    cwd: string
-): Promise<void> {
-    console.log(`Starting purchase process for: ${taysellFilePath}`);
+const DEFAULT_CLI_LOCAL_PORT = 3001; // Porta di default per il server locale della CLI
 
-    const fullTaysellPath = path.resolve(cwd, taysellFilePath);
-    if (!await fs.pathExists(fullTaysellPath)) {
-        // printUsageAndExit available from utils
-        printUsageAndExit(`CRITICAL ERROR: .taysell file not found at: ${fullTaysellPath}`);
-        return; // printUsageAndExit exits, but for type safety
+export async function handleBuyCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+        printUsageAndExit('Missing <taysell_file_path> argument for buy command.');
+    }
+    if (args.length > 1) {
+        printUsageAndExit('Too many arguments for buy command. Expected only <taysell_file_path>.');
+    }
+
+    const taysellFilePath = args[0];
+    if (!taysellFilePath.endsWith(TAYLORED_FILE_EXTENSION)) {
+        printUsageAndExit(`Invalid file type. Expected a ${TAYLORED_FILE_EXTENSION} file.`);
     }
 
     let taysellData: TaysellFile;
     try {
-        const rawData = await fs.readJson(fullTaysellPath);
-        taysellData = validateTaysellFileContent(rawData); // Use the utility function
+        const fileContent = await fs.readFile(taysellFilePath, 'utf-8');
+        taysellData = JSON.parse(fileContent);
+        validateTaysellFileContent(taysellData); // Validate structure and content
+    } catch (error: any) {
+        console.error(`Error reading or parsing taysell file ${taysellFilePath}: ${error.message}`);
+        process.exit(1);
+    }
 
-        // Warning for initiatePaymentUrl if not HTTPS (optional, can be part of validateTaysellFileContent too)
-        if (!taysellData.endpoints.initiatePaymentUrl.startsWith('https://')) {
-            console.warn(`WARNING: initiatePaymentUrl ("${taysellData.endpoints.initiatePaymentUrl}") does not use HTTPS. Proceed with caution.`);
+    if (!taysellData.payment?.initiatePaymentUrl || !taysellData.payment?.getPatchUrl) {
+        console.error('Payment URLs are not defined in the taysell file.');
+        process.exit(1);
+    }
+    if (!taysellData.patchId) {
+        console.error('Patch ID is not defined in the taysell file.');
+        process.exit(1);
+    }
+
+    const cliSessionId = uuidv4();
+    const cliLocalPort = DEFAULT_CLI_LOCAL_PORT; // In futuro, potremmo cercare una porta disponibile
+
+    const app = express();
+    app.use(express.json());
+
+    let resolveTokenPromise: (token: string) => void;
+    const tokenReceivedPromise = new Promise<string>((resolve) => {
+        resolveTokenPromise = resolve;
+    });
+
+    const server = app.listen(cliLocalPort, () => {
+        console.log(`CLI: Server locale in ascolto sulla porta ${cliLocalPort} per il token di acquisto...`);
+        console.log(`CLI: Sessione ID: ${cliSessionId}`);
+    });
+
+    // Endpoint per ricevere il token dal browser (dalla pagina di successo)
+    app.post('/receive-token', (req, res) => {
+        const { patchId: receivedPatchId, purchaseToken: receivedToken } = req.body;
+
+        if (!receivedPatchId || !receivedToken) {
+            console.error('CLI: Dati token non validi ricevuti dal browser.');
+            res.status(400).json({ status: 'error', message: 'Dati token non validi.' });
+            return;
         }
 
-    } catch (error: any) {
-        printUsageAndExit(`CRITICAL ERROR: Invalid .taysell file at ${fullTaysellPath}. Details: ${error.message}`);
-        return; // printUsageAndExit exits
-    }
+        if (receivedPatchId !== taysellData.patchId) {
+            console.error(`CLI: Patch ID non corrispondente. Atteso ${taysellData.patchId}, ricevuto ${receivedPatchId}.`);
+            res.status(400).json({ status: 'error', message: 'Patch ID non corrispondente.' });
+            return;
+        }
 
-    console.log(`Successfully loaded .taysell file for patch: "${taysellData.metadata.name}" from seller "${taysellData.sellerInfo.name}".`);
-    console.log(`Price: ${taysellData.payment.price} ${taysellData.payment.currency}`);
+        console.log('CLI: Token di acquisto ricevuto dal browser!');
+        resolveTokenPromise(receivedToken); // Risolve la promessa con il token ricevuto
 
-    // 2. Display Security Warning
-    console.log('\n--- SECURITY WARNING ---');
-    console.log(`You are about to connect to the seller's website: ${taysellData.sellerInfo.website || 'N/A'}`);
-    console.log(`Seller: ${taysellData.sellerInfo.name}`);
-    console.log(`Contact: ${taysellData.sellerInfo.contact}`);
-    console.log(`This CLI tool facilitates the purchase but CANNOT guarantee the security or integrity of third-party services or the patch itself.`);
-    console.log(`Proceed only if you trust the seller: "${taysellData.sellerInfo.name}".`);
+        res.json({ status: 'success', message: 'Token ricevuto dalla CLI.' });
 
-    const { proceed } = await inquirer.prompt([{
-        type: 'confirm',
-        name: 'proceed',
-        message: 'Do you want to continue with the purchase?',
-        default: false,
-    }]);
-
-    if (!proceed) {
-        console.log('Purchase aborted by user.');
-        return;
-    }
-
-    // 3. Open initiatePaymentUrl in the default browser
-    console.log(`Opening payment page in your browser: ${taysellData.endpoints.initiatePaymentUrl}`);
-    try {
-        const open = (await import('open')).default; // Dynamic import
-        await open(taysellData.endpoints.initiatePaymentUrl);
-    } catch (error: any) {
-        console.error(`CRITICAL ERROR: Could not open the payment URL in browser. Please open it manually: ${taysellData.endpoints.initiatePaymentUrl}`);
-        // We can still continue and ask for the token
-    }
-
-    // 4. Wait for the user to paste the purchaseToken
-    const { purchaseToken } = await inquirer.prompt([{
-        type: 'password', // Use password for sensitive tokens
-        name: 'purchaseToken',
-        message: 'After completing payment, paste the purchaseToken provided by the seller here:',
-        validate: input => input.trim() !== '' || 'Purchase token cannot be empty.',
-    }]);
-
-    // 5. Make a POST request to getPatchUrl
-    let decryptedPatchContent: string;
-    try {
-        // ... (https.request logic as implemented previously)
-        const parsedUrl = new URL(taysellData.endpoints.getPatchUrl);
-        // ... (options, https.request, req.on('error'), req.write, req.end())
-        decryptedPatchContent = await new Promise<string>((resolve, reject) => {
-            const req = https.request({
-            hostname: parsedUrl.hostname,
-            port: parsedUrl.port || 443,
-            path: parsedUrl.pathname + parsedUrl.search,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(JSON.stringify({ patchId: taysellData.patchId, purchaseToken }))
-            }
-            }, (res) => {
-                // ... (res.on 'data', res.on 'end')
-                 let responseBody = '';
-                res.setEncoding('utf8');
-                res.on('data', (chunk) => {
-                    responseBody += chunk;
-                });
-                res.on('end', () => {
-                    if (res.statusCode === 200) { resolve(responseBody); } else {
-                        let errorMsg = `Failed to download patch. Status: ${res.statusCode}`;
-                        try {
-                            const errorJson = JSON.parse(responseBody);
-                            errorMsg += ` - ${errorJson.error || responseBody}`;
-                        } catch (e) {
-                            errorMsg += ` - ${responseBody}`;
-                        }
-                        reject(new Error(errorMsg));
-                     }
-                });
-            });
-            req.on('error', (e) => reject(e));
-            req.write(JSON.stringify({ patchId: taysellData.patchId, purchaseToken }));
-            req.end();
+        // Chiudi il server dopo aver inviato la risposta e risolto la promessa
+        server.close(() => {
+            console.log('CLI: Server locale terminato.');
         });
-    } catch (error: any) {
-        printUsageAndExit(`CRITICAL ERROR: Failed to retrieve patch. Details: ${error.message}`);
-        return;
-    }
+    });
 
-    // 6. Save Patch (Dry Run Handling)
-    const patchFileName = `${taysellData.patchId.replace(/[^a-z0-9]/gi, '_')}${TAYLORED_FILE_EXTENSION}`;
-    const localPatchDir = path.join(cwd, TAYLORED_DIR_NAME);
-    await fs.ensureDir(localPatchDir);
-    const localPatchPath = path.join(localPatchDir, patchFileName);
+    // Aggiungi cliSessionId e cliLocalPort all'URL di pagamento
+    const initiatePaymentUrlWithParams = `${taysellData.payment.initiatePaymentUrl}?cliSessionId=${cliSessionId}&cliLocalPort=${cliLocalPort}`;
 
-    if (isDryRun) {
-        console.log('\n--- DRY RUN ---');
-        console.log(`Patch would be saved to: ${localPatchPath}`);
-        console.log('Patch Content:');
-        console.log('----------------------------------------');
-        console.log(decryptedPatchContent);
-        console.log('----------------------------------------');
-        console.log('Dry run complete. No files were written, and no patch was applied.');
-        return;
-    }
-
-    // 7. Save the patch and apply
-    await fs.writeFile(localPatchPath, decryptedPatchContent);
-    console.log(`Successfully downloaded and saved patch to: ${localPatchPath}`);
-
-    console.log('Applying the patch...');
+    console.log('CLI: Apertura del browser per l\'approvazione del pagamento...');
     try {
-        // The mode for handleApplyOperation would be '--add'
-        // handleApplyOperation expects the simple filename, not the full path,
-        // and assumes it's in the TAYLORED_DIR_NAME directory.
-        await handleApplyOperation(patchFileName, false, false, '--add', cwd);
-        console.log(`Patch "${taysellData.metadata.name}" applied successfully.`);
-    } catch (error: any) {
-        console.error(`Error applying patch: ${error.message}`);
-        console.error(`The patch was downloaded to ${localPatchPath}, but applying it failed. You may need to apply it manually or investigate the error.`);
-        // process.exit(1); // Decide if failure to apply is a critical error
+        await open(initiatePaymentUrlWithParams);
+    } catch (error) {
+        console.error('CLI: Impossibile aprire il browser. Copia e incolla il seguente URL nel tuo browser:', error);
+        console.log(initiatePaymentUrlWithParams);
+        // In questo caso, l'utente dovrà gestire manualmente il reindirizzamento e il server attenderà.
     }
-    console.log(`Purchase and application of patch "${taysellData.metadata.name}" complete.`);
+
+    console.log('CLI: In attesa della ricezione del token di acquisto dal browser...');
+    let purchaseToken: string;
+    try {
+        purchaseToken = await tokenReceivedPromise; // Attendi che il token venga ricevuto
+        console.log('CLI: Token di acquisto ottenuto.');
+
+        // Qui il server è già stato chiuso nel gestore di /receive-token
+        // Non è necessario server.close() qui se la logica rimane quella.
+
+    } catch (error) {
+        console.error('CLI: Errore durante l\'attesa del token di acquisto:', error);
+        server.close(() => { // Assicurati che il server sia chiuso in caso di errore prima della ricezione del token
+            console.log('CLI: Server locale terminato a causa di un errore.');
+        });
+        process.exit(1);
+    }
+
+
+    // --- Logica precedente per ottenere il patch ---
+    const getPatchUrl = taysellData.payment.getPatchUrl;
+    const postData = JSON.stringify({
+        patchId: taysellData.patchId,
+        purchaseToken: purchaseToken,
+    });
+
+    const options = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData),
+        },
+    };
+
+    console.log(`CLI: Richiesta patch a ${getPatchUrl}...`);
+
+    // Utilizza una nuova Promise per gestire la richiesta HTTPS e lo stream del file
+    await new Promise<void>((resolve, reject) => {
+        const req = https.request(getPatchUrl, options, (res) => {
+            if (res.statusCode !== 200) {
+                let errorData = '';
+                res.on('data', chunk => errorData += chunk);
+                res.on('end', () => {
+                    console.error(`CLI: Errore durante il recupero della patch. Status: ${res.statusCode}, Messaggio: ${errorData}`);
+                    reject(new Error(`Server error: ${res.statusCode} - ${errorData}`));
+                });
+                return;
+            }
+
+            const tayloredDir = path.resolve(process.cwd(), TAYLORED_DIR_NAME);
+            const targetFileName = `${taysellData.name}${TAYLORED_FILE_EXTENSION}`;
+            const destinationPath = path.join(tayloredDir, targetFileName);
+
+            fs.ensureDirSync(tayloredDir); // Assicura che la directory esista
+
+            const fileStream = fs.createWriteStream(destinationPath);
+            res.pipe(fileStream);
+
+            fileStream.on('finish', () => {
+                console.log(`CLI: Patch scaricata e salvata con successo in ${destinationPath}`);
+                // Dopo aver salvato il file, applica le modifiche
+                // Nota: handleApplyOperation si aspetta il nome del file, non il percorso completo
+                handleApplyOperation(targetFileName, true)
+                    .then(() => {
+                        console.log(`CLI: Operazione di applicazione per ${targetFileName} completata.`);
+                        resolve();
+                    })
+                    .catch(applyError => {
+                        console.error(`CLI: Errore durante l'applicazione della patch ${targetFileName}:`, applyError);
+                        reject(applyError);
+                    });
+            });
+
+            fileStream.on('error', (streamErr) => {
+                console.error(`CLI: Errore durante il salvataggio del file patch: ${streamErr.message}`);
+                fs.unlink(destinationPath, () => {}); // Tenta di eliminare il file parziale
+                reject(streamErr);
+            });
+        });
+
+        req.on('error', (requestErr) => {
+            console.error(`CLI: Errore durante la richiesta della patch: ${requestErr.message}`);
+            reject(requestErr);
+        });
+
+        req.write(postData);
+        req.end();
+    }).catch(error => {
+        // L'errore è già stato loggato, esci se necessario o gestisci ulteriormente
+        process.exit(1);
+    });
+
+    console.log('CLI: Processo di acquisto e applicazione completato.');
 }

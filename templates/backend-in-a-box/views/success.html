@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagamento Confermato</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f4f4f4; color: #333; }
+        .container { text-align: center; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #4CAF50; }
+        p { font-size: 1.1em; }
+        .status { margin-top: 20px; font-weight: bold; }
+        .error { color: #D32F2F; }
+        .success { color: #388E3C; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pagamento Approvato!</h1>
+        <p>Il tuo pagamento è stato approvato con successo.</p>
+        <p>Stiamo finalizzando l'acquisto e inviando il token alla tua applicazione CLI.</p>
+        <div id="status-message" class="status">In attesa di conferma dal server...</div>
+        <div id="cli-status-message" class="status"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const statusMessageDiv = document.getElementById('status-message');
+        const cliStatusMessageDiv = document.getElementById('cli-status-message');
+
+        // Estrai cliSessionId e cliLocalPort dai parametri URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const cliSessionId = urlParams.get('cliSessionId');
+        const cliLocalPort = urlParams.get('cliLocalPort');
+
+        if (!cliSessionId || !cliLocalPort) {
+            statusMessageDiv.textContent = 'Errore: cliSessionId o cliLocalPort mancanti nei parametri URL.';
+            statusMessageDiv.className = 'status error';
+        } else {
+            statusMessageDiv.textContent = `Tentativo di connessione al server con Session ID: ${cliSessionId}...`;
+
+            // Connettiti al server Socket.IO (assicurati che l'URL sia corretto per il tuo ambiente)
+            // Il server Socket.IO è servito dallo stesso host/porta del server HTTP
+            const socket = io(window.location.origin, {
+                // Opzioni aggiuntive se necessarie, es: path, transports
+            });
+
+            socket.on('connect', () => {
+                statusMessageDiv.textContent = 'Connesso al server! In attesa del token di acquisto...';
+                statusMessageDiv.className = 'status success';
+                console.log('Socket.IO connesso con ID:', socket.id);
+                // Unisciti alla room specifica per questa sessione CLI
+                socket.emit('joinSession', cliSessionId);
+                console.log(`Richiesta di join alla sessione ${cliSessionId} inviata.`);
+            });
+
+            socket.on('purchase_completed', (data) => {
+                statusMessageDiv.textContent = 'Token di acquisto ricevuto dal server!';
+                statusMessageDiv.className = 'status success';
+                console.log('Evento "purchase_completed" ricevuto:', data);
+
+                const { patchId, purchaseToken } = data;
+
+                if (!patchId || !purchaseToken) {
+                    cliStatusMessageDiv.textContent = 'Errore: Dati mancanti nell\'evento purchase_completed.';
+                    cliStatusMessageDiv.className = 'status error';
+                    console.error('Dati mancanti:', data);
+                    return;
+                }
+
+                cliStatusMessageDiv.textContent = `Invio del token alla CLI sulla porta ${cliLocalPort}...`;
+                console.log(`Invio token a http://localhost:${cliLocalPort}/receive-token`);
+
+                fetch(`http://localhost:${cliLocalPort}/receive-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ patchId, purchaseToken }),
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    throw new Error(`La CLI ha risposto con un errore: ${response.status}`);
+                })
+                .then(cliResponse => {
+                    cliStatusMessageDiv.textContent = `Token inviato con successo alla CLI! Risposta: ${cliResponse.message}`;
+                    cliStatusMessageDiv.className = 'status success';
+                    console.log('Risposta dalla CLI:', cliResponse);
+                     // Puoi chiudere questa finestra o reindirizzare l'utente
+                    // setTimeout(() => window.close(), 5000);
+                })
+                .catch(error => {
+                    cliStatusMessageDiv.textContent = `Errore durante l'invio del token alla CLI: ${error.message}`;
+                    cliStatusMessageDiv.className = 'status error';
+                    console.error('Errore invio token alla CLI:', error);
+                });
+            });
+
+            socket.on('connect_error', (error) => {
+                statusMessageDiv.textContent = `Errore di connessione Socket.IO: ${error.message}`;
+                statusMessageDiv.className = 'status error';
+                console.error('Errore di connessione Socket.IO:', error);
+            });
+
+            socket.on('disconnect', (reason) => {
+                statusMessageDiv.textContent = `Disconnesso dal server Socket.IO: ${reason}`;
+                statusMessageDiv.className = 'status error';
+                console.log('Socket.IO disconnesso:', reason);
+                if (reason === 'io server disconnect') {
+                    // Riconnessione manuale se necessario
+                    socket.connect();
+                }
+            });
+
+            // Gestione di errori specifici o messaggi dal server (opzionale)
+            socket.on('error_message', (message) => {
+                statusMessageDiv.textContent = `Messaggio di errore dal server: ${message}`;
+                statusMessageDiv.className = 'status error';
+                console.error('Messaggio di errore dal server:', message);
+            });
+        }
+    </script>
+</body>
+</html>

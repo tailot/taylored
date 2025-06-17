@@ -63,11 +63,8 @@
     "babel-jest": "^29.7.0",
     "babel-plugin-transform-import-meta": "^2.3.3",
     "jest": "^29.7.0",
-    "simple-git": "^3.27.0",
     "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3",
-    "@types/express": "^4.17.21"
-
+    "typescript": "^5.8.3"
   }
 }

@@ -6,7 +6,7 @@ import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 import { handleApplyOperation } from '../apply-logic';
 import { printUsageAndExit } from '../utils';
 import { v4 as uuidv4 } from 'uuid';
-import open from 'open';
+// import open from 'open'; // Removed static import
 import inquirer from 'inquirer';
 
 async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVerify: string, timeoutMs: number = 600000, intervalMs: number = 2500): Promise<{ patchId: string; purchaseToken: string }> {
@@ -106,6 +106,7 @@ export async function handleBuyCommand(
 
     console.log('CLI: Opening browser for payment approval...');
     try {
+        const {default: open} = await import('open'); // Dynamic import
         await open(initiatePaymentUrlWithParams);
     } catch (error) {
         console.error('CLI: Could not open browser. Please copy and paste the following URL into your browser:', error);

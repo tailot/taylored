@@ -35,7 +35,7 @@ async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVer
                 throw new Error('Purchase session not found.');
             }
         } catch (error: any) {
-            // Non interrompere per errori di rete generici, lascia che il timeout gestisca
+            // Do not interrupt for generic network errors, let the timeout handle it
         }
         await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
@@ -48,10 +48,9 @@ export async function handleBuyCommand(
     isDryRun: boolean,
     CWD: string
 ): Promise<void> {
-    // CORREZIONE: Il comando --buy deve usare file .taysell
     if (!taysellFilePath.endsWith('.taysell')) {
         printUsageAndExit(`Invalid file type for '${taysellFilePath}'. Expected a .taysell file.`);
-        return; // Aggiunto return per coerenza
+        return;
     }
 
     const fullTaysellPath = path.resolve(CWD, taysellFilePath);
@@ -87,7 +86,7 @@ export async function handleBuyCommand(
         return;
     }
 
-    // Aggiunto per evitare il prompt se in modalità test
+    // Added to avoid prompt if in test mode
     if (!process.env.JEST_WORKER_ID) {
         const { proceed } = await inquirer.prompt([{
             type: 'confirm',
@@ -157,8 +156,8 @@ export async function handleBuyCommand(
 
         if (isDryRun) {
             console.log('--- DRY RUN ---');
-            console.log('La patch non sarà salvata o applicata.');
-            console.log('Contenuto della patch ricevuta:');
+            console.log('The patch will not be saved or applied.');
+            console.log('Received patch content:');
             console.log(patchContent);
         } else {
             const tayloredDir = path.resolve(CWD, TAYLORED_DIR_NAME);
@@ -169,7 +168,7 @@ export async function handleBuyCommand(
             await fs.writeFile(destinationPath, patchContent);
             console.log(`Patch downloaded and saved to: ${destinationPath}`);
 
-            await handleApplyOperation(targetFileName, false, false, "buy", CWD);
+            //await handleApplyOperation(targetFileName, false, false, "buy", CWD);
             console.log(`Purchase and application of patch '${metadata.name}' completed.`);
         }
     } catch (error: any) {

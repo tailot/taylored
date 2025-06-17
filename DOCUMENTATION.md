@@ -1465,10 +1465,17 @@ The `taylored setup-backend` command initializes the "Backend-in-a-Box" server, 
     *   **Local Server Port**: The local port on which the Dockerized server will run (e.g., `3000`).
 4.  **Create `.env` File**: Generates a `.env` file within the `taysell-server` directory, populating it with the configuration values provided by the user. This file is used by Docker Compose to configure the server environment.
 5.  **Instructions**: Provides the user with instructions on how to start the server:
-    ```bash
-    cd taysell-server
-    docker-compose up --build -d
-    ```
+    *   **Using Docker (Recommended)**:
+        ```bash
+        cd taysell-server
+        docker-compose up --build -d
+        ```
+    *   **Manually (Alternative)**:
+        While Docker is recommended for ease of use and consistency, you can also run the server manually:
+        1.  Navigate to the `taysell-server` directory: `cd taysell-server`
+        2.  Install dependencies: `npm install`
+        3.  Ensure all environment variables defined in the `.env` file are set in your current shell session (you might need to source the file or set them manually).
+        4.  Start the server: `npm start` (or `node index.js`, depending on the `package.json` scripts).
 
 #### Usage Example (`setup-backend`)<a name="usage-example-setup-backend"></a>
 
@@ -1594,7 +1601,7 @@ The `taylored --buy <file.taysell>` command initiates the purchase process for a
 
 #### Usage Example (`--buy`)<a name="usage-example-buy"></a>
 
-To purchase and apply a patch:
+To purchase and download a patch:
 ```bash
 taylored --buy professional-exporter.taysell
 ```

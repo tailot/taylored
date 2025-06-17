@@ -1,6 +1,3 @@
-// Copyright (c) 2025 tailot@gmail.com
-// SPDX-License-Identifier: MIT
-
 // lib/handlers/setup-backend-handler.ts
 import * as child_process from 'child_process';
 import * as fs from 'fs-extra';
@@ -10,27 +7,17 @@ import inquirer from 'inquirer'; // Import inquirer
 export async function handleSetupBackend(cwd: string): Promise<void> {
     console.log('Starting Taysell backend setup...');
 
-    // 1. Check for Docker installation unless explicitly skipped for E2E tests
-    if (process.env.TAYLORED_E2E_SKIP_DOCKER_CHECK !== 'true') {
-        try {
-            child_process.execSync('docker --version', { stdio: 'ignore' });
-            console.log('Docker is installed.');
-        } catch (error) {
-            console.error('CRITICAL ERROR: Docker is not installed. Please install Docker and try again.');
-            process.exit(1);
-        }
-    } else {
-        console.log('Skipping Docker installation check for E2E test.');
-    }
-
     const backendDestPath = path.join(cwd, 'taysell-server');
 
     // 2. Copy "Backend-in-a-Box" template files
     try {
-        const isDev = __filename.endsWith('.ts');
+        // CORRECTED LOGIC: The path logic is now unified.
+        // When installed, __dirname is inside 'dist/lib/handlers', so '../../templates' correctly points to 'dist/templates'.
+        // When running in dev with ts-node, __dirname is 'lib/handlers', so '../../templates' correctly points to the root 'templates' dir.
+        // This relies on the 'postbuild' script placing templates inside 'dist'.
         const templateSourcePath = path.resolve(
             __dirname,
-            isDev ? '../../templates/backend-in-a-box' : '../../../templates/backend-in-a-box'
+            '../../templates/backend-in-a-box'
         );
 
         if (!await fs.pathExists(templateSourcePath)) {
@@ -39,8 +26,6 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
         }
 
         if (await fs.pathExists(backendDestPath)) {
-            // In a test environment, do not prompt for overwrite, just proceed.
-            // This assumes the E2E test setup will provide a clean directory.
             if (!process.env.JEST_WORKER_ID) {
                 const { overwrite } = await inquirer.prompt([{
                     type: 'confirm',
@@ -172,8 +157,8 @@ DB_PATH=./db/taysell.sqlite
         console.log('\nNext Steps:');
         console.log('1. Navigate to the backend directory:');
         console.log(`     cd ${path.relative(cwd, backendDestPath) || '.'}`);
-        console.log('2. Build and run the backend using Docker Compose:');
-        console.log('     docker-compose up --build -d');
+        console.log('2. Build and run the backend using Docker Compose (recommended) or manually:');
+        console.log('     docker-compose up --build -d  (for Docker)');
         console.log(`3. Your Taysell backend should be running and accessible via ${answers.serverPublicUrl} (if it maps to localhost:${answers.serverPort} or your server setup).`);
         console.log('   Check Docker logs if you encounter issues: docker-compose logs -f');
         console.log('\nFor more details, refer to the "Backend-in-a-Box" documentation (included in taysell-server).');

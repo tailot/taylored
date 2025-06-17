@@ -37,7 +37,6 @@ describe('handleSetupBackend', () => {
         });
 
         // Default mock implementations
-        (child_process.execSync as jest.Mock).mockReturnValue(Buffer.from('Docker version 20.10.7, build f0df350'));
         (fs.pathExists as jest.Mock).mockResolvedValue(false); // Default: taysell-server dir does not exist
         (fs.ensureDir as jest.Mock).mockResolvedValue(undefined);
         (fs.copy as jest.Mock).mockResolvedValue(undefined);
@@ -67,14 +66,13 @@ describe('handleSetupBackend', () => {
         processExitSpy.mockRestore();
     });
 
-    it('should complete successfully if Docker is installed and directory does not exist', async () => {
-        // Add specific inquirer mock for this test
-        // No inquirer.prompt mock needed here because JEST_WORKER_ID is set by beforeEach,
-        // so the handler will use its internal defaults.
+    it('should complete successfully if directory does not exist', async () => {
+        // JEST_WORKER_ID is set in beforeEach, so prompts are skipped and defaults are used.
 
         await handleSetupBackend(mockCwd);
 
-        expect(child_process.execSync).toHaveBeenCalledWith('docker --version', { stdio: 'ignore' });
+        // The Docker check is removed, so child_process.execSync should not be called for 'docker --version'
+        expect(child_process.execSync).not.toHaveBeenCalledWith('docker --version', expect.anything());
         expect(fs.copy).toHaveBeenCalledWith(getMockTemplateSourcePath(), path.join(mockCwd, 'taysell-server'));
         expect(fs.writeFile).toHaveBeenCalledWith(
             path.join(mockCwd, 'taysell-server', '.env'),
@@ -83,14 +81,6 @@ describe('handleSetupBackend', () => {
         expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Running in test environment, using default config for .env'));
         expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Successfully created .env file at'));
         expect(process.exit).not.toHaveBeenCalled();
-    });
-
-    it('should exit if Docker is not installed', async () => {
-        (child_process.execSync as jest.Mock).mockImplementation(() => {
-            throw new Error('Docker not found');
-        });
-        await expect(handleSetupBackend(mockCwd)).rejects.toThrow('process.exit called with 1');
-        expect(console.error).toHaveBeenCalledWith(expect.stringContaining('CRITICAL ERROR: Docker is not installed.'));
     });
 
     it('should prompt for overwrite if taysell-server directory exists and user aborts', async () => {

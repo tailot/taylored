@@ -1,58 +1,82 @@
 // index.js
 const express = require('express');
-const fs = require('fs');
+const fs = require('fs').promises;
 const sqlite3 = require('sqlite3').verbose();
 const crypto = require('crypto');
 const paypal = require('@paypal/checkout-server-sdk');
-const axios = require('axios');
-const path = require('path'); // Required for serving static files
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || './db/taysell.sqlite';
-// SERVER_BASE_URL should be your server's public URL, needed for PayPal return/cancel URLs
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL || `http://localhost:${PORT}`;
+
+// --- Decryption Logic embedded from taysell-utils ---
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 16;
+const SALT_LENGTH = 16;
+const TAG_LENGTH = 16;
+const KEY_LENGTH = 32; // AES-256
+const PBKDF2_ITERATIONS = 100000;
+
+/**
+ * Decrypts text encrypted with AES-256-GCM.
+ * @param {string} encryptedText The encrypted text in format salt:iv:authtag:ciphertext (all hex).
+ * @param {string} passwordKey The password to derive the key from.
+ * @returns {string} The decrypted plaintext.
+ */
+function decryptAES256GCM(encryptedText, passwordKey) {
+    const parts = encryptedText.split(':');
+    if (parts.length !== 4) {
+        throw new Error('Invalid encrypted text format. Expected salt:iv:authtag:ciphertext');
+    }
+    const salt = Buffer.from(parts[0], 'hex');
+    const iv = Buffer.from(parts[1], 'hex');
+    const tag = Buffer.from(parts[2], 'hex');
+    const ciphertext = parts[3];
+
+    const key = crypto.pbkdf2Sync(passwordKey, salt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha512');
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+}
+// --- End of Embedded Decryption Logic ---
 
 // Setup PayPal environment
 const clientId = process.env.PAYPAL_CLIENT_ID;
 const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
 
 if (!clientId || !clientSecret) {
-    console.error("ERRORE CRITICO: Le variabili d'ambiente PAYPAL_CLIENT_ID e PAYPAL_CLIENT_SECRET non sono definite.");
-    console.error("Queste variabili sono necessarie per l'integrazione con PayPal.");
-    console.error("Senza di esse, le funzionalità di pagamento non opereranno correttamente.");
-    // In un ambiente di produzione, potresti voler terminare il processo:
-    // process.exit(1);
+    console.error("CRITICAL ERROR: PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET environment variables are not defined.");
+    console.error("These variables are required for PayPal integration.");
+    console.error("Without them, payment functionalities will not operate correctly.");
 }
-
-// Considerations for Production Environment:
-// - Use HTTPS: Ensure SERVER_BASE_URL uses https.
-// - Robust Error Handling: Implement more sophisticated error handling and logging.
-// - Security: Add rate limiting, input validation, and other security measures.
-// - Database Management: Use a more robust database solution for production.
-// - Environment Variables: Manage secrets and configurations securely.
 
 const environment = new paypal.core.SandboxEnvironment(clientId, clientSecret);
 const client = new paypal.core.PayPalHttpClient(environment);
 
 app.use(express.json());
-app.use(express.static('public')); // Serve static files from 'public' directory
+app.use(express.static('public'));
 
-// Ensure the directory for the SQLite database exists
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log(`Directory ${dbDir} created for SQLite database.`);
-}
+(async () => {
+    try {
+        const dbDir = path.dirname(DB_PATH);
+        await fs.mkdir(dbDir, { recursive: true });
+        console.log(`Directory ${dbDir} created for SQLite database.`);
+    } catch (error) {
+        console.error("Failed to create database directory:", error);
+    }
+})();
 
-// Initialize SQLite database
 const db = new sqlite3.Database(DB_PATH, (err) => {
     if (err) {
-        console.error("Errore durante la connessione al database SQLite:", err.message);
+        console.error("Error connecting to the SQLite database:", err.message);
         return;
     }
-    console.log("Connesso al database SQLite.");
-    // Create purchases table if it doesn't exist
+    console.log("Connected to the SQLite database.");
     db.run(`CREATE TABLE IF NOT EXISTS purchases (
         id TEXT PRIMARY KEY,
         patch_id TEXT NOT NULL,
@@ -63,23 +87,37 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, (err) => {
         if (err) {
-            console.error("Errore durante la creazione della tabella 'purchases':", err.message);
+            console.error("Error creating 'purchases' table:", err.message);
         } else {
-            console.log("Tabella 'purchases' pronta.");
+            console.log("Table 'purchases' is ready.");
         }
     });
 });
 
-// Endpoint to create a PayPal order and initiate a purchase
 app.get('/pay/:patchId', async (req, res) => {
     const { patchId } = req.params;
-    const { cliSessionId } = req.query; // Extract from query
+    const { cliSessionId } = req.query;
 
     if (!patchId) {
-        return res.status(400).json({ error: "patchId è obbligatorio." });
+        return res.status(400).json({ error: "patchId is required." });
     }
     if (!cliSessionId) {
-        return res.status(400).json({ error: "cliSessionId è obbligatorio." });
+        return res.status(400).json({ error: "cliSessionId is required." });
+    }
+
+    const metadataPath = path.join(__dirname, 'patches', `${patchId}.taysell`);
+    let patchMetadata;
+    try {
+        const metadataContent = await fs.readFile(metadataPath, 'utf8');
+        patchMetadata = JSON.parse(metadataContent);
+    } catch (error) {
+        console.error(`Could not read or parse metadata for patchId ${patchId} at ${metadataPath}:`, error);
+        return res.status(404).json({ error: "Patch metadata not found or invalid. Ensure the .taysell file was uploaded correctly." });
+    }
+
+    const { price, currency } = patchMetadata.payment || {};
+    if (!price || !currency) {
+        return res.status(400).json({ error: "Price or currency is missing in the patch metadata file." });
     }
 
     const purchaseId = crypto.randomBytes(16).toString('hex');
@@ -89,10 +127,10 @@ app.get('/pay/:patchId', async (req, res) => {
         intent: 'CAPTURE',
         purchase_units: [{
             amount: {
-                currency_code: 'EUR',
-                value: '0.01', // Example value
+                currency_code: currency,
+                value: price,
             },
-            description: `Acquisto patch ${patchId}`
+            description: `Purchase of patch ${patchId}`
         }],
         application_context: {
             return_url: `${SERVER_BASE_URL}/paypal/success?cliSessionId=${cliSessionId}`,
@@ -103,168 +141,134 @@ app.get('/pay/:patchId', async (req, res) => {
 
     try {
         const order = await client.execute(request);
-        // Store cliSessionId along with other purchase details
         db.run(`INSERT INTO purchases (id, patch_id, paypal_order_id, status, cli_session_id) VALUES (?, ?, ?, ?, ?)`,
             [purchaseId, patchId, order.result.id, 'CREATED', cliSessionId],
             function(err) {
                 if (err) {
-                    console.error("Errore durante l'inserimento dell'acquisto nel database:", err.message);
-                    return res.status(500).json({ error: "Errore interno del server." });
+                    console.error("Error inserting purchase into the database:", err.message);
+                    return res.status(500).json({ error: "Internal server error." });
                 }
-                console.log(`Nuovo acquisto inserito con ID: ${purchaseId}, PayPal Order ID: ${order.result.id}`);
+                console.log(`New purchase inserted with ID: ${purchaseId}, PayPal Order ID: ${order.result.id}`);
                 const approveUrl = order.result.links.find(link => link.rel === 'approve').href;
                 res.redirect(approveUrl);
             });
     } catch (error) {
-        console.error("Errore durante la creazione dell'ordine PayPal:", error);
-        res.status(500).json({ error: "Errore durante la creazione dell'ordine PayPal." });
+        console.error("Error creating PayPal order:", error);
+        res.status(500).json({ error: "Error creating PayPal order." });
     }
 });
 
-// PayPal webhook endpoint
 app.post('/paypal/webhook', async (req, res) => {
     const webhookEvent = req.body;
-    // Log the full event for debugging
-    // console.log("Received webhook event:", JSON.stringify(webhookEvent, null, 2));
-
-    // Validate webhook signature (important for security, omitted for brevity in this example)
-    // See PayPal documentation for details on webhook signature validation
-
     if (webhookEvent.event_type === 'CHECKOUT.ORDER.APPROVED' || webhookEvent.event_type === 'CHECKOUT.ORDER.COMPLETED') {
         const orderID = webhookEvent.resource.id;
-        const purchaseToken = crypto.randomBytes(16).toString('hex'); // Generate unique purchase token
-
+        const purchaseToken = crypto.randomBytes(16).toString('hex');
         db.run(`UPDATE purchases SET status = 'COMPLETED', purchase_token = ? WHERE paypal_order_id = ?`,
             [purchaseToken, orderID],
-            async function(err) {
+            function(err) {
                 if (err) {
-                    console.error(`Errore durante l'aggiornamento dello stato dell'acquisto per l'ordine PayPal ${orderID}:`, err.message);
-                    return res.sendStatus(500); // Internal server error
+                    console.error(`Error updating purchase status for PayPal order ${orderID}:`, err.message);
+                    return res.sendStatus(500);
                 }
                 if (this.changes === 0) {
-                    console.warn(`Nessun acquisto trovato o aggiornato per l'ordine PayPal ${orderID}. L'ordine potrebbe non esistere o essere già stato processato.`);
-                    // Consider if this should be an error or handled differently
-                    return res.sendStatus(404); // Not Found or some other appropriate status
+                    console.warn(`No purchase found or updated for PayPal order ${orderID}. The order may not exist or may have already been processed.`);
+                    return res.sendStatus(404);
                 }
-                console.log(`Acquisto completato e token generato per l'ordine PayPal ${orderID}. Token: ${purchaseToken}`);
-                res.sendStatus(200); // Acknowledge receipt of webhook
+                console.log(`Purchase completed and token generated for PayPal order ${orderID}. Token: ${purchaseToken}`);
+                res.sendStatus(200);
             });
     } else {
-        console.log(`Evento webhook ricevuto non gestito: ${webhookEvent.event_type}`);
-        res.sendStatus(200); // Acknowledge other events without processing
+        console.log(`Unhandled webhook event received: ${webhookEvent.event_type}`);
+        res.sendStatus(200);
     }
 });
 
-// Endpoint for successful PayPal payment
-// Validates cliSessionId and serves success.html
 app.get('/paypal/success', (req, res) => {
-    const { cliSessionId } = req.query; // Extract from query
-    // Basic validation - in a real app, you might want to verify these against a stored state
+    const { cliSessionId } = req.query;
     if (!cliSessionId) {
-        return res.status(400).send("Parametro cliSessionId mancante o non valido.");
+        return res.status(400).send("Missing or invalid cliSessionId parameter.");
     }
-    // Serve a success page
     res.sendFile(path.join(__dirname, 'views', 'success.html'));
 });
 
-// Endpoint for cancelled PayPal payment
 app.get('/paypal/cancel', (req, res) => {
-    const { cliSessionId } = req.query; // Extract from query
-    // You might want to log this event or handle it in some way
-    console.log(`Pagamento annullato per sessione ${cliSessionId}.`);
-    // Serve a cancel page or redirect
-    res.send("Pagamento annullato.");
+    const { cliSessionId } = req.query;
+    console.log(`Payment cancelled for session ${cliSessionId}.`);
+    res.send("Payment cancelled.");
 });
 
-// Add new endpoint GET /check-purchase/:cliSessionId
 app.get('/check-purchase/:cliSessionId', (req, res) => {
     const { cliSessionId } = req.params;
     if (!cliSessionId) {
-        return res.status(400).json({ error: "cliSessionId è obbligatorio." });
+        return res.status(400).json({ error: "cliSessionId is required." });
     }
-
     db.get(`SELECT patch_id, purchase_token, status FROM purchases WHERE cli_session_id = ?`, [cliSessionId], (err, row) => {
         if (err) {
-            console.error("Errore durante la verifica dell'acquisto:", err.message);
-            return res.status(500).json({ error: "Errore interno del server." });
+            console.error("Error checking purchase:", err.message);
+            return res.status(500).json({ error: "Internal server error." });
         }
-
         if (!row) {
-            return res.status(404).json({ message: "Sessione di acquisto non trovata." });
+            return res.status(404).json({ message: "Purchase session not found." });
         }
-
         if (row.status === 'COMPLETED') {
             res.status(200).json({ patchId: row.patch_id, purchaseToken: row.purchase_token });
-        } else if (row.status === 'PENDING' || row.status === 'CREATED') {
-            res.status(202).json({ status: row.status, message: "Acquisto in attesa." });
         } else {
-            // Handle other statuses if necessary, or treat as pending/error
-            res.status(202).json({ status: row.status, message: "Stato acquisto sconosciuto, considerato in attesa." });
+            res.status(202).json({ status: row.status, message: "Purchase pending." });
         }
     });
 });
 
-// Aggiungi questa nuova rotta per gestire il download delle patch
-app.post('/get-patch', (req, res) => {
+app.post('/get-patch', async (req, res) => {
     const { patchId, purchaseToken } = req.body;
     const encryptionKey = process.env.PATCH_ENCRYPTION_KEY;
 
     if (!patchId || !purchaseToken) {
-        return res.status(400).json({ error: "patchId e purchaseToken sono obbligatori." });
+        return res.status(400).json({ error: "patchId and purchaseToken are required." });
     }
-    
     if (!encryptionKey) {
-        console.error("ERRORE CRITICO: La variabile d'ambiente PATCH_ENCRYPTION_KEY non è definita.");
-        return res.status(500).json({ error: "Errore di configurazione del server." });
+        console.error("CRITICAL ERROR: PATCH_ENCRYPTION_KEY environment variable is not defined.");
+        return res.status(500).json({ error: "Server configuration error." });
     }
 
-    // Verifica il token di acquisto nel database
-    db.get(`SELECT * FROM purchases WHERE patch_id = ? AND purchase_token = ? AND status = 'COMPLETED'`, 
-        [patchId, purchaseToken], 
-        (err, row) => {
+    db.get(`SELECT * FROM purchases WHERE patch_id = ? AND purchase_token = ? AND status = 'COMPLETED'`,
+        [patchId, purchaseToken],
+        async (err, row) => {
             if (err) {
-                console.error("Errore durante la verifica del token di acquisto:", err.message);
-                return res.status(500).json({ error: "Errore interno del server." });
+                console.error("Error verifying purchase token:", err.message);
+                return res.status(500).json({ error: "Internal server error." });
             }
-
             if (!row) {
-                return res.status(401).json({ error: "Token di acquisto non valido o non autorizzato." });
+                return res.status(401).json({ error: "Invalid or unauthorized purchase token." });
             }
 
-            // Se il token è valido, procedi con la decrittazione e l'invio del file
-            // Nota: La convenzione del nome file deve corrispondere a quella usata da 'create-taysell'
             const encryptedFilePath = path.join(__dirname, 'patches', `${patchId}.taylored.enc`);
-            
-            fs.readFile(encryptedFilePath, 'utf-8', (readErr, encryptedContent) => {
-                if (readErr) {
-                    console.error(`File patch crittografato non trovato a: ${encryptedFilePath}`, readErr);
-                    return res.status(404).json({ error: "File patch non trovato." });
+            try {
+                const encryptedContent = await fs.readFile(encryptedFilePath, 'utf-8');
+                const decryptedContent = decryptAES256GCM(encryptedContent, encryptionKey);
+                res.setHeader('Content-Type', 'text/plain');
+                res.status(200).send(decryptedContent);
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    console.error(`Encrypted patch file not found at: ${encryptedFilePath}`, error);
+                    res.status(404).json({ error: "Patch file not found." });
+                } else {
+                    console.error("Error decrypting patch:", error);
+                    res.status(500).json({ error: "Could not decrypt patch." });
                 }
-
-                try {
-                    const decryptedContent = decryptAES256GCM(encryptedContent, encryptionKey);
-                    res.setHeader('Content-Type', 'text/plain');
-                    res.status(200).send(decryptedContent);
-                } catch (decryptErr) {
-                    console.error("Errore durante la decrittazione della patch:", decryptErr);
-                    res.status(500).json({ error: "Impossibile decrittare la patch." });
-                }
-            });
+            }
         });
 });
 
-// Health check endpoint
 app.get('/', (req, res) => {
-    res.send('Backend in a Box è in esecuzione!');
+    res.send('Backend-in-a-Box is running!');
 });
 
-// Start the server
 app.listen(PORT, () => {
-    console.log(`Server in ascolto sulla porta ${PORT}`);
-    console.log(`URL base del server: ${SERVER_BASE_URL}`);
+    console.log(`Server listening on port ${PORT}`);
+    console.log(`Server base URL: ${SERVER_BASE_URL}`);
     if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
-        console.warn("ATTENZIONE: PAYPAL_CLIENT_ID o PAYPAL_CLIENT_SECRET non sono impostati. Le funzionalità PayPal non saranno disponibili.");
+        console.warn("WARNING: PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET are not set. PayPal functionality will be unavailable.");
     }
 });
 
-module.exports = { app, db }; // Export for testing or other modules
+module.exports = { app, db };

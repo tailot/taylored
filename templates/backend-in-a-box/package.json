@@ -9,6 +9,7 @@
   "dependencies": {
     "@paypal/checkout-server-sdk": "^1.0.3",
     "axios": "^1.6.8",
+    "express": "^5.1.0",
     "sqlite3": "^5.0.2",
     "uuid": "^11.1.0"
   }

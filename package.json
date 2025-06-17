@@ -1,6 +1,6 @@
 {
   "name": "taylored",
-  "version": "6.8.21",
+  "version": "7.0.6",
   "description": "Make changes to a branch a plugin. A command-line tool to manage and apply plugins '.taylored'. Supports applying, removing, verifying plugins, and generating them from branch (GIT).",
   "keywords": [
     "plugins",
@@ -50,9 +50,7 @@
     "inquirer": "^12.6.3",
     "open": "^10.1.2",
     "parse-diff": "^0.11.1",
-    "uuid": "^11.1.0",
-    "express": "^4.19.2",
-    "@types/express": "^4.17.21"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.27.4",
@@ -68,6 +66,8 @@
     "simple-git": "^3.27.0",
     "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/express": "^4.17.21"
+
   }
 }

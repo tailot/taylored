@@ -41,6 +41,9 @@ Taysell Monetization Commands:`);
         console.log(`  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.`);
         // Add more details for each command as needed
     }
+    if (!message) {
+        process.exit(0);
+    }
     process.exit(1);
 }
 

@@ -37,7 +37,6 @@ jest.mock('../../lib/handlers/buy-handler', () => {
     };
 });
 
-
 describe('handleBuyCommand', () => {
     const mockCwd = '/test/cwd';
     const mockTaysellFileName = 'mypatch.taysell';
@@ -54,13 +53,18 @@ describe('handleBuyCommand', () => {
         metadata: { name: 'My Test Patch', description: 'A patch for testing', tayloredVersion: '>=1.0.0' },
         endpoints: {
             initiatePaymentUrl: 'https://seller.example.com/pay/test-patch-id-123',
-            getPatchUrl: 'https://seller.example.com/api/download-patch'
+            getPatchUrl: 'https://seller.example.com/api/download-patch',
         },
-        payment: { price: '12.34', currency: 'USD' }
+        payment: { price: '12.34', currency: 'USD' },
     };
 
     let mockHttpsRequest: Writable;
-    let mockHttpsGetResponse: PassThrough & { statusCode?: number; setEncoding: jest.Mock, on: jest.Mock, emit: jest.Mock };
+    let mockHttpsGetResponse: PassThrough & {
+        statusCode?: number;
+        setEncoding: jest.Mock;
+        on: jest.Mock;
+        emit: jest.Mock;
+    };
 
     beforeEach(() => {
         jest.resetAllMocks();
@@ -91,13 +95,22 @@ describe('handleBuyCommand', () => {
 
         // Mock per https.get (usato per il polling)
         // This will be the mocked IncomingMessage. Tests will configure its behavior.
-        mockHttpsGetResponse = new PassThrough() as PassThrough & { statusCode?: number; setEncoding: jest.Mock, on: jest.Mock; emit: jest.Mock };
+        mockHttpsGetResponse = new PassThrough() as PassThrough & {
+            statusCode?: number;
+            setEncoding: jest.Mock;
+            on: jest.Mock;
+            emit: jest.Mock;
+        };
         mockHttpsGetResponse.on = jest.fn().mockReturnThis(); // Default mock for .on
         mockHttpsGetResponse.emit = jest.fn();
         mockHttpsGetResponse.setEncoding = jest.fn();
 
         jest.mocked(https.get).mockImplementation(
-            (url: string | URL, optionsOrCallback: any, callbackOrUndefined?: (res: IncomingMessage) => void): ClientRequest => {
+            (
+                url: string | URL,
+                optionsOrCallback: any,
+                callbackOrUndefined?: (res: IncomingMessage) => void
+            ): ClientRequest => {
                 let actualCallback: ((res: IncomingMessage) => void) | undefined;
                 if (typeof optionsOrCallback === 'function') {
                     actualCallback = optionsOrCallback;
@@ -129,21 +142,21 @@ describe('handleBuyCommand', () => {
                 callback = arg3;
             }
 
-                if (typeof callback === 'function') {
-                    const mockResForRequest = new PassThrough() as any; // Start with PassThrough, add properties
-                    mockResForRequest.statusCode = 200; // Default success for patch download
-                    mockResForRequest.headers = {};
-                    mockResForRequest.setEncoding = jest.fn();
+            if (typeof callback === 'function') {
+                const mockResForRequest = new PassThrough() as any; // Start with PassThrough, add properties
+                mockResForRequest.statusCode = 200; // Default success for patch download
+                mockResForRequest.headers = {};
+                mockResForRequest.setEncoding = jest.fn();
 
-                    process.nextTick(() => {
-                        if ((options as https.RequestOptions).method === 'POST') {
-                            (mockResForRequest as PassThrough).emit('data', Buffer.from("mocked patch content"));
-                        }
-                        (mockResForRequest as PassThrough).emit('end');
-                    });
-                    callback(mockResForRequest as IncomingMessage); // Cast to IncomingMessage
-                }
-                return mockClientRequestInstance;
+                process.nextTick(() => {
+                    if ((options as https.RequestOptions).method === 'POST') {
+                        (mockResForRequest as PassThrough).emit('data', Buffer.from('mocked patch content'));
+                    }
+                    (mockResForRequest as PassThrough).emit('end');
+                });
+                callback(mockResForRequest as IncomingMessage); // Cast to IncomingMessage
+            }
+            return mockClientRequestInstance;
         };
         jest.mocked(https.request).mockImplementation(mockRequestFn as typeof https.request);
     });
@@ -157,9 +170,11 @@ describe('handleBuyCommand', () => {
     it('should complete successfully for a valid .taysell file and successful purchase', async () => {
         // Simulate a successful polling response
         mockHttpsGetResponse.statusCode = 200;
-        mockHttpsGetResponse.on.mockImplementation(function(this: any, event: string, cb: (...args: any[]) => void) {
+        mockHttpsGetResponse.on.mockImplementation(function (this: any, event: string, cb: (...args: any[]) => void) {
             if (event === 'data') {
-                process.nextTick(() => cb(Buffer.from(JSON.stringify({ purchaseToken: 'valid-token', patchId: 'test-patch-id-123' }))));
+                process.nextTick(() =>
+                    cb(Buffer.from(JSON.stringify({ purchaseToken: 'valid-token', patchId: 'test-patch-id-123' })))
+                );
             }
             if (event === 'end') {
                 process.nextTick(() => cb());
@@ -169,21 +184,25 @@ describe('handleBuyCommand', () => {
 
         await handleBuyCommand(mockTaysellFileName, false, mockCwd);
 
-        expect(open).toHaveBeenCalledWith(expect.stringContaining(validTaysellFileContent.endpoints.initiatePaymentUrl));
+        expect(open).toHaveBeenCalledWith(
+            expect.stringContaining(validTaysellFileContent.endpoints.initiatePaymentUrl)
+        );
         expect(https.request).toHaveBeenCalled();
         expect(fs.writeFile).toHaveBeenCalledWith(
             path.join(mockCwd, TAYLORED_DIR_NAME, `test_patch_id_123${TAYLORED_FILE_EXTENSION}`), // Corrected filename
-            "mocked patch content" // Expecting the content from the https.request mock
+            'mocked patch content' // Expecting the content from the https.request mock
         );
     });
 
     it('should perform a dry run correctly', async () => {
         mockHttpsGetResponse.statusCode = 200;
-        mockHttpsGetResponse.on.mockImplementation(function(this: any, event: string, cb: (...args: any[]) => void) {
-            if(event === 'data') {
-                process.nextTick(() => cb(Buffer.from(JSON.stringify({ purchaseToken: 'valid-token', patchId: 'test-patch-id-123'}))));
+        mockHttpsGetResponse.on.mockImplementation(function (this: any, event: string, cb: (...args: any[]) => void) {
+            if (event === 'data') {
+                process.nextTick(() =>
+                    cb(Buffer.from(JSON.stringify({ purchaseToken: 'valid-token', patchId: 'test-patch-id-123' })))
+                );
             }
-            if(event === 'end') {
+            if (event === 'end') {
                 process.nextTick(() => cb());
             }
             return this;
@@ -198,8 +217,7 @@ describe('handleBuyCommand', () => {
 
     it('should exit if .taysell file is not found', async () => {
         jest.mocked(fs.pathExists).mockImplementation(async () => false);
-        await expect(handleBuyCommand(mockTaysellFileName, false, mockCwd))
-            .rejects.toThrow('process.exit called');
+        await expect(handleBuyCommand(mockTaysellFileName, false, mockCwd)).rejects.toThrow('process.exit called');
         expect(utils.printUsageAndExit).toHaveBeenCalledWith(expect.stringContaining('Taysell file not found'));
     });
 });

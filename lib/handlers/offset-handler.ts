@@ -9,13 +9,9 @@ import { TAYLORED_DIR_NAME } from '../constants';
  * @param CWD The current working directory (Git repository root).
  * @param branchName Optional branch name to calculate offset against.
  */
-export async function handleOffsetCommand(
-    userInputFileName: string,
-    CWD: string,
-    branchName?: string
-): Promise<void> {
+export async function handleOffsetCommand(userInputFileName: string, CWD: string, branchName?: string): Promise<void> {
     const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
-    
+
     try {
         // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
         const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, undefined, branchName);

@@ -66,7 +66,7 @@ async function execGit(repoRoot: string, args: string[], options: ExecGitOptions
                 stdout: error.stdout ? error.stdout.trim() : '',
                 stderr: error.stderr ? error.stderr.trim() : '',
                 success: false,
-                error: error as Error & { stdout?: string; stderr?: string; code?: number }
+                error: error as Error & { stdout?: string; stderr?: string; code?: number },
             };
         }
         const errorMessage = `Error executing git command: ${command}\nRepo: ${repoRoot}\nExit Code: ${error.code}\nStdout: ${error.stdout ? error.stdout.trim() : 'N/A'}\nStderr: ${error.stderr ? error.stderr.trim() : 'N/A'}`;
@@ -121,7 +121,8 @@ function embedMessageInContent(diffBody: string, message: string | null): string
 
     // If there's a message, it takes precedence.
     // A patch/commit can exist with only a message and no actual code changes.
-    if (message) { // Check if message is not null and not an empty string
+    if (message) {
+        // Check if message is not null and not an empty string
         const subjectLine = `Subject: [PATCH] ${message}`;
         let content = subjectLine;
 
@@ -139,8 +140,8 @@ function embedMessageInContent(diffBody: string, message: string | null): string
 
     // If no message (null or empty string), return the trimmed diff body (if any) with a final newline,
     // or an empty string if the trimmed diff body is empty.
-    if (trimmedDiffBody === "") {
-        return "";
+    if (trimmedDiffBody === '') {
+        return '';
     }
     let content = trimmedDiffBody;
     if (!content.endsWith('\n')) {
@@ -170,11 +171,10 @@ function getActualDiffBody(patchFileContent: string): string {
             return lines.slice(firstBlankLineIndex + 1).join('\n');
         }
         // If no blank line is found after Subject, or no content after it, assume empty diff body
-        return "";
+        return '';
     }
     return patchFileContent; // No Subject line, return the whole content
 }
-
 
 interface SimplifiedUpdatePatchOffsetsResult {
     outputPath: string;
@@ -190,29 +190,41 @@ async function updatePatchOffsets(
 
     const statusResult = await execGit(repoRoot, ['status', '--porcelain']);
     if (statusResult.stdout.trim() !== '') {
-        throw new Error("CRITICAL ERROR: Uncommitted changes detected in the repository. Please commit or stash them before running --offset.\n" + statusResult.stdout);
+        throw new Error(
+            'CRITICAL ERROR: Uncommitted changes detected in the repository. Please commit or stash them before running --offset.\n' +
+                statusResult.stdout
+        );
     }
     const absolutePatchFilePath = path.join(repoRoot, TAYLORED_DIR_NAME, patchFileName);
 
     if (!fs.existsSync(absolutePatchFilePath) || !fs.statSync(absolutePatchFilePath).isFile()) {
         throw new Error(`Patch file '${absolutePatchFilePath}' not found or is not a file.`);
     }
-    
-    const baseBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', baseBranch], { allowFailure: true, ignoreStderr: true });
+
+    const baseBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', baseBranch], {
+        allowFailure: true,
+        ignoreStderr: true,
+    });
     if (!baseBranchExistsResult.success) {
-        throw new GitExecutionError(`CRITICAL ERROR: The base branch '${baseBranch}' does not exist in the repository. Cannot calculate diff against '${baseBranch}'.`, baseBranchExistsResult.error);
+        throw new GitExecutionError(
+            `CRITICAL ERROR: The base branch '${baseBranch}' does not exist in the repository. Cannot calculate diff against '${baseBranch}'.`,
+            baseBranchExistsResult.error
+        );
     }
 
     let originalBranchOrCommit: string = '';
     try {
-        const symbolicRefResult = await execGit(repoRoot, ['symbolic-ref', '--short', 'HEAD'], { allowFailure: true, ignoreStderr: true });
+        const symbolicRefResult = await execGit(repoRoot, ['symbolic-ref', '--short', 'HEAD'], {
+            allowFailure: true,
+            ignoreStderr: true,
+        });
         if (symbolicRefResult.success && symbolicRefResult.stdout) {
             originalBranchOrCommit = symbolicRefResult.stdout;
         } else {
             originalBranchOrCommit = (await execGit(repoRoot, ['rev-parse', 'HEAD'])).stdout;
         }
         if (!originalBranchOrCommit) {
-            throw new Error("Could not determine the current branch or commit.");
+            throw new Error('Could not determine the current branch or commit.');
         }
     } catch (e: any) {
         throw new GitExecutionError(`Failed to determine current branch/commit: ${e.message}`, e);
@@ -233,7 +245,13 @@ async function updatePatchOffsets(
             // The original code had an empty if block here.
             // Now, attempting 'add' as a fallback.
             try {
-                await handleApplyOperation(patchFileName, false, false, '--add (invoked by offset, after remove failed)', repoRoot);
+                await handleApplyOperation(
+                    patchFileName,
+                    false,
+                    false,
+                    '--add (invoked by offset, after remove failed)',
+                    repoRoot
+                );
                 cliEquivalentCallSucceeded = true;
             } catch (addError: any) {
                 // Error during fallback 'add' attempt.
@@ -245,7 +263,7 @@ async function updatePatchOffsets(
         if (cliEquivalentCallSucceeded) {
             await execGit(repoRoot, ['add', '.']);
 
-            const tempCommitMessageText = "Internal: Staged changes for offset update";
+            const tempCommitMessageText = 'Internal: Staged changes for offset update';
             await execGit(repoRoot, ['commit', '--allow-empty', '-m', tempCommitMessageText, '--quiet']);
 
             const tayloredDirPath = path.join(repoRoot, TAYLORED_DIR_NAME);
@@ -254,14 +272,16 @@ async function updatePatchOffsets(
             const diffCmdResult = await execGit(repoRoot, ['diff', baseBranch, 'HEAD'], { allowFailure: true });
 
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
-            const rawNewDiffContent = diffCmdResult.stdout || "";
+            const rawNewDiffContent = diffCmdResult.stdout || '';
 
             // Custom commit message is no longer supported for --offset.
             // Always extract from the original patch if present.
             const effectiveMessageToEmbed: string | null = extractMessageFromPatch(originalPatchContent);
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
-                console.error(`ERROR: Execution of 'git diff ${baseBranch} HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`);
+                console.error(
+                    `ERROR: Execution of 'git diff ${baseBranch} HEAD' command failed with an unexpected exit code ${diffCmdResult.error.code} on the temporary branch.`
+                );
                 if (diffCmdResult.stderr) console.error(`  Stderr: ${diffCmdResult.stderr}`);
             } else {
                 const originalHunks = parsePatchHunks(originalPatchContent);
@@ -289,7 +309,10 @@ async function updatePatchOffsets(
                 }
 
                 let finalOutputContentToWrite: string;
-                const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
+                const cleanedDiffContent = rawNewDiffContent
+                    .split('\n')
+                    .map((line) => line.trimEnd())
+                    .join('\n');
 
                 if (allHunksAreConsideredInverted) {
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
@@ -312,10 +335,11 @@ async function updatePatchOffsets(
                 }
                 operationSucceeded = true;
             }
-        } else { 
-            console.error(`ERROR: Preliminary internal apply/remove operations for '${patchFileName}' failed on the temporary branch.`);
+        } else {
+            console.error(
+                `ERROR: Preliminary internal apply/remove operations for '${patchFileName}' failed on the temporary branch.`
+            );
         }
-
     } catch (error: any) {
         console.error(`CRITICAL ERROR during offset update process: ${error.message}`);
         if (error instanceof GitExecutionError && error.stderr) {
@@ -326,7 +350,10 @@ async function updatePatchOffsets(
         try {
             await execGit(repoRoot, ['checkout', '--force', originalBranchOrCommit, '--quiet']);
 
-            const tempBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', tempBranchName], { allowFailure: true, ignoreStderr: true });
+            const tempBranchExistsResult = await execGit(repoRoot, ['rev-parse', '--verify', tempBranchName], {
+                allowFailure: true,
+                ignoreStderr: true,
+            });
             if (tempBranchExistsResult.success) {
                 await execGit(repoRoot, ['branch', '-D', tempBranchName, '--quiet']);
             }
@@ -339,7 +366,9 @@ async function updatePatchOffsets(
     }
 
     if (!operationSucceeded) {
-        throw new Error(`WARNING: The taylored file '${patchFileName}' is obsolete or could not be processed for offset update.`);
+        throw new Error(
+            `WARNING: The taylored file '${patchFileName}' is obsolete or could not be processed for offset update.`
+        );
     }
 
     return { outputPath: absolutePatchFilePath };

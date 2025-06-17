@@ -38,7 +38,9 @@ export async function handleApplyOperation(
         await fs.access(actualTayloredFilePath);
     } catch (e: any) {
         // Provide a specific error message if the file access fails.
-        console.error(`CRITICAL ERROR: Taylored file '${actualTayloredFilePath}' not found or not accessible in '${TAYLORED_DIR_NAME}/' directory.`);
+        console.error(
+            `CRITICAL ERROR: Taylored file '${actualTayloredFilePath}' not found or not accessible in '${TAYLORED_DIR_NAME}/' directory.`
+        );
         throw e; // Re-throw the error to be handled by the caller.
     }
 
@@ -50,14 +52,14 @@ export async function handleApplyOperation(
     //           is determined by the exit code of `git apply`.
     let gitApplyCommand = `git apply --verbose`; // New base command
     if (isVerify) {
-        gitApplyCommand += " --check"; // Add check first if verifying
+        gitApplyCommand += ' --check'; // Add check first if verifying
     } else {
-        gitApplyCommand += " --whitespace=fix"; // Add fix only if not verifying
+        gitApplyCommand += ' --whitespace=fix'; // Add fix only if not verifying
     }
-    gitApplyCommand += " --reject"; // Add --reject after --check or --whitespace=fix
+    gitApplyCommand += ' --reject'; // Add --reject after --check or --whitespace=fix
 
     if (isReverse) {
-        gitApplyCommand += " --reverse"; // Add --reverse if needed
+        gitApplyCommand += ' --reverse'; // Add --reverse if needed
     }
     // Ensure the filepath is quoted to handle potential spaces or special characters,
     // though typically taylored filenames are sanitized.
@@ -77,10 +79,12 @@ export async function handleApplyOperation(
         // indicating failure of `git apply`.
         console.error(`\nCRITICAL ERROR: 'git apply' failed during ${modeName} operation.`);
         if (isVerify) {
-            console.error("  Verification failed. The patch may not apply/revert cleanly (atomicity check failed).");
+            console.error('  Verification failed. The patch may not apply/revert cleanly (atomicity check failed).');
         } else {
-            console.error("  Execution failed. The current directory might be in an inconsistent or partially modified state.");
-            console.error("  Please check git status and any .rej files created for conflict details.");
+            console.error(
+                '  Execution failed. The current directory might be in an inconsistent or partially modified state.'
+            );
+            console.error('  Please check git status and any .rej files created for conflict details.');
         }
         throw error; // Re-throw the error to be handled by the caller.
     }

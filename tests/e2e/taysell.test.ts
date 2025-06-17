@@ -48,7 +48,7 @@ describe('Taysell E2E Tests', () => {
             // We assume unit tests cover the .env content based on mocked prompts.
             // To make it non-interactive for critical prompts (like overwrite), we ensure the dir is new.
 
-            let output = "";
+            let output = '';
             try {
                 // We expect this to fail or hang if it truly waits for inquirer input
                 // that we can't provide via execSync easily.
@@ -69,7 +69,7 @@ describe('Taysell E2E Tests', () => {
                 output = error.stdout?.toString() + error.stderr?.toString();
                 // Log warning, but don't fail the test just for this command failing due to interactivity.
                 // The primary assertions are about file creation.
-                console.warn("setup-backend E2E command execution warning (may be due to interactivity):", output);
+                console.warn('setup-backend E2E command execution warning (may be due to interactivity):', output);
             }
 
             expect(fs.pathExistsSync(path.join(currentTempDir, 'taysell-server'))).toBe(true);
@@ -85,7 +85,8 @@ describe('Taysell E2E Tests', () => {
     });
 
     describe('create-taysell', () => {
-        const dummyTayloredContent = "diff --git a/file.txt b/file.txt\nindex e69de29..9daeafb 100644\n--- a/file.txt\n+++ b/file.txt\n@@ -0,0 +1 @@\n+Hello";
+        const dummyTayloredContent =
+            'diff --git a/file.txt b/file.txt\nindex e69de29..9daeafb 100644\n--- a/file.txt\n+++ b/file.txt\n@@ -0,0 +1 @@\n+Hello';
         const dummyPatchName = 'e2e-test-patch';
         // dummyTayloredFilePath will be set in beforeEach context of currentTempDir
         let dummyTayloredFilePath: string;
@@ -111,15 +112,18 @@ SELLER_CONTACT=e2e@seller.com
         });
 
         it('should create encrypted patch and .taysell metadata file', async () => {
-            const cliPrice = "7.89";
-            const cliDesc = "E2E Test Description";
+            const cliPrice = '7.89';
+            const cliDesc = 'E2E Test Description';
 
             // For inquirer prompts not covered by .env or CLI args (like patchId, patchName, etc.),
             // we pipe newlines to accept defaults.
             const command = `printf '\\n\\n\\n\\n\\n\\n' | npx ts-node ${CLI_ENTRY} create-taysell ${dummyPatchName}${TAYLORED_FILE_EXTENSION} --price "${cliPrice}" --desc "${cliDesc}"`;
             const output = execSync(command, { cwd: currentTempDir, stdio: 'pipe' }).toString();
 
-            const encryptedFilePath = path.join(currentTempDir, `${dummyPatchName}${TAYLORED_FILE_EXTENSION}.encrypted`);
+            const encryptedFilePath = path.join(
+                currentTempDir,
+                `${dummyPatchName}${TAYLORED_FILE_EXTENSION}.encrypted`
+            );
             const metadataFilePath = path.join(currentTempDir, `${dummyPatchName}.taysell`);
 
             expect(await fs.pathExists(encryptedFilePath)).toBe(true);
@@ -137,7 +141,6 @@ SELLER_CONTACT=e2e@seller.com
             expect(taysellJson.endpoints.initiatePaymentUrl).toBe(`${envServerUrl}/pay/${taysellJson.patchId}`);
             expect(taysellJson.endpoints.getPatchUrl).toBe(`${envServerUrl}/get-patch`);
             expect(taysellJson.sellerInfo.name).toBe('E2E Seller');
-
 
             // Validate encrypted content
             const encryptedContent = await fs.readFile(encryptedFilePath, 'utf-8');

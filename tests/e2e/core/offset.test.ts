@@ -10,7 +10,7 @@ import {
     execOptions,
     TEST_DIR_FULL_PATH,
     TAYLORED_DIR_FULL_PATH,
-    initialCommitHash
+    initialCommitHash,
 } from './setup';
 
 describe('Offset Functionality Tests', () => {
@@ -25,18 +25,18 @@ describe('Offset Functionality Tests', () => {
 
     // Initial content for offset test files
     const OFFSET_INITIAL_CONTENT = [
-        "Line 1: Initial context",
-        "Line 2: Target for deletion/modification",
-        "Line 3: More context",
-        "Line 4: Even more context",
-        "Line 5: Final context line"
+        'Line 1: Initial context',
+        'Line 2: Target for deletion/modification',
+        'Line 3: More context',
+        'Line 4: Even more context',
+        'Line 5: Final context line',
     ].join('\n');
 
-    const PREPEND_CONTENT = "Prepended Line 1\nPrepended Line 2\n";
+    const PREPEND_CONTENT = 'Prepended Line 1\nPrepended Line 2\n';
 
     describe('Offset - Deletions Patch (Simulated Step 11 from original description)', () => {
-        const OFFSET_DEL_FILE = "offset_del_file.txt";
-        const OFFSET_DEL_BRANCH_S11 = "offset-del-branch-s11";
+        const OFFSET_DEL_FILE = 'offset_del_file.txt';
+        const OFFSET_DEL_BRANCH_S11 = 'offset-del-branch-s11';
         const OFFSET_DEL_PLUGIN_NAME_S11 = `${OFFSET_DEL_BRANCH_S11}.taylored`;
         const OFFSET_DEL_PLUGIN_FULL_PATH_S11 = path.join(TAYLORED_DIR_FULL_PATH, OFFSET_DEL_PLUGIN_NAME_S11);
         let mainCommitForS11Patch: string;
@@ -55,7 +55,7 @@ describe('Offset Functionality Tests', () => {
 
             // 2. Create branch, make deletion, save patch
             execSync(`git checkout -b ${OFFSET_DEL_BRANCH_S11} ${mainCommitForS11Patch}`, execOptions);
-            const s11DeletedContent = OFFSET_INITIAL_CONTENT.replace("Line 2: Target for deletion/modification\n", "");
+            const s11DeletedContent = OFFSET_INITIAL_CONTENT.replace('Line 2: Target for deletion/modification\n', '');
             fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_DEL_FILE), s11DeletedContent);
             execSync(`git add ${OFFSET_DEL_FILE}`, execOptions);
             execSync('git commit -m "Delete line for S11 patch"', execOptions);
@@ -77,40 +77,49 @@ describe('Offset Functionality Tests', () => {
             execSync('git commit -m "Prepend lines on main to cause offset for S11"', execOptions);
         });
 
-        afterEach(() => { // Changed from afterAll to afterEach for better isolation
+        afterEach(() => {
+            // Changed from afterAll to afterEach for better isolation
             execSync('git checkout main', execOptions); // Ensure on main before branch deletion
             try {
                 execSync(`git branch -D ${OFFSET_DEL_BRANCH_S11}`, execOptions);
-            } catch (e) { /* ignore if branch not found */ }
+            } catch (e) {
+                /* ignore if branch not found */
+            }
 
             // Patch file is in .taylored, which should be cleaned by resetToInitialState or cleanupTestEnvironment
             // but explicit removal if it was created in this test's scope can be good.
             if (fs.existsSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11)) {
-                 // fs.unlinkSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11); // Avoid unlinking if it's part of a commit. Let reset handle.
+                // fs.unlinkSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11); // Avoid unlinking if it's part of a commit. Let reset handle.
             }
         });
 
         test('taylored --offset for deletions patch fails as expected', () => {
-            let stderr = "";
+            let stderr = '';
             let failed = false;
             try {
                 execSync(`${TAYLORED_CMD_BASE} --offset ${OFFSET_DEL_PLUGIN_NAME_S11}`, execOptions);
             } catch (error) {
                 failed = true;
-                stderr = (error as any).stderr?.toString() || "";
+                stderr = (error as any).stderr?.toString() || '';
             }
             expect(failed).toBe(true); // Taylored currently does not support offset for deletions
-            expect(stderr.toLowerCase()).toMatch(/obsolete|could not be processed|patch does not apply|offset failed|failed to apply/);
+            expect(stderr.toLowerCase()).toMatch(
+                /obsolete|could not be processed|patch does not apply|offset failed|failed to apply/
+            );
             // Ensure original patch file is unchanged
-            expect(normalizeLineEndings(fs.readFileSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11, 'utf8'))).toBe(normalizeLineEndings(storedOffsetDelPluginS11Content));
+            expect(normalizeLineEndings(fs.readFileSync(OFFSET_DEL_PLUGIN_FULL_PATH_S11, 'utf8'))).toBe(
+                normalizeLineEndings(storedOffsetDelPluginS11Content)
+            );
             // Ensure file on disk is unchanged by the failed offset attempt
-            expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_DEL_FILE), 'utf8'))).toBe(normalizeLineEndings(mainModifiedContentS11));
+            expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_DEL_FILE), 'utf8'))).toBe(
+                normalizeLineEndings(mainModifiedContentS11)
+            );
         });
     });
 
     describe('Offset - Additions Patch (Simulated Step 12 from original description)', () => {
-        const OFFSET_ADD_FILE_S12 = "offset_add_file.txt"; // Use a different file name
-        const OFFSET_ADD_BRANCH_S12 = "offset-add-branch-s12";
+        const OFFSET_ADD_FILE_S12 = 'offset_add_file.txt'; // Use a different file name
+        const OFFSET_ADD_BRANCH_S12 = 'offset-add-branch-s12';
         const OFFSET_ADD_PLUGIN_NAME_S12 = `${OFFSET_ADD_BRANCH_S12}.taylored`;
         const OFFSET_ADD_PLUGIN_FULL_PATH_S12 = path.join(TAYLORED_DIR_FULL_PATH, OFFSET_ADD_PLUGIN_NAME_S12);
         let mainCommitForS12Patch: string;
@@ -126,8 +135,10 @@ describe('Offset Functionality Tests', () => {
             mainCommitForS12Patch = execSync('git rev-parse HEAD', execOptions).toString().trim();
 
             execSync(`git checkout -b ${OFFSET_ADD_BRANCH_S12} ${mainCommitForS12Patch}`, execOptions);
-            const s12AddedContent = OFFSET_INITIAL_CONTENT.replace("Line 2: Target for deletion/modification",
-                "Line 2: Target for deletion/modification\nLine 2.5: Newly added line for S12 patch");
+            const s12AddedContent = OFFSET_INITIAL_CONTENT.replace(
+                'Line 2: Target for deletion/modification',
+                'Line 2: Target for deletion/modification\nLine 2.5: Newly added line for S12 patch'
+            );
             fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_ADD_FILE_S12), s12AddedContent);
             execSync(`git add ${OFFSET_ADD_FILE_S12}`, execOptions);
             execSync('git commit -m "Add line for S12 patch"', execOptions);
@@ -147,29 +158,38 @@ describe('Offset Functionality Tests', () => {
             execSync('git commit -m "Prepend lines on main to cause offset for S12"', execOptions);
         });
 
-        afterEach(() => { // Changed from afterAll to afterEach
+        afterEach(() => {
+            // Changed from afterAll to afterEach
             execSync('git checkout main', execOptions);
             try {
                 execSync(`git branch -D ${OFFSET_ADD_BRANCH_S12}`, execOptions);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                /* ignore */
+            }
             // if (fs.existsSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12)) {
             //     fs.unlinkSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12);
             // }
         });
 
         test('taylored --offset for additions patch fails as expected', () => {
-            let stderr = "";
+            let stderr = '';
             let failed = false;
             try {
                 execSync(`${TAYLORED_CMD_BASE} --offset ${OFFSET_ADD_PLUGIN_NAME_S12}`, execOptions);
             } catch (error) {
                 failed = true;
-                stderr = (error as any).stderr?.toString() || "";
+                stderr = (error as any).stderr?.toString() || '';
             }
             expect(failed).toBe(true); // Taylored currently does not support offset for additions either
-            expect(stderr.toLowerCase()).toMatch(/obsolete|could not be processed|patch does not apply|offset failed|failed to apply/);
-            expect(normalizeLineEndings(fs.readFileSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12, 'utf8'))).toBe(normalizeLineEndings(storedOffsetAddPluginS12Content));
-            expect(normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_ADD_FILE_S12), 'utf8'))).toBe(normalizeLineEndings(mainModifiedContentS12));
+            expect(stderr.toLowerCase()).toMatch(
+                /obsolete|could not be processed|patch does not apply|offset failed|failed to apply/
+            );
+            expect(normalizeLineEndings(fs.readFileSync(OFFSET_ADD_PLUGIN_FULL_PATH_S12, 'utf8'))).toBe(
+                normalizeLineEndings(storedOffsetAddPluginS12Content)
+            );
+            expect(
+                normalizeLineEndings(fs.readFileSync(path.join(TEST_DIR_FULL_PATH, OFFSET_ADD_FILE_S12), 'utf8'))
+            ).toBe(normalizeLineEndings(mainModifiedContentS12));
         });
     });
 });

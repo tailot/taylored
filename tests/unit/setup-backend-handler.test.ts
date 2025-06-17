@@ -21,7 +21,6 @@ const getMockTemplateSourcePath = () => {
     );
 };
 
-
 describe('handleSetupBackend', () => {
     const mockCwd = '/test/cwd';
     let consoleLogSpy: jest.SpyInstance;
@@ -32,9 +31,11 @@ describe('handleSetupBackend', () => {
         jest.resetAllMocks(); // Reset mocks for each test
         consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-        processExitSpy = jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined): never => {
-            throw new Error(`process.exit called with ${code}`);
-        });
+        processExitSpy = jest
+            .spyOn(process, 'exit')
+            .mockImplementation((code?: string | number | null | undefined): never => {
+                throw new Error(`process.exit called with ${code}`);
+            });
 
         // Default mock implementations
         (fs.pathExists as jest.Mock).mockResolvedValue(false); // Default: taysell-server dir does not exist
@@ -47,7 +48,7 @@ describe('handleSetupBackend', () => {
         // The actual fs.pathExists check for the template source path will use this resolved path.
         // We need to make sure this specific path check returns true.
         const mockTemplatePath = getMockTemplateSourcePath();
-        (fs.pathExists as jest.Mock).mockImplementation(p => {
+        (fs.pathExists as jest.Mock).mockImplementation((p) => {
             if (p === mockTemplatePath) {
                 return Promise.resolve(true); // Simulate template source exists
             }
@@ -56,7 +57,6 @@ describe('handleSetupBackend', () => {
             }
             return Promise.resolve(false);
         });
-
     });
 
     afterEach(() => {
@@ -78,7 +78,9 @@ describe('handleSetupBackend', () => {
             path.join(mockCwd, 'taysell-server', '.env'),
             expect.stringContaining('PAYPAL_ENVIRONMENT=sandbox')
         );
-        expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Running in test environment, using default config for .env'));
+        expect(console.log).toHaveBeenCalledWith(
+            expect.stringContaining('Running in test environment, using default config for .env')
+        );
         expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Successfully created .env file at'));
         expect(process.exit).not.toHaveBeenCalled();
     });
@@ -87,7 +89,7 @@ describe('handleSetupBackend', () => {
         delete process.env.JEST_WORKER_ID; // Ensure inquirer is called
         // fs.pathExists for taysell-server should return true
         const mockTemplatePath = getMockTemplateSourcePath();
-        (fs.pathExists as jest.Mock).mockImplementation(p => {
+        (fs.pathExists as jest.Mock).mockImplementation((p) => {
             if (p === mockTemplatePath) return Promise.resolve(true);
             if (p === path.join(mockCwd, 'taysell-server')) return Promise.resolve(true); // Directory exists
             return Promise.resolve(false);
@@ -96,9 +98,9 @@ describe('handleSetupBackend', () => {
 
         await handleSetupBackend(mockCwd);
 
-        expect(jest.mocked(inquirer.prompt)).toHaveBeenCalledWith(expect.arrayContaining([
-            expect.objectContaining({ name: 'overwrite' })
-        ]));
+        expect(jest.mocked(inquirer.prompt)).toHaveBeenCalledWith(
+            expect.arrayContaining([expect.objectContaining({ name: 'overwrite' })])
+        );
         expect(fs.copy).not.toHaveBeenCalled();
         expect(console.log).toHaveBeenCalledWith('Backend setup aborted by user.');
         expect(process.exit).not.toHaveBeenCalled();
@@ -106,15 +108,16 @@ describe('handleSetupBackend', () => {
 
     it('should overwrite if taysell-server directory exists and user confirms', async () => {
         delete process.env.JEST_WORKER_ID; // Ensure inquirer is called
-         const mockTemplatePath = getMockTemplateSourcePath();
-        (fs.pathExists as jest.Mock).mockImplementation(p => {
+        const mockTemplatePath = getMockTemplateSourcePath();
+        (fs.pathExists as jest.Mock).mockImplementation((p) => {
             if (p === mockTemplatePath) return Promise.resolve(true);
             if (p === path.join(mockCwd, 'taysell-server')) return Promise.resolve(true); // Directory exists
             return Promise.resolve(false);
         });
         jest.mocked(inquirer.prompt)
             .mockResolvedValueOnce({ overwrite: true }) // Confirm overwrite
-            .mockResolvedValueOnce({ // Env answers
+            .mockResolvedValueOnce({
+                // Env answers
                 paypalEnv: 'production',
                 paypalClientId: 'prod-id',
                 paypalClientSecret: 'prod-secret',
@@ -168,15 +171,12 @@ PATCH_ENCRYPTION_KEY=${mockAnswers.patchEncryptionKey}
 # Database Configuration (SQLite)
 DB_PATH=./db/taysell.sqlite
 `.trim();
-        expect(fs.writeFile).toHaveBeenCalledWith(
-            path.join(mockCwd, 'taysell-server', '.env'),
-            expectedEnvContent
-        );
+        expect(fs.writeFile).toHaveBeenCalledWith(path.join(mockCwd, 'taysell-server', '.env'), expectedEnvContent);
     });
 
     it('should exit if template source directory does not exist', async () => {
         // Override fs.pathExists for the template source path
-        (fs.pathExists as jest.Mock).mockImplementation(p => {
+        (fs.pathExists as jest.Mock).mockImplementation((p) => {
             if (p === getMockTemplateSourcePath()) {
                 return Promise.resolve(false); // Template source does NOT exist
             }
@@ -184,6 +184,8 @@ DB_PATH=./db/taysell.sqlite
         });
 
         await expect(handleSetupBackend(mockCwd)).rejects.toThrow('process.exit called with 1');
-        expect(console.error).toHaveBeenCalledWith(expect.stringContaining('CRITICAL ERROR: Backend template source directory not found'));
+        expect(console.error).toHaveBeenCalledWith(
+            expect.stringContaining('CRITICAL ERROR: Backend template source directory not found')
+        );
     });
 });

@@ -73,7 +73,7 @@ export interface SellerInfo {
 }
 
 export interface PatchMetadata {
-    name:string;
+    name: string;
     description: string;
     tayloredVersion: string;
 }
@@ -116,7 +116,9 @@ export function validateTaysellFileContent(data: any): TaysellFile {
     }
 
     if (typeof data.taysellVersion !== 'string' || data.taysellVersion !== '1.0-decentralized') {
-        throw new Error(`Invalid .taysell file: unsupported taysellVersion "${data.taysellVersion}". Expected "1.0-decentralized".`);
+        throw new Error(
+            `Invalid .taysell file: unsupported taysellVersion "${data.taysellVersion}". Expected "1.0-decentralized".`
+        );
     }
     if (typeof data.patchId !== 'string' || !data.patchId.trim()) {
         throw new Error('Invalid .taysell file: patchId must be a non-empty string.');
@@ -135,27 +137,39 @@ export function validateTaysellFileContent(data: any): TaysellFile {
     // Add more checks for metadata.description, metadata.tayloredVersion (semver format)
 
     // Endpoints validation
-    if (typeof data.endpoints !== 'object' ||
-        !data.endpoints.initiatePaymentUrl || typeof data.endpoints.initiatePaymentUrl !== 'string' ||
-        !data.endpoints.getPatchUrl || typeof data.endpoints.getPatchUrl !== 'string') {
-        throw new Error('Invalid .taysell file: endpoints.initiatePaymentUrl and endpoints.getPatchUrl must be non-empty strings.');
+    if (
+        typeof data.endpoints !== 'object' ||
+        !data.endpoints.initiatePaymentUrl ||
+        typeof data.endpoints.initiatePaymentUrl !== 'string' ||
+        !data.endpoints.getPatchUrl ||
+        typeof data.endpoints.getPatchUrl !== 'string'
+    ) {
+        throw new Error(
+            'Invalid .taysell file: endpoints.initiatePaymentUrl and endpoints.getPatchUrl must be non-empty strings.'
+        );
     }
     try {
         new URL(data.endpoints.initiatePaymentUrl); // Validate URL format
         const getPatchUrlObj = new URL(data.endpoints.getPatchUrl); // Validate URL format
         if (getPatchUrlObj.protocol !== 'https:') {
-             throw new Error('Invalid .taysell file: endpoints.getPatchUrl must use HTTPS.');
+            throw new Error('Invalid .taysell file: endpoints.getPatchUrl must use HTTPS.');
         }
     } catch (e: any) {
         throw new Error(`Invalid .taysell file: one of the endpoint URLs is invalid. ${e.message}`);
     }
 
-
     // Payment validation
-    if (typeof data.payment !== 'object' ||
-        !data.payment.price || typeof data.payment.price !== 'string' || // Assuming price as string e.g. "9.99"
-        !data.payment.currency || typeof data.payment.currency !== 'string' || data.payment.currency.length !== 3) {
-        throw new Error('Invalid .taysell file: payment.price must be a string and payment.currency must be a 3-letter string.');
+    if (
+        typeof data.payment !== 'object' ||
+        !data.payment.price ||
+        typeof data.payment.price !== 'string' || // Assuming price as string e.g. "9.99"
+        !data.payment.currency ||
+        typeof data.payment.currency !== 'string' ||
+        data.payment.currency.length !== 3
+    ) {
+        throw new Error(
+            'Invalid .taysell file: payment.price must be a string and payment.currency must be a 3-letter string.'
+        );
     }
 
     return data as TaysellFile; // If all checks pass, cast and return

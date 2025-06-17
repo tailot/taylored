@@ -10,7 +10,7 @@ import {
     TEST_DIR_FULL_PATH,
     TAYLORED_DIR_FULL_PATH,
     INITIAL_FILE1_CONTENT,
-    initialCommitHash
+    initialCommitHash,
 } from './setup';
 
 describe('Core CLI Tests - Save', () => {
@@ -24,15 +24,15 @@ describe('Core CLI Tests - Save', () => {
 
     beforeEach(async () => {
         await resetToInitialState(true); // Pass true to skip re-saving deletions patch from setup
-                                        // as we want to test --save explicitly here.
+        // as we want to test --save explicitly here.
     });
 
     test('taylored --save correctly creates a patch from a branch (purely additive)', () => {
-        const BRANCH_SAVE_TEST = "save-test-branch-pure-add";
+        const BRANCH_SAVE_TEST = 'save-test-branch-pure-add';
         const PLUGIN_SAVE_TEST_NAME = `${BRANCH_SAVE_TEST}.taylored`;
         const PLUGIN_SAVE_TEST_FULL_PATH = path.join(TAYLORED_DIR_FULL_PATH, PLUGIN_SAVE_TEST_NAME);
-        const FILE_FOR_SAVE_TEST = "save_test_file.txt";
-        const FILE_FOR_SAVE_TEST_CONTENT = "Content for save test.\nLine 2 for save test.\n";
+        const FILE_FOR_SAVE_TEST = 'save_test_file.txt';
+        const FILE_FOR_SAVE_TEST_CONTENT = 'Content for save test.\nLine 2 for save test.\n';
         // MODIFIED_FILE_FOR_SAVE_TEST_CONTENT is removed as we are not modifying file1.txt on the branch
 
         try {
@@ -45,9 +45,8 @@ describe('Core CLI Tests - Save', () => {
 
             // 2. Go back to main
             execSync('git checkout main', execOptions);
-             // Ensure main is pristine for comparison (file1.txt should be INITIAL_FILE1_CONTENT from initialCommitHash)
+            // Ensure main is pristine for comparison (file1.txt should be INITIAL_FILE1_CONTENT from initialCommitHash)
             execSync(`git reset --hard ${initialCommitHash}`, execOptions);
-
 
             // 3. Run taylored --save
             execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_SAVE_TEST}`, execOptions);
@@ -59,8 +58,6 @@ describe('Core CLI Tests - Save', () => {
             expect(patchContent).not.toContain(`a/file1.txt b/file1.txt`); // Should not have changes for file1.txt
             expect(patchContent).toContain(`new file mode`);
             expect(patchContent).toContain(`a/${FILE_FOR_SAVE_TEST} b/${FILE_FOR_SAVE_TEST}`);
-
-
         } finally {
             // Clean up
             if (fs.existsSync(PLUGIN_SAVE_TEST_FULL_PATH)) {
@@ -68,17 +65,16 @@ describe('Core CLI Tests - Save', () => {
             }
             execSync(`git checkout main`, execOptions); // Ensure we are on main
             execSync(`git branch -D ${BRANCH_SAVE_TEST}`, execOptions);
-             // Reset file1.txt on main to its absolute initial state from setup
+            // Reset file1.txt on main to its absolute initial state from setup
             fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), INITIAL_FILE1_CONTENT);
             // Removed git add and commit, as resetToInitialState will handle file state.
-
         }
     });
 
     describe('Mixed Changes Save Test (Should Fail or Not Create Patch)', () => {
         // This test is moved from main.test.ts
         test('taylored --save with mixed add/delete in same file', () => {
-            const BRANCH_MIXED = "mixed-changes-branch";
+            const BRANCH_MIXED = 'mixed-changes-branch';
             const PLUGIN_MIXED_NAME = `${BRANCH_MIXED}.taylored`;
             const PLUGIN_MIXED_FULL_PATH = path.join(TAYLORED_DIR_FULL_PATH, PLUGIN_MIXED_NAME);
             let failed = false;
@@ -100,18 +96,16 @@ describe('Core CLI Tests - Save', () => {
                 execSync('git commit -m "Mixed changes to file1"', execOptions);
 
                 execSync('git checkout main', execOptions);
-                 // Ensure file1.txt is back to its original state on main for a clean diff
+                // Ensure file1.txt is back to its original state on main for a clean diff
                 fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), INITIAL_FILE1_CONTENT);
                 execSync(`git add file1.txt`, execOptions);
                 execSync(`git commit --allow-empty -m "Ensure file1 is initial on main for mixed test"`, execOptions);
-
 
                 execSync(`${TAYLORED_CMD_BASE} --save ${BRANCH_MIXED}`, execOptions);
                 // If execSync doesn't throw, the command succeeded.
                 // We expect it to fail or create an empty/problematic patch for "mixed" changes,
                 // depending on how taylored handles such diffs (e.g. if it uses --no-mixed).
                 // The original test checked for failure OR empty patch.
-
             } catch (error) {
                 failed = true; // Command threw an error, which is one expected outcome.
             } finally {
@@ -119,9 +113,9 @@ describe('Core CLI Tests - Save', () => {
                     execSync('git checkout main', execOptions); // Switch back to main before deleting branch
                     execSync(`git branch -D ${BRANCH_MIXED}`, execOptions);
                 }
-                 // Reset file1.txt on main to its absolute initial state from setup
+                // Reset file1.txt on main to its absolute initial state from setup
                 fs.writeFileSync(path.join(TEST_DIR_FULL_PATH, 'file1.txt'), INITIAL_FILE1_CONTENT);
-            // Removed git add and commit, as resetToInitialState will handle file state.
+                // Removed git add and commit, as resetToInitialState will handle file state.
             }
 
             // Assertions based on original test logic:

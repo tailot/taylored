@@ -39,11 +39,13 @@ describe('handleCreateTaysell', () => {
 
         jest.spyOn(console, 'log').mockImplementation();
         jest.spyOn(console, 'error').mockImplementation();
-        
+
         jest.mocked(fs.pathExists).mockImplementation(async (p) => p === mockFullTayloredPath || p === mockEnvPath);
         jest.mocked(fs.readFile).mockImplementation(async (p) => {
             if (p === mockEnvPath) {
-                return Object.entries(defaultEnvConfig).map(([key, value]) => `${key}=${value}`).join('\n');
+                return Object.entries(defaultEnvConfig)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join('\n');
             }
             if (p === mockFullTayloredPath) return 'patch content here';
             return '';
@@ -104,11 +106,11 @@ describe('handleCreateTaysell', () => {
             expect.objectContaining({
                 patchId: 'mock-uuid-v4', // Should also check this as it's part of the output
                 endpoints: expect.objectContaining({
-                    initiatePaymentUrl: 'http://test.com/pay/mock-uuid-v4' // Corrected fallback
+                    initiatePaymentUrl: 'http://test.com/pay/mock-uuid-v4', // Corrected fallback
                 }),
                 sellerInfo: expect.objectContaining({
-                    name: 'E2E Test Seller' // Corrected fallback
-                })
+                    name: 'E2E Test Seller', // Corrected fallback
+                }),
             }),
             { spaces: 2 }
         );

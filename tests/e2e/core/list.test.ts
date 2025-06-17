@@ -4,7 +4,7 @@ import {
     resetToInitialState,
     TAYLORED_CMD_BASE,
     execOptions,
-    PLUGIN_DELETIONS_NAME
+    PLUGIN_DELETIONS_NAME,
 } from './setup';
 import { execSync } from 'child_process';
 
@@ -22,7 +22,7 @@ describe('Core CLI Tests - List', () => {
     });
 
     test('taylored --list: lists saved patch files', () => {
-      const output = execSync(`${TAYLORED_CMD_BASE} --list`, execOptions).toString();
-      expect(output).toContain(PLUGIN_DELETIONS_NAME);
+        const output = execSync(`${TAYLORED_CMD_BASE} --list`, execOptions).toString();
+        expect(output).toContain(PLUGIN_DELETIONS_NAME);
     });
 });

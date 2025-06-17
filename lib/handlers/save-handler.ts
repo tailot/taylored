@@ -17,7 +17,9 @@ export async function handleSaveOperation(branchName: string, CWD: string): Prom
     try {
         await fsExtra.ensureDir(targetDirectoryPath);
     } catch (mkdirError: any) {
-        console.error(`CRITICAL ERROR: Failed to create directory '${targetDirectoryPath}'. Details: ${mkdirError.message}`);
+        console.error(
+            `CRITICAL ERROR: Failed to create directory '${targetDirectoryPath}'. Details: ${mkdirError.message}`
+        );
         throw mkdirError;
     }
 
@@ -28,11 +30,15 @@ export async function handleSaveOperation(branchName: string, CWD: string): Prom
             try {
                 await fs.writeFile(resolvedOutputFileName, diffResult.diffOutput);
             } catch (writeError: any) {
-                console.error(`CRITICAL ERROR: Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`);
+                console.error(
+                    `CRITICAL ERROR: Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`
+                );
                 throw writeError;
             }
         } else {
-            console.error(`CRITICAL ERROR: Diff output is unexpectedly undefined for branch '${branchName}' despite successful analysis.`);
+            console.error(
+                `CRITICAL ERROR: Diff output is unexpectedly undefined for branch '${branchName}' despite successful analysis.`
+            );
             throw new Error(`Undefined diff output for pure diff on branch '${branchName}'.`);
         }
     } else {
@@ -41,16 +47,27 @@ export async function handleSaveOperation(branchName: string, CWD: string): Prom
         } else {
             console.error(`ERROR: Taylored file '${resolvedOutputFileName}' was NOT generated.`);
             if (!diffResult.isPure) {
-                console.error(`Reason: The diff between "${branchName}" and HEAD contains a mix of content line additions and deletions.`);
+                console.error(
+                    `Reason: The diff between "${branchName}" and HEAD contains a mix of content line additions and deletions.`
+                );
                 console.error(`  Total lines added: ${diffResult.additions}`);
                 console.error(`  Total lines deleted: ${diffResult.deletions}`);
-                console.error("This script, for the --save operation, requires the diff to consist exclusively of additions or exclusively of deletions (of lines).");
+                console.error(
+                    'This script, for the --save operation, requires the diff to consist exclusively of additions or exclusively of deletions (of lines).'
+                );
             } else if (typeof diffResult.diffOutput === 'undefined') {
-                 console.error(`Reason: Failed to obtain diff output for branch '${branchName}'. This may be due to an invalid branch name or other git error.`);
+                console.error(
+                    `Reason: Failed to obtain diff output for branch '${branchName}'. This may be due to an invalid branch name or other git error.`
+                );
             } else {
-                console.error(`Reason: An unspecified error occurred during diff generation or analysis for branch '${branchName}'.`);
+                console.error(
+                    `Reason: An unspecified error occurred during diff generation or analysis for branch '${branchName}'.`
+                );
             }
         }
-        throw new Error(diffResult.errorMessage || `Failed to save taylored file for branch '${branchName}' due to purity or diff generation issues.`);
+        throw new Error(
+            diffResult.errorMessage ||
+                `Failed to save taylored file for branch '${branchName}' due to purity or diff generation issues.`
+        );
     }
 }

@@ -8,15 +8,38 @@ import { execSync } from 'child_process';
 import { TAYLORED_DIR_NAME } from './constants';
 
 /**
- * Handles apply, remove, verify-add, verify-remove operations using `git apply`.
- * This function is intended to be the core logic for applying/reverting patches.
+ * Handles core Taylored operations for applying, removing, and verifying patches
+ * by orchestrating `git apply` commands. This function is central to the
+ * `--add`, `--remove`, `--verify-add`, and `--verify-remove` CLI commands.
  *
- * @param tayloredFileNameWithExt The full name of the .taylored file, including the extension.
- * @param isVerify True if it's a verification (dry-run) operation (uses `git apply --check`).
- * @param isReverse True if the patch should be applied in reverse (for remove/verify-remove, uses `git apply -R`).
- * @param modeName A string representing the current mode (e.g., '--add', '--remove (invoked by offset)') for logging purposes.
- * @param CWD The current working directory, expected to be the root of the Git repository.
- * @throws Will throw an error if the file is not accessible or if `git apply` command fails.
+ * It constructs and executes a `git apply` command based on the provided parameters.
+ * Key `git apply` flags used include:
+ *  - `--check`: For verification operations (dry-run).
+ *  - `-R` (or `--reverse`): For remove/revert operations.
+ *  - `--verbose`: To provide detailed output during application.
+ *  - `--whitespace=fix`: To automatically fix whitespace issues when applying (not used in verify).
+ *  - `--reject`: To create .rej files for conflicting hunks, aiding in debugging.
+ *
+ * The function first checks for the existence and accessibility of the specified
+ * .taylored patch file before proceeding with the `git apply` command.
+ * For more details on the user-facing commands utilizing this logic, see DOCUMENTATION.md.
+ *
+ * @async
+ * @param {string} tayloredFileNameWithExt - The full name of the .taylored file,
+ *                                           including the extension (e.g., "myfeature.taylored").
+ * @param {boolean} isVerify - If true, performs a dry-run verification (`git apply --check`)
+ *                             instead of actually applying changes.
+ * @param {boolean} isReverse - If true, applies the patch in reverse (`git apply -R`),
+ *                              effectively undoing the patch.
+ * @param {string} modeName - A string identifying the calling command (e.g., "--add", "--remove").
+ *                            Used for logging and error messages.
+ * @param {string} CWD - The current working directory, which must be the root of a
+ *                       Git repository for `git apply` to function correctly.
+ * @returns {Promise<void>} A promise that resolves if the operation is successful.
+ * @throws {Error} Throws an error if the specified .taylored file is not found or
+ *                 is inaccessible (due to `fs.access` failure). Also re-throws errors
+ *                 from `execSync` if the `git apply` command itself fails (e.g., patch
+ *                 does not apply cleanly, non-zero exit code).
  */
 export async function handleApplyOperation(
     tayloredFileNameWithExt: string,

@@ -3,8 +3,26 @@ import * as path from 'path';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 
 /**
- * Handles the --list operation: lists all .taylored files.
- * @param CWD The current working directory (Git repository root).
+ * Implements the `taylored --list` command functionality.
+ *
+ * This function lists all Taylored patch files (files ending with `.taylored`)
+ * found within the `.taylored/` directory in the specified current working directory (CWD).
+ * It first checks for the existence and type of the `.taylored` directory.
+ * If the directory exists and contains .taylored files, their names are sorted
+ * alphabetically and printed to the console.
+ * Informational messages are provided if the directory is missing, not a directory,
+ * or contains no .taylored files.
+ *
+ * For more details on the `taylored --list` command, refer to `DOCUMENTATION.md`.
+ *
+ * @async
+ * @param {string} CWD - The current working directory, expected to be the root of a
+ *                       Git repository where Taylored operations are performed. The
+ *                       `.taylored/` directory is expected to be a direct child of CWD.
+ * @returns {Promise<void>} A promise that resolves when the listing operation is complete.
+ * @throws {Error} Throws an error if there's an issue accessing the `.taylored`
+ *                 directory (other than it not existing or not being a directory,
+ *                 which are handled gracefully) or if reading its contents fails.
  */
 export async function handleListOperation(CWD: string): Promise<void> {
     const tayloredDirPath = path.join(CWD, TAYLORED_DIR_NAME);

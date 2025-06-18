@@ -5,9 +5,33 @@ import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 import { getAndAnalyzeDiff } from '../utils';
 
 /**
- * Handles the --save operation: generates a .taylored file from a branch diff.
- * @param branchName The name of the branch to diff against HEAD.
- * @param CWD The current working directory (Git repository root).
+ * Implements the `taylored --save <branch_name>` command functionality.
+ *
+ * This function captures the difference between a specified Git branch and the current
+ * `HEAD`, then saves this diff as a `.taylored` patch file. A critical aspect of this
+ * operation is the **atomicity requirement**: the patch file is created only if the
+ * diff consists exclusively of line additions or exclusively of line deletions (or no changes).
+ * If the diff contains a mix of additions and deletions, the operation will fail,
+ * ensuring that Taylored patches represent clean, atomic changes.
+ *
+ * The generated patch file is named after the sanitized `branchName` and stored in
+ * the `.taylored/` directory within the `CWD`.
+ *
+ * For more details on the `taylored --save` command, refer to `DOCUMENTATION.md`.
+ *
+ * @async
+ * @param {string} branchName - The name of the Git branch to compare against HEAD.
+ *                              This name will be sanitized for use in the output filename.
+ * @param {string} CWD - The current working directory, which must be the root of a
+ *                       Git repository for the diff operation to work correctly.
+ * @returns {Promise<void>} A promise that resolves if the patch file is saved successfully.
+ * @throws {Error} Throws an error if:
+ *                 - The `.taylored` directory cannot be created.
+ *                 - The `git diff` command fails (e.g., invalid branch name).
+ *                 - The diff analysis fails.
+ *                 - The diff is not "pure" (contains mixed additions and deletions).
+ *                 - The diff output is unexpectedly undefined.
+ *                 - Writing the patch file fails.
  */
 export async function handleSaveOperation(branchName: string, CWD: string): Promise<void> {
     const outputFileName = `${branchName.replace(/[/\\]/g, '-')}${TAYLORED_FILE_EXTENSION}`;

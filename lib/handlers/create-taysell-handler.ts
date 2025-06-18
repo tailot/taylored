@@ -10,6 +10,18 @@ import { encryptAES256GCM } from '../taysell-utils'; // Corrected path
 import { TAYLORED_FILE_EXTENSION } from '../constants'; // Assuming this exists for .taylored extension
 
 // Helper function to read .env file
+/**
+ * Reads a simple .env file and parses its key-value pairs.
+ *
+ * This function is a basic parser that assumes keys and values are separated by '='.
+ * It handles lines starting with '#' as comments and ignores empty lines.
+ *
+ * @async
+ * @param {string} envPath - The path to the .env file.
+ * @returns {Promise<Record<string, string>>} A promise that resolves to an object
+ *          containing the key-value pairs from the .env file. Returns an empty
+ *          object if the file does not exist.
+ */
 async function readEnvFile(envPath: string): Promise<Record<string, string>> {
     if (!await fs.pathExists(envPath)) {
         return {};
@@ -25,6 +37,52 @@ async function readEnvFile(envPath: string): Promise<Record<string, string>> {
     return envConfig;
 }
 
+/**
+ * Implements the `taylored create-taysell <file.taylored> [--price <price>] [--desc "description"]` command.
+ *
+ * This function takes an existing `.taylored` patch file and prepares it for commercial
+ * distribution through the Taysell system. The process involves:
+ *
+ * 1.  **Validation**: Checks if the input `tayloredFilePath` is a valid `.taylored` file and exists.
+ * 2.  **Backend Configuration**: Attempts to read `SERVER_BASE_URL` and `PATCH_ENCRYPTION_KEY`
+ *     from `taysell-server/.env` located in the `cwd`. If not found, it prompts the user for them.
+ * 3.  **Interactive Prompts (via Inquirer)**: Collects metadata for the commercial patch.
+ *     This includes:
+ *     - Commercial name for the patch.
+ *     - Description (uses `descriptionInput` if provided).
+ *     - Unique Patch ID (can be auto-generated using UUIDv4 or taken from environment/input).
+ *     - Required `taylored` CLI version.
+ *     - Price (uses `priceInput` if provided).
+ *     - Currency code (e.g., USD).
+ *     - Seller information (name, website, contact email), potentially pre-filled from `.env`.
+ *     In test environments (`process.env.JEST_WORKER_ID` set), prompts are skipped, and
+ *     default/test values are used.
+ * 4.  **Patch Encryption**: Reads the content of the input `.taylored` file and encrypts it
+ *     using AES-256-GCM with the `PATCH_ENCRYPTION_KEY`. The encrypted content is saved
+ *     to a new file named `<original_basename>.taylored.encrypted`.
+ * 5.  **.taysell File Generation**: Creates a JSON metadata file (e.g., `<original_basename>.taysell`).
+ *     This file contains all commercial details, seller information, and constructed API
+ *     endpoints (`initiatePaymentUrl`, `getPatchUrl`) based on the `SERVER_BASE_URL` and `patchId`.
+ * 6.  **User Instructions**: Informs the user about the created encrypted patch and `.taysell`
+ *     metadata file, advising them to upload the encrypted patch to their Taysell server's
+ *     `patches/` directory and distribute the `.taysell` file to buyers.
+ *
+ * For more information on this command and the Taysell system, refer to `DOCUMENTATION.md`.
+ *
+ * @async
+ * @param {string} tayloredFilePath - Path to the source `.taylored` patch file to be packaged.
+ * @param {string | undefined} priceInput - Optional price provided via command-line argument.
+ * @param {string | undefined} descriptionInput - Optional description provided via command-line argument.
+ * @param {string} cwd - The current working directory. Used to resolve file paths and locate
+ *                       the `taysell-server/.env` file.
+ * @returns {Promise<void>} A promise that resolves when the Taysell package creation is complete.
+ * @throws {Error} The function may terminate the process with `process.exit(1)` if critical
+ *                 errors occur, such as:
+ *                 - Invalid input file (not a .taylored file, or does not exist).
+ *                 - Failure to read the patch file or write encrypted/metadata files.
+ *                 It handles errors by logging to console and exiting, rather than throwing
+ *                 to be caught by the main CLI handler.
+ */
 export async function handleCreateTaysell(
     tayloredFilePath: string,
     priceInput: string | undefined,

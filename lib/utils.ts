@@ -3,9 +3,17 @@ import * as parseDiffModule from 'parse-diff';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
 
 /**
- * Resolves the taylored file name by appending the default extension if not present.
- * @param userInputFileName The file name input by the user.
- * @returns The resolved file name with the extension.
+ * Ensures a Taylored filename ends with the standard .taylored extension.
+ *
+ * If the provided filename already has the correct extension, it's returned as is.
+ * Otherwise, the .taylored extension is appended. This helps standardize
+ * Taylored file naming and retrieval.
+ *
+ * @param userInputFileName The filename input by the user, potentially without an extension.
+ * @returns The fully resolved Taylored filename including the .taylored extension.
+ * @example
+ * resolveTayloredFileName("my_patch") // returns "my_patch.taylored"
+ * resolveTayloredFileName("feature.taylored") // returns "feature.taylored"
  */
 export function resolveTayloredFileName(userInputFileName: string): string {
     if (userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
@@ -15,9 +23,21 @@ export function resolveTayloredFileName(userInputFileName: string): string {
 }
 
 /**
- * Prints usage information and exits the process.
- * @param message An optional error message to display.
- * @param printFullUsage If true, prints the full command list.
+ * Prints usage information or an error message to the console and exits the process.
+ *
+ * This function is typically called when the CLI is used incorrectly (e.g., wrong arguments)
+ * or when a user requests help (though full help might be triggered by `printFullUsage`).
+ * It displays a general error message if provided, followed by the command usage summary.
+ * The process exits with code 1 if an error message is provided, and code 0 otherwise (graceful exit).
+ *
+ * The usage information includes core patching commands and Taysell monetization commands,
+ * giving users a quick reference.
+ *
+ * @param message An optional error message to display before the usage information.
+ *                If provided, the process will exit with a status code of 1.
+ * @param printFullUsage If true, or if a message is provided, the full usage text is printed.
+ *                       Defaults to false.
+ * @returns {void} This function does not return a value as it exits the process.
  */
 export function printUsageAndExit(message?: string, printFullUsage: boolean = false): void {
     if (message) {
@@ -55,9 +75,20 @@ Taysell Monetization Commands:`);
 
 
 /**
- * Analyzes diff content string to determine additions, deletions, and purity.
- * @param diffOutput The string output from a diff command.
- * @returns An object containing additions, deletions, purity, success status, and an optional error message.
+ * Parses git diff output to count additions and deletions and determine if the diff is "pure".
+ *
+ * A diff is considered "pure" if it contains only additions, only deletions, or no changes at all.
+ * Mixed additions and deletions are not pure. This function uses the `parse-diff` library
+ * to interpret the diff string.
+ *
+ * @param diffOutput The string output from a `git diff` command. Can be an empty string for no changes.
+ *                   Undefined input will result in a failure status.
+ * @returns An object detailing:
+ *          - `additions`: The total number of lines added.
+ *          - `deletions`: The total number of lines deleted.
+ *          - `isPure`: Boolean indicating if the diff is purely additive, purely deletive, or empty.
+ *          - `success`: Boolean indicating if the parsing and analysis were successful.
+ *          - `errorMessage`: An optional message if parsing failed or input was invalid.
  */
 export function analyzeDiffContent(diffOutput: string | undefined): { additions: number; deletions: number; isPure: boolean; success: boolean; errorMessage?: string } {
     let additions = 0;
@@ -91,10 +122,24 @@ export function analyzeDiffContent(diffOutput: string | undefined): { additions:
 }
 
 /**
- * Analyzes git diff output to determine if it's "pure" (all additions or all deletions).
- * @param branchName The branch to diff against HEAD.
- * @param CWD The current working directory (Git repository root).
- * @returns An object containing diff output, counts, purity, and success status.
+ * Executes a `git diff HEAD <branchName>` command and analyzes its output for purity.
+ *
+ * This function captures the diff between the current HEAD and a specified branch.
+ * It then uses `analyzeDiffContent` to count additions/deletions and determine
+ * if the diff is pure (all additions or all deletions).
+ * Handles cases where `git diff` itself might exit with a non-zero status (e.g., status 1
+ * when differences are found, which is normal for diffing).
+ *
+ * @param branchName The name of the branch to compare against the current HEAD.
+ *                   The branch name is sanitized for use in the shell command.
+ * @param CWD The current working directory, expected to be the root of a Git repository.
+ * @returns An object containing:
+ *          - `diffOutput`: The raw string output from the `git diff` command. Undefined if the command failed critically.
+ *          - `additions`: Total lines added.
+ *          - `deletions`: Total lines deleted.
+ *          - `isPure`: Boolean indicating if the diff is pure.
+ *          - `errorMessage`: An optional error message if the command or analysis failed.
+ *          - `success`: Boolean indicating overall success of both fetching and analyzing the diff.
  */
 export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput?: string; additions: number; deletions: number; isPure: boolean; errorMessage?: string; success: boolean } {
     const command = `git diff HEAD "${branchName.replace(/"/g, '\\"')}"`; // Basic quoting for branch name
@@ -144,6 +189,21 @@ export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput
     return { diffOutput, additions, deletions, isPure, errorMessage, success: commandSuccess };
 }
 
+/**
+ * Attempts to extract a commit-like message from the header of a patch file content.
+ *
+ * It primarily looks for a "Subject:" line, similar to `git format-patch` output,
+ * and cleans common prefixes like "[PATCH]".
+ * If no "Subject:" line is found, it uses a heuristic to find potential message lines
+ * from the beginning of the patch, avoiding common Git header lines and diff content.
+ *
+ * This is useful for automatically deriving a description or name for a patch
+ * based on its content.
+ *
+ * @param patchContent The full string content of a .taylored patch file.
+ * @returns The extracted message string, or null if no suitable message could be found
+ *          or if the input is null/undefined.
+ */
 export function extractMessageFromPatch(patchContent: string | null | undefined): string | null {
     if (!patchContent || typeof patchContent !== 'string') {
         return null;

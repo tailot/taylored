@@ -24,7 +24,33 @@ import { handleBuyCommand } from './lib/handlers/buy-handler';
 // </taylored>
 
 /**
- * Main function to parse arguments and dispatch to handlers.
+ * Main command-line interface for the Taylored application.
+ *
+ * This function serves as the entry point for the Taylored CLI. It parses command-line
+ * arguments provided via `process.argv`, determines the requested operation (mode),
+ * and then dispatches to the appropriate handler function.
+ *
+ * Operations include saving changes as patches, applying or removing patches,
+ * listing available patches, managing patch offsets, automatically generating patches
+ * from marked code blocks, and Taysell commercial patch operations like setting up
+ * a backend, creating sellable patches, and buying patches.
+ *
+ * For detailed information on each command, its arguments, and usage, please refer
+ * to DOCUMENTATION.md.
+ *
+ * The function performs an initial check for the presence of a `.git` directory
+ * in the current working directory for commands that operate on Git history or
+ * require a Git repository context (e.g., --save, --add, --list, --offset, --automatic).
+ *
+ * It handles argument validation for each command and calls utility functions
+ * like `printUsageAndExit` for errors or help requests.
+ *
+ * @async
+ * @returns {Promise<void>} A promise that resolves when the command processing is complete,
+ *                          or rejects if an unhandled error occurs.
+ * @throws {Error} Throws an error if critical issues prevent command execution,
+ *                 though most specific errors are handled by calling `printUsageAndExit`
+ *                 and exiting the process.
  */
 async function main(): Promise<void> {
     const rawArgs: string[] = process.argv.slice(2);

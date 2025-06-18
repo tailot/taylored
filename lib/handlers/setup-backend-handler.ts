@@ -4,6 +4,51 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import inquirer from 'inquirer'; // Importa inquirer
 
+/**
+ * Implements the `taylored setup-backend` command functionality.
+ *
+ * This function guides the user through setting up the "Backend-in-a-Box" server,
+ * which is used for Taysell, the commercial patch distribution system. The setup
+ * process involves:
+ *
+ * 1. **Template Copying**: Locates the `backend-in-a-box` template within the Taylored
+ *    installation and copies it to a new `taysell-server/` directory in the current
+ *    working directory (`CWD`). If `taysell-server/` already exists, it prompts the
+ *    user for confirmation to overwrite (unless in a test environment).
+ * 2. **Interactive Configuration (via Inquirer)**: Prompts the user for essential
+ *    configuration details required for the backend server. These include:
+ *    - PayPal environment (`sandbox` or `production`).
+ *    - PayPal Client ID.
+ *    - PayPal Client Secret.
+ *    - PayPal Webhook ID.
+ *    - The public URL where the Taysell server will be accessible.
+ *    - A strong encryption key (at least 32 characters) for securing patches.
+ *    - The local port number for the backend server.
+ *    In test environments (when `process.env.JEST_WORKER_ID` is set), it bypasses
+ *    prompts and uses predefined test values.
+ * 3. **.env File Generation**: Creates a `.env` file in the `taysell-server/` directory,
+ *    populating it with the configuration values collected from the user (or test defaults).
+ *    This file is used by Docker Compose and the Node.js server to configure the backend.
+ * 4. **User Instructions**: Prints instructions to the console on how to build and run
+ *    the newly configured backend server using Docker Compose (recommended) and provides
+ *    guidance for next steps.
+ *
+ * For more details on the `taylored setup-backend` command and the "Backend-in-a-Box"
+ * features, refer to `DOCUMENTATION.md`.
+ *
+ * @async
+ * @param {string} cwd - The current working directory where the `taysell-server/`
+ *                       directory will be created.
+ * @returns {Promise<void>} A promise that resolves when the setup process is complete
+ *                          or if the user aborts the setup.
+ * @throws {Error} The function may terminate the process with `process.exit(1)` if
+ *                 critical errors occur, such as:
+ *                 - Failure to find the backend template source.
+ *                 - Inability to copy template files.
+ *                 - Failure to write the `.env` file.
+ *                 It doesn't explicitly throw errors to be caught by the caller in `index.ts`
+ *                 but rather handles them by exiting.
+ */
 export async function handleSetupBackend(cwd: string): Promise<void> {
     console.log('Starting Taysell backend setup...');
 

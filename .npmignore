@@ -10,3 +10,4 @@ tsconfig.json
 jest.config.js
 *.ts
 DOCUMENTATION.md
+SECURITY.md

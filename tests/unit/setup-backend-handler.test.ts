@@ -142,6 +142,7 @@ describe('handleSetupBackend', () => {
             paypalClientId: 'customId',
             paypalClientSecret: 'customSecret',
             serverPublicUrl: 'https://mycustom.url',
+            paypalWebhookId: 'customWebhookId', // Added missing mock value
             patchEncryptionKey: 'myCustomKeyForEncryption123456789',
             serverPort: '5000',
         };
@@ -161,6 +162,7 @@ PORT=${mockAnswers.serverPort}
 PAYPAL_ENVIRONMENT=${mockAnswers.paypalEnv}
 PAYPAL_CLIENT_ID=${mockAnswers.paypalClientId}
 PAYPAL_CLIENT_SECRET=${mockAnswers.paypalClientSecret}
+PAYPAL_WEBHOOK_ID=${mockAnswers.paypalWebhookId}
 
 # Patch Encryption
 PATCH_ENCRYPTION_KEY=${mockAnswers.patchEncryptionKey}

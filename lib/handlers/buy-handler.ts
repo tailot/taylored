@@ -30,7 +30,7 @@ async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVer
                     return { purchaseToken: data.purchaseToken, patchId: data.patchId };
                 }
             } else if (response.statusCode === 404) {
-                console.error('CLI: Purchase session not found (404). Stopping polling.');
+                console.error('CLI: Purchase session not found (404). Please waiting!');
                 throw new Error('Purchase session not found.');
             }
         } catch (error: any) {

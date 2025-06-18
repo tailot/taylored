@@ -2,19 +2,15 @@
 import * as child_process from 'child_process';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import inquirer from 'inquirer'; // Import inquirer
+import inquirer from 'inquirer'; // Importa inquirer
 
 export async function handleSetupBackend(cwd: string): Promise<void> {
     console.log('Starting Taysell backend setup...');
 
     const backendDestPath = path.join(cwd, 'taysell-server');
 
-    // 2. Copy "Backend-in-a-Box" template files
+    // 2. Copia i file del template "Backend-in-a-Box"
     try {
-        // CORRECTED LOGIC: The path logic is now unified.
-        // When installed, __dirname is inside 'dist/lib/handlers', so '../../templates' correctly points to 'dist/templates'.
-        // When running in dev with ts-node, __dirname is 'lib/handlers', so '../../templates' correctly points to the root 'templates' dir.
-        // This relies on the 'postbuild' script placing templates inside 'dist'.
         const templateSourcePath = path.resolve(
             __dirname,
             '../../templates/backend-in-a-box'
@@ -53,13 +49,14 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
 
     let answers;
 
-    // 3. Interactive wizard for configuration
+    // 3. Wizard interattivo per la configurazione
     if (process.env.JEST_WORKER_ID) {
         console.log('Running in test environment, using default config for .env');
         answers = {
             paypalEnv: 'sandbox',
             paypalClientId: 'test-client-id',
             paypalClientSecret: 'test-client-secret',
+            paypalWebhookId: 'test-webhook-id', // Aggiunto per i test
             serverPublicUrl: 'https://test.example.com',
             patchEncryptionKey: 'test-encryption-key-that-is-32-characters-long',
             serverPort: '3001',
@@ -83,6 +80,13 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
                 name: 'paypalClientSecret',
                 message: 'Enter your PayPal Client Secret:',
                 validate: input => input.trim() !== '' || 'Client Secret cannot be empty.',
+            },
+            // Aggiunto prompt per l'ID Webhook
+            {
+                type: 'password',
+                name: 'paypalWebhookId',
+                message: 'Enter your PayPal Webhook ID:',
+                validate: input => input.trim() !== '' || 'Webhook ID cannot be empty.',
             },
             {
                 type: 'input',
@@ -120,7 +124,7 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
         ]);
     }
 
-    // 4. Write to .env file
+    // 4. Scrivi nel file .env
     const envContent = `
 # Node.js Environment
 NODE_ENV=production
@@ -133,6 +137,7 @@ PORT=${answers.serverPort}
 PAYPAL_ENVIRONMENT=${answers.paypalEnv}
 PAYPAL_CLIENT_ID=${answers.paypalClientId}
 PAYPAL_CLIENT_SECRET=${answers.paypalClientSecret}
+PAYPAL_WEBHOOK_ID=${answers.paypalWebhookId}
 
 # Patch Encryption
 PATCH_ENCRYPTION_KEY=${answers.patchEncryptionKey}
@@ -149,18 +154,18 @@ DB_PATH=./db/taysell.sqlite
         process.exit(1);
     }
 
-    // 5. Provide deployment instructions
+    // 5. Fornisci istruzioni per il deployment
     if (!process.env.JEST_WORKER_ID) {
-        console.log('\n--- Backend Setup Complete ---');
+        console.log('\\n--- Backend Setup Complete ---');
         console.log(`Configuration written to ${envPath}`);
         console.log(`Backend server files are in: ${backendDestPath}`);
-        console.log('\nNext Steps:');
+        console.log('\\nNext Steps:');
         console.log('1. Navigate to the backend directory:');
         console.log(`     cd ${path.relative(cwd, backendDestPath) || '.'}`);
         console.log('2. Build and run the backend using Docker Compose (recommended) or manually:');
         console.log('     docker-compose up --build -d  (for Docker)');
         console.log(`3. Your Taysell backend should be running and accessible via ${answers.serverPublicUrl} (if it maps to localhost:${answers.serverPort} or your server setup).`);
         console.log('   Check Docker logs if you encounter issues: docker-compose logs -f');
-        console.log('\nFor more details, refer to the "Backend-in-a-Box" documentation (included in taysell-server).');
+        console.log('\\nFor more details, refer to the "Backend-in-a-Box" documentation (included in taysell-server).');
     }
 }

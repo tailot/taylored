@@ -172,6 +172,27 @@ export async function handleBuyCommand(
             console.log(`Purchase and application of patch '${metadata.name}' completed.`);
         }
     } catch (error: any) {
-        printUsageAndExit(`CRITICAL ERROR: Failed to retrieve patch. Details: ${error.message}`);
+        // --- Enhanced Error Handling for Download Failure ---
+        console.error("\n--- Payment Succeeded, Download Failed ---");
+        console.error("An error occurred while attempting to download the patch after your payment was processed.");
+        console.error("Please contact the seller for assistance.\n");
+
+        const sellerContact = taysellData.sellerInfo.contact;
+        const patchName = taysellData.metadata.name;
+
+        console.error(`Seller Contact: ${sellerContact}\n`);
+        console.error("Please provide them with the following information:\n");
+
+        const subject = `Download issue for Taylored purchase: "${patchName}"`;
+        const body = `Hello,\n\nI recently purchased the patch "${patchName}" (Patch ID: ${patchId}) and my payment was successful.\nHowever, the download failed.\n\nMy Purchase Token is: ${purchaseToken}\n\nPlease assist me in obtaining the patch.\n\nThank you.`;
+
+        console.error("--- Pre-formatted Email ---");
+        console.error(`To: ${sellerContact}`);
+        console.error(`Subject: ${subject}\n`);
+        console.error("Body:\n");
+        console.error(body);
+        console.error("\n---------------------------\n");
+        console.error(`CRITICAL ERROR: Failed to retrieve patch. Details: ${error.message}`);
+        process.exit(1);
     }
 }

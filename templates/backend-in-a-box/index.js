@@ -17,7 +17,7 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 16;
 const TAG_LENGTH = 16;
 const KEY_LENGTH = 32; // AES-256
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 310000;
 
 /**
  * Decrypts text encrypted with AES-256-GCM.
@@ -48,15 +48,33 @@ function decryptAES256GCM(encryptedText, passwordKey) {
 // Setup PayPal environment
 const clientId = process.env.PAYPAL_CLIENT_ID;
 const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+const webhookId = process.env.PAYPAL_WEBHOOK_ID;
 
-if (!clientId || !clientSecret) {
-    console.error("CRITICAL ERROR: PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET environment variables are not defined.");
-    console.error("These variables are required for PayPal integration.");
+if (!clientId || !clientSecret || !webhookId) {
+    console.error("CRITICAL ERROR: PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, and PAYPAL_WEBHOOK_ID environment variables are not defined.");
+    console.error("These variables are required for PayPal integration and webhook verification.");
     console.error("Without them, payment functionalities will not operate correctly.");
 }
 
 const environment = new paypal.core.SandboxEnvironment(clientId, clientSecret);
 const client = new paypal.core.PayPalHttpClient(environment);
+
+// Middleware to capture raw body
+app.use((req, res, next) => {
+    if (req.originalUrl === '/paypal/webhook') { // Only for PayPal webhook route
+        let data = '';
+        req.setEncoding('utf8');
+        req.on('data', chunk => {
+            data += chunk;
+        });
+        req.on('end', () => {
+            req.rawBody = data;
+            next();
+        });
+    } else {
+        next();
+    }
+});
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -84,7 +102,8 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
         paypal_order_id TEXT UNIQUE,
         status TEXT NOT NULL,
         cli_session_id TEXT UNIQUE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        token_used_at DATETIME DEFAULT NULL
     )`, (err) => {
         if (err) {
             console.error("Error creating 'purchases' table:", err.message);
@@ -159,27 +178,93 @@ app.get('/pay/:patchId', async (req, res) => {
 });
 
 app.post('/paypal/webhook', async (req, res) => {
-    const webhookEvent = req.body;
-    if (webhookEvent.event_type === 'CHECKOUT.ORDER.APPROVED' || webhookEvent.event_type === 'CHECKOUT.ORDER.COMPLETED') {
-        const orderID = webhookEvent.resource.id;
-        const purchaseToken = crypto.randomBytes(16).toString('hex');
-        db.run(`UPDATE purchases SET status = 'COMPLETED', purchase_token = ? WHERE paypal_order_id = ?`,
-            [purchaseToken, orderID],
-            function(err) {
+    const transmissionId = req.headers['paypal-transmission-id'];
+    const transmissionTime = req.headers['paypal-transmission-time'];
+    const transmissionSig = req.headers['paypal-transmission-sig'];
+    const certUrl = req.headers['paypal-cert-url'];
+    const authAlgo = req.headers['paypal-auth-algo'];
+    const requestBody = req.rawBody || JSON.stringify(req.body); // PayPal SDK requires the raw body
+
+    try {
+        // Note: Accessing webhooks directly from the paypal object as per documentation
+        const { verified, event: verifiedEvent } = await paypal.webhooks.Webhooks.verifyAndGetWebhookEvent(
+            transmissionId,
+            transmissionTime,
+            transmissionSig,
+            certUrl,
+            webhookId, // PAYPAL_WEBHOOK_ID from env
+            requestBody,
+            authAlgo
+        );
+
+        if (!verified) {
+            console.error("Webhook verification failed.");
+            return res.status(403).send("Webhook verification failed.");
+        }
+
+        if (verifiedEvent.event_type === 'CHECKOUT.ORDER.APPROVED') {
+            const orderID = verifiedEvent.resource.id;
+            // Check current status before updating
+            db.get(`SELECT status FROM purchases WHERE paypal_order_id = ?`, [orderID], (err, row) => {
                 if (err) {
-                    console.error(`Error updating purchase status for PayPal order ${orderID}:`, err.message);
+                    console.error(`Error fetching purchase status for PayPal order ${orderID}:`, err.message);
                     return res.sendStatus(500);
                 }
-                if (this.changes === 0) {
-                    console.warn(`No purchase found or updated for PayPal order ${orderID}. The order may not exist or may have already been processed.`);
-                    return res.sendStatus(404);
+                if (row && row.status === 'COMPLETED') {
+                    console.log(`Order ${orderID} is already marked as COMPLETED. No action taken.`);
+                    return res.sendStatus(200); // Or 204 No Content
                 }
-                console.log(`Purchase completed and token generated for PayPal order ${orderID}. Token: ${purchaseToken}`);
-                res.sendStatus(200);
+
+                const purchaseToken = crypto.randomBytes(16).toString('hex');
+                db.run(`UPDATE purchases SET status = 'COMPLETED', purchase_token = ? WHERE paypal_order_id = ? AND status != 'COMPLETED'`,
+                    [purchaseToken, orderID],
+                    function(updateErr) {
+                        if (updateErr) {
+                            console.error(`Error updating purchase status for PayPal order ${orderID}:`, updateErr.message);
+                            return res.sendStatus(500);
+                        }
+                        if (this.changes === 0) {
+                            console.warn(`No purchase found or updated for PayPal order ${orderID}. The order may not exist or was already processed.`);
+                            // It's possible it was already completed, so sending 200 is okay if the goal is idempotency.
+                            // If it must be found and not completed, then 404 might be more appropriate.
+                            // Given the pre-check, this path might indicate a race condition or an issue.
+                            return res.sendStatus(200); // Adjusted from 404 as status check is now above
+                        }
+                        console.log(`Purchase COMPLETED (from APPROVED) and token generated for PayPal order ${orderID}. Token: ${purchaseToken}`);
+                        res.sendStatus(200);
+                    });
             });
-    } else {
-        console.log(`Unhandled webhook event received: ${webhookEvent.event_type}`);
-        res.sendStatus(200);
+        } else if (verifiedEvent.event_type === 'CHECKOUT.ORDER.COMPLETED') {
+            const orderID = verifiedEvent.resource.id;
+            const purchaseToken = crypto.randomBytes(16).toString('hex');
+            // This path assumes CHECKOUT.ORDER.COMPLETED means we should finalize,
+            // potentially overwriting if it was APPROVED but not yet tokenized by that path.
+            // Or, if it's a direct COMPLETED event.
+            db.run(`UPDATE purchases SET status = 'COMPLETED', purchase_token = ? WHERE paypal_order_id = ?`,
+                [purchaseToken, orderID], // Consider adding AND status != 'COMPLETED' if needed, though COMPLETED event should be final.
+                function(err) {
+                    if (err) {
+                        console.error(`Error updating purchase status for PayPal order ${orderID} (on COMPLETED event):`, err.message);
+                        return res.sendStatus(500);
+                    }
+                    if (this.changes === 0) {
+                        // This could happen if the order was already processed by an APPROVED event or doesn't exist
+                        console.warn(`No purchase found or updated for PayPal order ${orderID} on COMPLETED event. May have been processed or not exist.`);
+                         return res.sendStatus(200); // Or 404 if it must exist
+                    }
+                    console.log(`Purchase COMPLETED (from COMPLETED event) and token generated for PayPal order ${orderID}. Token: ${purchaseToken}`);
+                    res.sendStatus(200);
+                });
+        } else {
+            console.log(`Unhandled webhook event received: ${verifiedEvent.event_type}`);
+            res.sendStatus(200);
+        }
+    } catch (err) {
+        console.error("Error processing PayPal webhook:", err.message, err.stack);
+        if (err.name === 'WEBHOOK_SIGNATURE_VERIFICATION_FAILED') {
+             return res.status(403).send('Webhook signature verification failed.');
+        }
+        res.status(500).send('Error processing webhook');
     }
 });
 
@@ -230,7 +315,7 @@ app.post('/get-patch', async (req, res) => {
         return res.status(500).json({ error: "Server configuration error." });
     }
 
-    db.get(`SELECT * FROM purchases WHERE patch_id = ? AND purchase_token = ? AND status = 'COMPLETED'`,
+    db.get(`SELECT id, patch_id, purchase_token, status, token_used_at FROM purchases WHERE patch_id = ? AND purchase_token = ? AND status = 'COMPLETED'`,
         [patchId, purchaseToken],
         async (err, row) => {
             if (err) {
@@ -240,13 +325,33 @@ app.post('/get-patch', async (req, res) => {
             if (!row) {
                 return res.status(401).json({ error: "Invalid or unauthorized purchase token." });
             }
+            if (row.token_used_at) {
+                console.warn(`Attempt to reuse token for purchase ID ${row.id} (Patch ${patchId}). Token already used at ${row.token_used_at}.`);
+                return res.status(403).json({ error: "Purchase token has already been used." });
+            }
 
             const encryptedFilePath = path.join(__dirname, 'patches', `${patchId}.taylored.enc`);
             try {
                 const encryptedContent = await fs.readFile(encryptedFilePath, 'utf-8');
                 const decryptedContent = decryptAES256GCM(encryptedContent, encryptionKey);
-                res.setHeader('Content-Type', 'text/plain');
-                res.status(200).send(decryptedContent);
+
+                // Mark token as used before sending content
+                db.run(`UPDATE purchases SET token_used_at = CURRENT_TIMESTAMP WHERE id = ?`, [row.id], function(updateErr) {
+                    if (updateErr) {
+                        console.error(`Failed to mark token as used for purchase ID ${row.id}:`, updateErr.message);
+                        // Decide if we should still send the content or return an error.
+                        // For now, let's assume if we can't mark it, we shouldn't send it to be safe.
+                        return res.status(500).json({ error: "Server error processing request." });
+                    }
+                    if (this.changes === 0) {
+                        // This case should ideally not be reached if the initial SELECT worked.
+                        console.error(`Failed to update token_used_at: No rows updated for purchase ID ${row.id}.`);
+                        return res.status(500).json({ error: "Failed to finalize purchase." });
+                    }
+                    console.log(`Token for purchase ID ${row.id} (Patch ${patchId}) marked as used.`);
+                    res.setHeader('Content-Type', 'text/plain');
+                    res.status(200).send(decryptedContent);
+                });
             } catch (error) {
                 if (error.code === 'ENOENT') {
                     console.error(`Encrypted patch file not found at: ${encryptedFilePath}`, error);
@@ -266,8 +371,8 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
     console.log(`Server base URL: ${SERVER_BASE_URL}`);
-    if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
-        console.warn("WARNING: PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET are not set. PayPal functionality will be unavailable.");
+    if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET || !process.env.PAYPAL_WEBHOOK_ID) {
+        console.warn("WARNING: PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET or PAYPAL_WEBHOOK_ID are not set. PayPal functionality will be unavailable or insecure.");
     }
 });
 

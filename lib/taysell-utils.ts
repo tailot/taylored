@@ -9,7 +9,7 @@ const IV_LENGTH = 16; // For GCM, 12 is recommended, but 16 is also common. Node
 const SALT_LENGTH = 16;
 const TAG_LENGTH = 16;
 const KEY_LENGTH = 32; // AES-256
-const PBKDF2_ITERATIONS = 100000; // OWASP recommended minimum
+const PBKDF2_ITERATIONS = 310000; // OWASP recommended minimum
 
 /**
  * Encrypts text using AES-256-GCM.

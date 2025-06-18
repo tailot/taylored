@@ -11,6 +11,8 @@ import inquirer from 'inquirer';
 async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVerify: string, timeoutMs: number = 600000, intervalMs: number = 2500): Promise<{ patchId: string; purchaseToken: string }> {
     const startTime = Date.now();
     console.log(`CLI: Starting polling for purchase token for session ${cliSessionId}. Timeout: ${timeoutMs / 1000}s.`);
+    let lastWarningTime = 0;
+    const WARNING_INTERVAL = 15000; // ms, to avoid spamming warnings
 
     while (Date.now() - startTime < timeoutMs) {
         try {
@@ -20,26 +22,104 @@ async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVer
                     let data = '';
                     res.on('data', (chunk) => data += chunk);
                     res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
-                }).on('error', (err) => reject(err));
+                }).on('error', (err) => reject(err)); // Network errors will be caught by the outer try-catch
             });
 
             if (response.statusCode === 200) {
-                const data = JSON.parse(response.body);
+                const data = JSON.parse(response.body); // JSON parse errors will be caught by outer try-catch
                 if (data.purchaseToken && data.patchId && data.patchId === patchIdToVerify) {
                     console.log('CLI: Purchase token and verified patch ID received successfully.');
                     return { purchaseToken: data.purchaseToken, patchId: data.patchId };
+                } else {
+                    // Successful response, but unexpected data (e.g., missing token, wrong patchId)
+                    if (Date.now() - lastWarningTime > WARNING_INTERVAL) {
+                        console.warn(`CLI: Server responded successfully (200) but with unexpected data structure at ${fullUrl}. Retrying...`);
+                        lastWarningTime = Date.now();
+                    }
                 }
             } else if (response.statusCode === 404) {
-                console.error('CLI: Purchase session not found (404). Please waiting!');
-                throw new Error('Purchase session not found.');
+                console.error(`CLI: Purchase session not found (404) at ${fullUrl}. This may mean the session expired or was invalid.`);
+                throw new Error('Purchase session not found (404).'); // Specific error for 404
+            } else if (response.statusCode !== undefined && response.statusCode > 405) {
+                // Server errors (5xx) or other client errors (>405 and not 404)
+                // These are considered terminal for the polling process by this client.
+                const errorMessage = `Server error during polling: Status ${response.statusCode}`;
+                console.error(`CLI: ${errorMessage} at ${fullUrl}. Aborting polling.`);
+                throw new Error(errorMessage); // This will be caught by handleBuyCommand
+            } else if (response.statusCode !== 200) { 
+                // For other non-200 codes not explicitly handled (e.g., 400-403, 405, or 2xx with unexpected data if previous checks failed)
+                // Log a warning and continue retrying until timeout.
+                if (Date.now() - lastWarningTime > WARNING_INTERVAL) {
+                    console.warn(`CLI: Unexpected response (Status: ${response.statusCode}) from server at ${fullUrl}. Retrying...`);
+                    lastWarningTime = Date.now();
+                }
             }
         } catch (error: any) {
-            // Do not interrupt for generic network errors, let the timeout handle it
+            // If the error is a specific one we want to propagate immediately (404 or server error > 405), re-throw it.
+            if (error.message &&
+                (error.message.includes('Purchase session not found (404)') || error.message.startsWith('Server error during polling:'))) {
+                throw error; 
+            }
+            // Catches network errors from https.get or JSON.parse errors
+            if (Date.now() - lastWarningTime > WARNING_INTERVAL) {
+                console.warn(`CLI: Error during polling attempt: ${error.message}. Retrying...`);
+                lastWarningTime = Date.now();
+            }
         }
         await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
+    // Timeout occurred
+    throw new Error('Timeout: Waited too long for purchase confirmation. If payment was made, please contact the seller.');
+}
 
-    throw new Error('Timeout while polling for purchase token.');
+/**
+ * Displays a standardized assistance message to the user when a purchase-related error occurs.
+ * @param issueType A string describing the type of issue (e.g., "Timeout", "Download Failed").
+ * @param taysellData The TaysellFile data.
+ * @param cliSessionId The CLI session ID (relevant for timeout issues).
+ * @param purchaseToken The purchase token (relevant for download failures after payment).
+ * @param underlyingErrorMessage The original error message that triggered this assistance message.
+ */
+function displayPurchaseAssistanceMessage(
+    issueType: "Timeout" | "Download Failed" | "Polling Server Error",
+    taysellData: TaysellFile,
+    cliSessionId: string | null,
+    purchaseToken: string | null,
+    underlyingErrorMessage: string
+): void {
+    const title = issueType === "Timeout" ? "Purchase Confirmation Timed Out" :
+                  issueType === "Download Failed" ? "Payment Succeeded, Download Failed" :
+                  "Server Error During Purchase Confirmation";
+    console.error(`\n--- ${title} ---`);
+
+    if (issueType === "Timeout") {
+        console.error("We were unable to confirm your purchase within the time limit.");
+        console.error("This could be due to several reasons:");
+        console.error("  - The payment process was not completed in the browser.");
+        console.error("  - There was a network issue preventing communication with the server.");
+        console.error("  - The seller's server is experiencing delays.");
+    } else if (issueType === "Polling Server Error") {
+        console.error("The seller's server reported an issue while we were trying to confirm your purchase status.");
+        console.error("This might be a temporary problem with the server or an issue with the purchase session.");
+        console.error("Details of the error encountered:");
+        // The underlyingErrorMessage will contain the status code from the server.
+        console.error(`  ${underlyingErrorMessage}`);
+    } else {
+        console.error("An error occurred while attempting to download the patch after your payment was processed.");
+    }
+    console.error("\nIf you believe your payment was successful (or in case of download failure), please contact the seller for assistance.\n");
+
+    const sellerContact = taysellData.sellerInfo.contact;
+    const patchName = taysellData.metadata.name;
+
+    console.error(`Seller Contact: ${sellerContact}\n`);
+    console.error("Please provide them with the following information if you contact them:\n");
+    console.error(`- Issue: ${issueType} for patch "${patchName}" (Patch ID: ${taysellData.patchId}).`);
+    if (cliSessionId) console.error(`- CLI Session ID: ${cliSessionId}`);
+    if (purchaseToken) console.error(`- Purchase Token: ${purchaseToken}`);
+    console.error("\n---------------------------\n");
+    console.error(`CRITICAL ERROR: ${underlyingErrorMessage}`); // Display the original error that led to this
+    process.exit(1);
 }
 
 export async function handleBuyCommand(
@@ -122,8 +202,31 @@ export async function handleBuyCommand(
         const pollResult = await pollForToken(checkUrl, cliSessionId, patchId);
         purchaseToken = pollResult.purchaseToken;
     } catch (error: any) {
-        printUsageAndExit(`CLI: Failed to retrieve purchase token via polling: ${error.message}`);
-        return;
+        if (error.message && error.message.startsWith('Timeout:')) {
+            displayPurchaseAssistanceMessage(
+                "Timeout",
+                taysellData,
+                cliSessionId,
+                null, // No purchase token yet if timeout occurred during polling
+                `Timeout confirming purchase for patch "${taysellData.metadata.name}". ${error.message}`
+            );
+            // process.exit(1) is called within displayPurchaseAssistanceMessage
+        } else if (error.message && error.message.includes('Purchase session not found (404)')) {
+            printUsageAndExit(`CLI: Failed to retrieve purchase token. The purchase session was not found (404), possibly expired or invalid.`);
+        } else if (error.message && error.message.startsWith('Server error during polling:')) {
+            displayPurchaseAssistanceMessage(
+                "Polling Server Error",
+                taysellData,
+                cliSessionId,
+                null, // No purchase token if polling failed due to server error
+                `The server returned an error while confirming purchase for patch "${taysellData.metadata.name}". ${error.message}`
+            );
+            // displayPurchaseAssistanceMessage calls process.exit(1), so this line should not be reached.
+            // The original printUsageAndExit message here was also misleading for this error type.
+        } else {
+            printUsageAndExit(`CLI: An unexpected error occurred while trying to retrieve the purchase token: ${error.message}`);
+        }
+        return; // Should be unreachable
     }
 
     console.log(`CLI: Requesting patch from ${endpoints.getPatchUrl}...`);
@@ -172,27 +275,13 @@ export async function handleBuyCommand(
             console.log(`Purchase and application of patch '${metadata.name}' completed.`);
         }
     } catch (error: any) {
-        // --- Enhanced Error Handling for Download Failure ---
-        console.error("\n--- Payment Succeeded, Download Failed ---");
-        console.error("An error occurred while attempting to download the patch after your payment was processed.");
-        console.error("Please contact the seller for assistance.\n");
-
-        const sellerContact = taysellData.sellerInfo.contact;
-        const patchName = taysellData.metadata.name;
-
-        console.error(`Seller Contact: ${sellerContact}\n`);
-        console.error("Please provide them with the following information:\n");
-
-        const subject = `Download issue for Taylored purchase: "${patchName}"`;
-        const body = `Hello,\n\nI recently purchased the patch "${patchName}" (Patch ID: ${patchId}) and my payment was successful.\nHowever, the download failed.\n\nMy Purchase Token is: ${purchaseToken}\n\nPlease assist me in obtaining the patch.\n\nThank you.`;
-
-        console.error("--- Pre-formatted Email ---");
-        console.error(`To: ${sellerContact}`);
-        console.error(`Subject: ${subject}\n`);
-        console.error("Body:\n");
-        console.error(body);
-        console.error("\n---------------------------\n");
-        console.error(`CRITICAL ERROR: Failed to retrieve patch. Details: ${error.message}`);
-        process.exit(1);
+        displayPurchaseAssistanceMessage(
+            "Download Failed",
+            taysellData,
+            cliSessionId, // Pass cliSessionId for completeness, though purchaseToken is more direct here
+            purchaseToken, // Purchase token is available if download failed after polling
+            `Failed to retrieve/download patch "${taysellData.metadata.name}". Details: ${error.message}`
+        );
+        // process.exit(1) is called within displayPurchaseAssistanceMessage
     }
 }

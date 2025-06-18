@@ -169,10 +169,6 @@ Taylored is available in two versions:
 
 3.  **Verify Installation:** After the installation completes, you can verify it by running:
     ```bash
-    taylored --version
-    ```
-    Or simply:
-    ```bash
     taylored
     ```
     This should display the installed version of Taylored or a list of available commands, confirming the installation was successful.

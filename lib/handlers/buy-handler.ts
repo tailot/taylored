@@ -38,15 +38,18 @@ async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVer
                     }
                 }
             } else if (response.statusCode === 404) {
-                console.error(`CLI: Purchase session not found (404) at ${fullUrl}. This may mean the session expired or was invalid.`);
-                throw new Error('Purchase session not found (404).'); // Specific error for 404
+                // Changed behavior: Log a warning and retry on 404, instead of throwing immediately.
+                if (Date.now() - lastWarningTime > WARNING_INTERVAL) {
+                    console.warn(`CLI: Purchase session not found (404) at ${fullUrl}. Please waiting! Retrying...`);
+                    lastWarningTime = Date.now();
+                }
             } else if (response.statusCode !== undefined && response.statusCode > 405) {
                 // Server errors (5xx) or other client errors (>405 and not 404)
                 // These are considered terminal for the polling process by this client.
                 const errorMessage = `Server error during polling: Status ${response.statusCode}`;
                 console.error(`CLI: ${errorMessage} at ${fullUrl}. Aborting polling.`);
                 throw new Error(errorMessage); // This will be caught by handleBuyCommand
-            } else if (response.statusCode !== 200) { 
+            } else if (response.statusCode !== 200) {
                 // For other non-200 codes not explicitly handled (e.g., 400-403, 405, or 2xx with unexpected data if previous checks failed)
                 // Log a warning and continue retrying until timeout.
                 if (Date.now() - lastWarningTime > WARNING_INTERVAL) {
@@ -56,9 +59,8 @@ async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVer
             }
         } catch (error: any) {
             // If the error is a specific one we want to propagate immediately (404 or server error > 405), re-throw it.
-            if (error.message &&
-                (error.message.includes('Purchase session not found (404)') || error.message.startsWith('Server error during polling:'))) {
-                throw error; 
+            if (error.message && error.message.startsWith('Server error during polling:')) {
+                throw error;
             }
             // Catches network errors from https.get or JSON.parse errors
             if (Date.now() - lastWarningTime > WARNING_INTERVAL) {
@@ -88,8 +90,8 @@ function displayPurchaseAssistanceMessage(
     underlyingErrorMessage: string
 ): void {
     const title = issueType === "Timeout" ? "Purchase Confirmation Timed Out" :
-                  issueType === "Download Failed" ? "Payment Succeeded, Download Failed" :
-                  "Server Error During Purchase Confirmation";
+        issueType === "Download Failed" ? "Payment Succeeded, Download Failed" :
+            "Server Error During Purchase Confirmation";
     console.error(`\n--- ${title} ---`);
 
     if (issueType === "Timeout") {
@@ -158,7 +160,7 @@ export async function handleBuyCommand(
         printUsageAndExit('Patch ID is not defined in the taysell file.');
         return;
     }
-    
+
     const getPatchUrlObj = new URL(endpoints.getPatchUrl);
     if (getPatchUrlObj.protocol !== 'https:') {
         printUsageAndExit('CRITICAL ERROR: for security reasons, getPatchUrl must use HTTPS.');
@@ -185,7 +187,7 @@ export async function handleBuyCommand(
 
     console.log('CLI: Opening browser for payment approval...');
     try {
-        const {default: open} = await import('open'); // Dynamic import
+        const { default: open } = await import('open'); // Dynamic import
         await open(initiatePaymentUrlWithParams);
     } catch (error) {
         console.error('CLI: Could not open browser. Please copy and paste the following URL into your browser:', error);
@@ -212,7 +214,10 @@ export async function handleBuyCommand(
             );
             // process.exit(1) is called within displayPurchaseAssistanceMessage
         } else if (error.message && error.message.includes('Purchase session not found (404)')) {
-            printUsageAndExit(`CLI: Failed to retrieve purchase token. The purchase session was not found (404), possibly expired or invalid.`);
+            // This block should ideally not be reached if pollForToken retries on 404 until timeout.
+            // However, keeping it as a fallback or if other parts of the code could throw this.
+            // The more likely scenario now is a general timeout.
+            printUsageAndExit(`CLI: The purchase session was consistently not found (404) and polling timed out or was aborted.`);
         } else if (error.message && error.message.startsWith('Server error during polling:')) {
             displayPurchaseAssistanceMessage(
                 "Polling Server Error",
@@ -266,7 +271,7 @@ export async function handleBuyCommand(
             const tayloredDir = path.resolve(CWD, TAYLORED_DIR_NAME);
             const targetFileName = `${patchId.replace(/[^a-z0-9]/gi, '_')}${TAYLORED_FILE_EXTENSION}`;
             const destinationPath = path.join(tayloredDir, targetFileName);
-            
+
             await fs.ensureDir(tayloredDir);
             await fs.writeFile(destinationPath, patchContent);
             console.log(`Patch downloaded and saved to: ${destinationPath}`);

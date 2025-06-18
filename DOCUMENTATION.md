@@ -148,18 +148,24 @@ This section guides you through installing Taylored, whether you want a quick se
 ### Quick Install via npm (Recommended)
 
 For most users, the recommended way to install Taylored is globally via npm (Node Package Manager). This makes the `taylored` command readily available in your system's terminal.
+Taylored is available in two versions:
+
+*   **`taylored` (Full Version)**: Includes all features, including monetization functionalities (`setup-backend`, `create-taysell`, `taylored --buy`).
+    ```bash
+    npm install -g taylored
+    ```
+*   **`taylo` (Lite Version)**: A more essential version focusing on core patch management, excluding monetization features. Ideal for users needing only the fundamental code manipulation capabilities.
+    ```bash
+    npm install -g taylo
+    ```
 
 **Prerequisites:**
 *   Node.js (which includes npm). If you don't have Node.js installed, download it from [nodejs.org](https://nodejs.org/). It's advisable to use a Long Term Support (LTS) version.
 
 **Installation Steps:**
-
-1.  Open your terminal or command prompt.
-2.  Run the following command:
-    ```bash
-    npm install -g taylored
-    ```
-    The `-g` flag ensures the package is installed globally, making the `taylored` CLI accessible from any directory.
+1.  Choose your preferred version and open your terminal or command prompt.
+2.  Run the corresponding installation command (see above).
+    The `-g` flag ensures the package is installed globally, making the `taylored` (or `taylo`) CLI accessible from any directory.
 
 3.  **Verify Installation:** After the installation completes, you can verify it by running:
     ```bash
@@ -1447,6 +1453,8 @@ The `taylored --automatic` command is a sophisticated feature that combines code
 ---
 
 ### `taylored setup-backend`
+**Note: This command is part of the full `taylored` package and is not available in `taylored-lite`.**
+
 
 #### Purpose (`setup-backend`)<a name="purpose-setup-backend"></a>
 
@@ -1487,6 +1495,8 @@ Follow the interactive prompts to configure your backend server.
 ---
 
 ### `taylored create-taysell <file.taylored> [--price <price>] [--desc "description"]`
+**Note: This command is part of the full `taylored` package and is not available in `taylored-lite`.**
+
 
 #### Purpose (`create-taysell`)<a name="purpose-create-taysell"></a>
 
@@ -1553,6 +1563,8 @@ This command will then interactively ask for other details like Patch ID, seller
 ---
 
 ### `taylored --buy <file.taysell> [--dry-run]`
+**Note: This command is part of the full `taylored` package and is not available in `taylored-lite`.**
+
 
 #### Purpose (`--buy`)<a name="purpose-buy"></a>
 
@@ -1828,6 +1840,8 @@ This section describes official project templates that can be used with or are p
 "Backend-in-a-Box" is a Node.js Express application template designed to provide a ready-to-use server for selling digital patches or similar small digital goods. It features a secure download mechanism and has recently been enhanced with PayPal integration for payment processing.
 
 It's intended to be a quick-start solution for developers looking to monetize their digital creations with minimal backend setup. The backend handles payment intent, webhook verification, and secure delivery of patch files.
+
+   **Note: The Taylored CLI commands for interacting with this backend for monetization purposes (`setup-backend`, `create-taysell`, `taylored --buy`) are available exclusively in the full `taylored` package, not in `taylored-lite`.**
 
 #### PayPal Integration for Patch Monetization <a name="bib-paypal-integration"></a>
 

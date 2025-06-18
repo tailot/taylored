@@ -14,6 +14,11 @@ export function resolveTayloredFileName(userInputFileName: string): string {
     return userInputFileName + TAYLORED_FILE_EXTENSION;
 }
 
+/**
+ * Prints usage information and exits the process.
+ * @param message An optional error message to display.
+ * @param printFullUsage If true, prints the full command list.
+ */
 export function printUsageAndExit(message?: string, printFullUsage: boolean = false): void {
     if (message) {
         console.error(message);
@@ -33,19 +38,21 @@ Core Patching Commands (require to be run in a Git repository root):`);
         console.log(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
         console.log(`                                      Automatically computes and applies line offsets for patches based on Git history.`);
 
+        // <taylored number="9003">
         console.log(`
 Taysell Monetization Commands:`);
         console.log(`  setup-backend                       Sets up the Taysell 'Backend-in-a-Box'.`);
         console.log(`  create-taysell <file.taylored> [--price <price>] [--desc "description"]`);
         console.log(`                                      Creates a .taysell package for selling a patch.`);
         console.log(`  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.`);
-        // Add more details for each command as needed
+        // </taylored>
     }
     if (!message) {
         process.exit(0);
     }
     process.exit(1);
 }
+
 
 /**
  * Analyzes diff content string to determine additions, deletions, and purity.

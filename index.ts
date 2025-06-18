@@ -16,10 +16,12 @@ import { handleOffsetCommand } from './lib/handlers/offset-handler';
 import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
 import { resolveTayloredFileName, printUsageAndExit } from './lib/utils';
 
+// <taylored number="9001">
 // Import new Taysell handlers
 import { handleSetupBackend } from './lib/handlers/setup-backend-handler';
 import { handleCreateTaysell } from './lib/handlers/create-taysell-handler';
 import { handleBuyCommand } from './lib/handlers/buy-handler';
+// </taylored>
 
 /**
  * Main function to parse arguments and dispatch to handlers.
@@ -138,6 +140,7 @@ async function main(): Promise<void> {
             }
             await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD, excludeDirs);
         }
+        // <taylored number="9002">
         // === New Taysell Commands Start Here ===
         else if (mode === 'setup-backend') { // Changed from --setup-backend to setup-backend
             if (rawArgs.length !== 1) {
@@ -213,6 +216,7 @@ async function main(): Promise<void> {
             await handleBuyCommand(finalTaysellFile, isDryRun, CWD);
         }
         // === End New Taysell Commands ===
+        // </taylored>
         else { // Original logic for --add, --remove, etc.
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];
             if (applyModes.includes(mode)) {

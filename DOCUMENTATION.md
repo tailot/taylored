@@ -1152,11 +1152,16 @@ Taylored blocks are segments of code or text within your source files that are d
 #### Marker Syntax
 
 *   **Start Marker**:
-    *   Format: `<taylored number="NUMERO" [compute="CHARS_TO_STRIP_PATTERNS"] [async="true|false"]>`
+    *   Format: `<taylored number="NUMERO" [disabled="true|false"] [compute="CHARS_TO_STRIP_PATTERNS"] [async="true|false"]>`
     *   `number="NUMERO"`: (Required attribute) An integer that specifies the number for the output plugin file. For example, `number="1"` will generate `.taylored/1.taylored`. This attribute is mandatory. The older positional syntax (e.g., `<taylored 123>`) is no longer supported.
+    *   `[disabled="true|false"]`: (Optional attribute)
+        *   If set to `"true"`, the entire block is completely ignored by the `taylored --automatic` process. Its content will not be evaluated, any `compute` script within it will not run, and no corresponding `.taylored` file will be generated for this block.
+        *   If set to `"false"` or if the attribute is absent, the block is processed normally according to other attributes like `compute` and `async`.
+        *   This attribute takes precedence: if `disabled="true"`, attributes like `compute` and `async` are ignored for that block.
+        *   Example: `<taylored number="25" disabled="true">`, `<taylored number="26" disabled="false" compute="/*,*/">`
     *   `[compute="CHARS_TO_STRIP_PATTERNS"]`: (Optional attribute) See [Dynamic Content with `compute`](#dynamic-content-with-compute).
     *   `[async="true|false"]`: (Optional attribute, only relevant with `compute`) See [Dynamic Content with `compute`](#dynamic-content-with-compute).
-    *   Example: `<taylored number="15">`, `<taylored number="3" compute="/*,*/">`, `<taylored number="7" compute="#!--,!--#" async="true">`
+    *   Example: `<taylored number="15">`, `<taylored number="3" compute="/*,*/">`, `<taylored number="7" compute="#!--,!--#" async="true">`, `<taylored number="8" disabled="true">`
 
 *   **End Marker**:
     *   Format: `</taylored>`

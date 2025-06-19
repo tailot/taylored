@@ -60,8 +60,9 @@ async function findFilesRecursive(
  * This function orchestrates a complex Git workflow for each discovered block:
  * 1. Scans files matching specified `extensionsInput` within the `CWD`, respecting `excludeDirs`.
  * 2. For each file, it searches for Taylored blocks using a regex.
- *    The marker syntax is: `<taylored number="N" [compute="STRIP_CHARS"] [async="true|false"]>...content...</taylored>`
+ *    The marker syntax is: `<taylored number="N" [disabled="true|false"] [compute="STRIP_CHARS"] [async="true|false"]>...content...</taylored>`
  *    - `number="N"`: (Required) Specifies the output file number (e.g., N.taylored).
+ *    - `disabled="true|false"`: (Optional) If "true", the block is completely ignored by the `--automatic` process. If "false" or absent, the block is processed normally. Takes precedence over `compute` and `async`.
  *    - `compute="STRIP_CHARS"`: (Optional) If present, the block's content is treated as a script.
  *      `STRIP_CHARS` is a comma-separated list of patterns to remove from the script
  *      before execution (e.g., comment markers like "/*,*"/""). The script's stdout
@@ -207,6 +208,14 @@ export async function handleAutomaticOperation(
 
             const asyncMatch = attributesString.match(/async=["'](true|false)["']/); // Capture 'true' or 'false' within single or double quotes
             const asyncFlag = asyncMatch ? asyncMatch[1] === 'true' : false;
+
+            const disabledMatch = attributesString.match(/disabled=["'](true|false)["']/);
+            const isDisabled = disabledMatch ? disabledMatch[1] === 'true' : false;
+
+            if (isDisabled) {
+                console.log(`Skipping disabled block ${numero} from ${originalFilePath}.`);
+                continue; 
+            }
 
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
             const targetTayloredFilePath = path.join(tayloredDir, targetTayloredFileName);

@@ -1,3 +1,4 @@
+// tests/e2e/automatic-git.test.ts
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithStringEncoding, ExecSyncOptionsWithBufferEncoding } from 'child_process'; // Import both
@@ -30,15 +31,19 @@ const setupTestRepo = (testName: string): string => {
   if (fs.existsSync(repoPath)) {
     fs.rmSync(repoPath, { recursive: true, force: true });
   }
-  fs.mkdirSync(repoPath, { recursive: true });
+  fs.mkdirSync(repoPath, { recursive: true }); // Ensure the repo directory is created
 
   const execOpts: ExecSyncOptionsWithStringEncoding = { cwd: repoPath, encoding: 'utf8', stdio: 'pipe' }; 
-  execSync('git init -b main', execOpts);
-  execSync('git config user.name "Test User"', execOpts);
-  execSync('git config user.email "test@example.com"', execOpts);
+
+  execSync('git init -b main', execOpts); // Initialize the git repository with main as default branch
+  execSync('git config user.name "Test User"', execOpts); // Required for commits
+  execSync('git config user.email "test@example.com"', execOpts); // Required for commits
   execSync('git config commit.gpgsign false', execOpts); 
 
-  fs.writeFileSync(path.join(repoPath, 'initial.txt'), 'Initial commit');
+  // Create and commit an initial file to ensure the repo is not empty and has a base commit.
+  // Ensure content ends with a newline for consistency, similar to createFileAndCommit.
+  const initialFileContent = 'Initial commit\n';
+  fs.writeFileSync(path.join(repoPath, 'initial.txt'), initialFileContent);
   execSync('git add initial.txt', execOpts);
   execSync('git commit -m "Initial commit"', execOpts);
   return repoPath;
@@ -274,6 +279,7 @@ console.log(jsVar);\n`; // Added trailing newline
       // Verify no temporary branches are left
       const branches = execSync('git branch', { cwd: testRepoPath, encoding: 'utf8' });
       expect(branches).not.toContain('temp-taylored-');
+
       const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: testRepoPath, encoding: 'utf8' }).trim();
       expect(currentBranch).toBe('main');
     });
@@ -551,7 +557,7 @@ ${scriptContentForCompute}
       createFileAndCommit(testRepoPath, 'src/app.js', fileContent, 'Add app.js with old format 111');
 
       const result = runTayloredCommand(testRepoPath, '--automatic js main');
-      expect(result.status).toBe(0); // Command should succeed
+      expect(result.status).toBe(0); 
       expect(result.stderr).toBe('');
 
       const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `111${TAYLORED_FILE_EXTENSION}`);
@@ -665,6 +671,117 @@ ${scriptContentForCompute}
 
 
       expect(result.stdout).toMatch(/Successfully created \d+ taylored file\(s\)\./);
+    });
+  });
+
+  describe('Disabled Attribute Functionality', () => {
+    let testRepoPath: string;
+ 
+    beforeEach(() => {
+      // Create a unique subdirectory for each test to ensure isolation
+      const currentTestNameFromState = expect.getState().currentTestName;
+      // Sanitize the test name: replace spaces with underscores and remove/replace problematic characters like quotes.
+      const sanitizedTestName = (currentTestNameFromState || 'unknown_test_name')
+        .replace(/\s+/g, '_')
+        .replace(/"/g, '') // Remove double quotes
+        .replace(/'/g, ''); // Remove single quotes
+      testRepoPath = setupTestRepo(`disabled_attr_${sanitizedTestName}`);
+    });
+ 
+    afterEach(() => {
+      if (testRepoPath && fs.existsSync(testRepoPath)) {
+        fs.rmSync(testRepoPath, { recursive: true, force: true });
+      }
+    });
+ 
+    test('Scenario 1: disabled="true" with compute script - skips block and prevents side effects', () => {
+      const disabledContent = `// disabled.ts
+// <taylored number="101" disabled="true" compute="/*,*/">
+/*
+#!/usr/bin/env node
+console.log("This should NOT be executed or appear in any patch.");
+require('fs').writeFileSync('DO_NOT_CREATE.txt', 'created by disabled block');
+*/
+// </taylored>`;
+      createFileAndCommit(testRepoPath, 'disabled.ts', disabledContent, 'Add disabled.ts');
+ 
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
+      expect(result.status).toBe(0); // Command should complete successfully
+ 
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `101${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(false); // .taylored file should NOT be created
+ 
+      const sideEffectFilePath = path.join(testRepoPath, 'DO_NOT_CREATE.txt'); // Changed this line, it was duplicated below.
+      expect(fs.existsSync(sideEffectFilePath)).toBe(false); // Side effect file should NOT be created 
+    
+      expect(result.stdout).toContain('Skipping disabled block 101 from'); // Also check actual stdout
+      expect(result.status).toBe(0); // Expect command to complete successfully
+    });
+ 
+    test('Scenario 2: disabled="false" - processes block normally', () => {
+      const notDisabledContent = `// not-disabled.ts
+// <taylored number="102" disabled="false">
+// This block should be processed.
+export const processed = true;
+// </taylored>`;
+      createFileAndCommit(testRepoPath, 'not-disabled.ts', notDisabledContent, 'Add not-disabled.ts');
+ 
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
+      expect(result.status).toBe(0);
+ 
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `102${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(true); // .taylored file SHOULD be created
+ 
+      const tayloredContent = normalizeLineEndings(fs.readFileSync(tayloredFilePath, 'utf8'));
+      expect(tayloredContent).toMatch(/--- a\/not-disabled.ts/);
+      expect(tayloredContent).toContain('-// <taylored number="102" disabled="false">');
+      expect(tayloredContent).toContain('-// This block should be processed.');
+      expect(tayloredContent).toContain('-export const processed = true;');
+      expect(tayloredContent).toContain('-// </taylored>');
+      expect(result.stdout).not.toContain('Skipping disabled block 102');
+      expect(result.stderr).toBe(''); // No critical errors expected
+    });
+ 
+    test('Scenario 3: disabled attribute absent - processes block normally', () => {
+      const defaultDisabledContent = `// default-disabled.ts
+// <taylored number="103">
+// This block should also be processed by default.
+export const defaultProcessed = true;
+// </taylored>`;
+      createFileAndCommit(testRepoPath, 'default-disabled.ts', defaultDisabledContent, 'Add default-disabled.ts');
+ 
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
+      expect(result.status).toBe(0);
+ 
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `103${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(true); // .taylored file SHOULD be created
+ 
+      const tayloredContent = normalizeLineEndings(fs.readFileSync(tayloredFilePath, 'utf8'));
+      expect(tayloredContent).toMatch(/--- a\/default-disabled.ts/);
+      expect(tayloredContent).toContain('-// <taylored number="103">');
+      expect(tayloredContent).toContain('-// This block should also be processed by default.');
+      expect(tayloredContent).toContain('-export const defaultProcessed = true;');
+      expect(tayloredContent).toContain('-// </taylored>');
+      expect(result.stdout).not.toContain('Skipping disabled block 103');
+      expect(result.stderr).toBe(''); // No critical errors expected
+    });
+ 
+    test('Scenario 4: disabled="true" for static block - skips block', () => {
+      const disabledStaticContent = `// disabled-static.ts
+// <taylored number="104" disabled="true">
+// This static block should be skipped.
+export const staticSkipped = true;
+// </taylored>`;
+      createFileAndCommit(testRepoPath, 'disabled-static.ts', disabledStaticContent, 'Add disabled-static.ts');
+ 
+      const result = runTayloredCommand(testRepoPath, '--automatic ts main');
+      expect(result.status).toBe(0);
+ 
+      const tayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `104${TAYLORED_FILE_EXTENSION}`);
+      expect(fs.existsSync(tayloredFilePath)).toBe(false); // .taylored file should NOT be created
+ 
+      expect(result.stdout).toContain('Skipping disabled block 104 from');
+      expect(result.status).toBe(0); // Expect command to complete successfully
     });
   });
 });

@@ -5,7 +5,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import inquirer from 'inquirer';
-import { v4 as uuidv4 } from 'uuid'; // For generating patchId
+import * as crypto from 'crypto'; // For generating patchId
 import { encryptAES256GCM } from '../taysell-utils'; // Corrected path
 import { TAYLORED_FILE_EXTENSION } from '../constants'; // Assuming this exists for .taylored extension
 
@@ -131,7 +131,7 @@ export async function handleCreateTaysell(
     questions.push(
         { type: 'input', name: 'patchName', message: 'Enter the commercial name for this patch:', default: patchFileNameBase.replace(TAYLORED_FILE_EXTENSION, '') },
         { type: 'input', name: 'patchDescription', message: 'Enter a description for this patch:', default: descriptionInput || 'No description provided.'},
-        { type: 'input', name: 'patchId', message: 'Enter a unique ID for this patch (or press Enter to generate one):', default: patchIdFromEnv || uuidv4() },
+            { type: 'input', name: 'patchId', message: 'Enter a unique ID for this patch (or press Enter to generate one):', default: patchIdFromEnv || crypto.randomUUID() },
         { type: 'input', name: 'tayloredVersion', message: 'Enter the required taylored CLI version (e.g., >=6.8.21):', default: '>=6.8.21'}, // TODO: Read from current CLI version?
         { type: 'input', name: 'price', message: 'Enter the price (e.g., 9.99):', default: priceInput, validate: (input: string) => !isNaN(parseFloat(input)) || 'Invalid price.' },
         { type: 'input', name: 'currency', message: 'Enter the currency code (e.g., USD, EUR):', default: 'USD', validate: (input: string) => input.trim().length === 3 || 'Currency code must be 3 letters.'}
@@ -152,7 +152,7 @@ export async function handleCreateTaysell(
         answers = {
             patchName: patchFileNameBase.replace(TAYLORED_FILE_EXTENSION, ''),
             patchDescription: descriptionInput || 'Default test description',
-            patchId: patchIdFromEnv || uuidv4(),
+            patchId: patchIdFromEnv || crypto.randomUUID(),
             tayloredVersion: '>=6.8.21',
             price: priceInput || '0.00',
             currency: 'USD',

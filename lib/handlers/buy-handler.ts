@@ -5,7 +5,7 @@ import { validateTaysellFileContent, TaysellFile } from '../taysell-utils';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 //import { handleApplyOperation } from '../apply-logic';
 import { printUsageAndExit } from '../utils';
-import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 import inquirer from 'inquirer';
 
 /**
@@ -262,7 +262,7 @@ export async function handleBuyCommand(
     }
 
 
-    const cliSessionId = uuidv4();
+    const cliSessionId = crypto.randomUUID();
     const initiatePaymentUrlWithParams = `${endpoints.initiatePaymentUrl}?cliSessionId=${cliSessionId}`;
 
     console.log('CLI: Opening browser for payment approval...');

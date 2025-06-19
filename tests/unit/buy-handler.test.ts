@@ -21,8 +21,9 @@ jest.mock('open');
 jest.mock('https');
 jest.mock('../../lib/apply-logic');
 jest.mock('../../lib/utils');
-jest.mock('uuid', () => ({
-    v4: jest.fn(() => 'mock-cli-session-id'), // Consistent mock UUID
+jest.mock('crypto', () => ({
+    ...jest.requireActual('crypto'), // Import and retain default behavior
+    randomUUID: jest.fn(() => 'mock-cli-session-id'), // Consistent mock UUID
 }));
 
 // Simulate polling logic for tests

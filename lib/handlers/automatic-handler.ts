@@ -1,6 +1,13 @@
 // Copyright (c) 2025 tailot@gmail.com
 // SPDX-License-Identifier: MIT
 
+// Added BlockMatch interface for storing information about found blocks
+interface BlockMatch {
+    type: 'xml' | 'json';
+    match: RegExpMatchArray;
+    index: number; // Add index to sort later
+}
+
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithStringEncoding, spawn } from 'child_process';
@@ -180,6 +187,8 @@ export async function handleAutomaticOperation(
 
     // Corrected regex to properly capture number, other attributes, and content
     const blockRegex = /[^\n]*?<taylored\s+number="(\d+)"([^>]*)>([\s\S]*?)[^\n]*?<\/taylored>/g;
+    // Regex for JSON blocks
+    const jsonBlockRegex = /{[^}]*?"taylored":\s*(\d+)[^}]*?}/g;
     let totalBlocksProcessed = 0;
     const asyncScriptPromises: Promise<void>[] = [];
 
@@ -192,28 +201,114 @@ export async function handleAutomaticOperation(
             continue;
         }
 
-        const matches = Array.from(fileContent.matchAll(blockRegex));
-        if (matches.length === 0) {
+        // Initialize an array to store all found matches (XML and JSON)
+        const allMatches: BlockMatch[] = [];
+
+        // Find XML matches
+        const xmlMatches = Array.from(fileContent.matchAll(blockRegex));
+        for (const match of xmlMatches) {
+            if (match.index !== undefined) { // Ensure index is present
+                allMatches.push({ type: 'xml', match, index: match.index });
+            }
+        }
+
+        // Find JSON matches
+        const jsonMatches = Array.from(fileContent.matchAll(jsonBlockRegex));
+        for (const match of jsonMatches) {
+            if (match.index !== undefined) { // Ensure index is present
+                allMatches.push({ type: 'json', match, index: match.index });
+            }
+        }
+
+        // Sort all matches by their starting index in the file
+        allMatches.sort((a, b) => a.index - b.index);
+
+        if (allMatches.length === 0) {
             continue;
         }
 
-        for (const match of matches) {
-            const numero = match[1];
-            const attributesString = match[2];
-            const scriptContentWithTags = match[0]; // Full matched string <taylored...>...</taylored>
-            const scriptContent = match[3]; // Content between tags
+        // Iterate over all sorted matches
+        for (const matchInfo of allMatches) {
+            // Declare variables to be populated by parsing logic
+            let numero: string;
+            let scriptContent: string;
+            let scriptContentWithTags: string = matchInfo.match[0]; // Full matched block, common for both
+            let computeCharsToStrip: string | undefined;
+            let asyncFlag: boolean = false; // Default to false
+            let isDisabled: boolean = false; // Default to false
 
-            const computeMatch = attributesString.match(/compute=["']([^"']*)["']/);
-            const computeCharsToStrip = computeMatch ? computeMatch[1] : undefined;
+            if (matchInfo.type === 'xml') {
+                // Existing XML parsing logic
+                numero = matchInfo.match[1];
+                const attributesString = matchInfo.match[2]; // Only used for XML attributes
+                scriptContent = matchInfo.match[3];
+                // scriptContentWithTags is already matchInfo.match[0]
 
-            const asyncMatch = attributesString.match(/async=["'](true|false)["']/); // Capture 'true' or 'false' within single or double quotes
-            const asyncFlag = asyncMatch ? asyncMatch[1] === 'true' : false;
+                const computeMatch = attributesString.match(/compute=["']([^"']*)["']/);
+                computeCharsToStrip = computeMatch ? computeMatch[1] : undefined;
 
-            const disabledMatch = attributesString.match(/disabled=["'](true|false)["']/);
-            const isDisabled = disabledMatch ? disabledMatch[1] === 'true' : false;
+                const asyncMatch = attributesString.match(/async=["'](true|false)["']/);
+                asyncFlag = asyncMatch ? asyncMatch[1] === 'true' : false;
 
+                const disabledMatch = attributesString.match(/disabled=["'](true|false)["']/);
+                isDisabled = disabledMatch ? disabledMatch[1] === 'true' : false;
+
+            } else if (matchInfo.type === 'json') {
+                // New JSON parsing logic
+                // scriptContentWithTags is already matchInfo.match[0]
+                try {
+                    const parsedJson = JSON.parse(scriptContentWithTags);
+
+                    if (parsedJson.taylored === undefined || parsedJson.taylored === null) {
+                        console.warn(`Warning: JSON block in ${originalFilePath} is missing the required 'taylored' property. Skipping.`);
+                        continue;
+                    }
+                    if (typeof parsedJson.taylored !== 'number') {
+                        console.warn(`Warning: JSON block in ${originalFilePath} has a 'taylored' property that is not a number. Skipping.`);
+                        continue;
+                    }
+                    numero = String(parsedJson.taylored);
+
+                    if (typeof parsedJson.content !== 'string') {
+                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} is missing the required 'content' property or it's not a string. Skipping.`);
+                        continue;
+                    }
+                    scriptContent = parsedJson.content;
+
+                    if (parsedJson.compute !== undefined && typeof parsedJson.compute !== 'string') {
+                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} has a 'compute' property that is not a string. It will be ignored.`);
+                        computeCharsToStrip = undefined;
+                    } else {
+                        computeCharsToStrip = parsedJson.compute || undefined;
+                    }
+
+                    if (parsedJson.async !== undefined && typeof parsedJson.async !== 'boolean') {
+                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} has an 'async' property that is not a boolean. It will be ignored, defaulting to false.`);
+                        asyncFlag = false;
+                    } else {
+                        asyncFlag = parsedJson.async === true;
+                    }
+
+                    if (parsedJson.disabled !== undefined && typeof parsedJson.disabled !== 'boolean') {
+                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} has a 'disabled' property that is not a boolean. It will be ignored, defaulting to false.`);
+                        isDisabled = false;
+                    } else {
+                        isDisabled = parsedJson.disabled === true;
+                    }
+
+                } catch (e: any) {
+                    console.warn(`Warning: Failed to parse JSON block in ${originalFilePath}. Skipping. Error: ${e.message}`);
+                    continue;
+                }
+            } else {
+                // Should not happen given the types in BlockMatch
+                console.warn(`Warning: Unknown block type '${matchInfo.type}' encountered in ${originalFilePath}. Skipping.`);
+                continue;
+            }
+
+            // Common logic using the populated variables
             if (isDisabled) {
-                console.log(`Skipping disabled block ${numero} from ${originalFilePath}.`);
+                console.log(`Skipping disabled block ${numero} from ${originalFilePath} (type: ${matchInfo.type}).`);
                 continue; 
             }
 

@@ -9,6 +9,12 @@ import { analyzeDiffContent } from '../utils'; // Changed from handleSaveOperati
 
 const execOpts: ExecSyncOptionsWithStringEncoding = { encoding: 'utf8', stdio: 'pipe' };
 
+interface BlockMatch {
+    type: 'xml' | 'json';
+    match: RegExpMatchArray;
+    index: number;
+}
+
 /**
  * Recursively finds files with a specific extension within a directory, respecting exclusions.
  *
@@ -180,6 +186,7 @@ export async function handleAutomaticOperation(
 
     // Corrected regex to properly capture number, other attributes, and content
     const blockRegex = /[^\n]*?<taylored\s+number="(\d+)"([^>]*)>([\s\S]*?)[^\n]*?<\/taylored>/g;
+    const jsonBlockRegex = /{[^}]*?"taylored":\s*(\d+)[^}]*?}/g;
     let totalBlocksProcessed = 0;
     const asyncScriptPromises: Promise<void>[] = [];
 
@@ -192,29 +199,89 @@ export async function handleAutomaticOperation(
             continue;
         }
 
-        const matches = Array.from(fileContent.matchAll(blockRegex));
-        if (matches.length === 0) {
+        // const matches = Array.from(fileContent.matchAll(blockRegex));
+        // if (matches.length === 0) {
+        //     continue;
+        // }
+        const xmlMatchesRaw = Array.from(fileContent.matchAll(blockRegex));
+        const jsonMatchesRaw = Array.from(fileContent.matchAll(jsonBlockRegex));
+
+        const allMatches: BlockMatch[] = [];
+
+        for (const match of xmlMatchesRaw) {
+            if (match.index !== undefined) {
+                allMatches.push({ type: 'xml', match, index: match.index });
+            }
+        }
+        for (const match of jsonMatchesRaw) {
+            if (match.index !== undefined) {
+                allMatches.push({ type: 'json', match, index: match.index });
+            }
+        }
+
+        allMatches.sort((a, b) => a.index - b.index);
+
+        if (allMatches.length === 0) {
             continue;
         }
 
-        for (const match of matches) {
-            const numero = match[1];
-            const attributesString = match[2];
-            const scriptContentWithTags = match[0]; // Full matched string <taylored...>...</taylored>
-            const scriptContent = match[3]; // Content between tags
+        for (const matchInfo of allMatches) {
+            let numero: string;
+            let attributesString: string | undefined; // Only for XML
+            let scriptContent: string;
+            let scriptContentWithTags: string; // Full matched block
+            let computeCharsToStrip: string | undefined;
+            let asyncFlag: boolean = false; // Default to false
+            let isDisabled: boolean = false; // Default to false
 
-            const computeMatch = attributesString.match(/compute=["']([^"']*)["']/);
-            const computeCharsToStrip = computeMatch ? computeMatch[1] : undefined;
+            if (matchInfo.type === 'xml') {
+                const match = matchInfo.match;
+                numero = match[1];
+                attributesString = match[2];
+                scriptContentWithTags = match[0];
+                scriptContent = match[3];
 
-            const asyncMatch = attributesString.match(/async=["'](true|false)["']/); // Capture 'true' or 'false' within single or double quotes
-            const asyncFlag = asyncMatch ? asyncMatch[1] === 'true' : false;
+                const computeMatch = attributesString.match(/compute=["']([^"']*)["']/);
+                computeCharsToStrip = computeMatch ? computeMatch[1] : undefined;
 
-            const disabledMatch = attributesString.match(/disabled=["'](true|false)["']/);
-            const isDisabled = disabledMatch ? disabledMatch[1] === 'true' : false;
+                const asyncMatch = attributesString.match(/async=["'](true|false)["']/);
+                asyncFlag = asyncMatch ? asyncMatch[1] === 'true' : false;
+
+                const disabledMatch = attributesString.match(/disabled=["'](true|false)["']/);
+                isDisabled = disabledMatch ? disabledMatch[1] === 'true' : false;
+
+            } else { // type === 'json'
+                const jsonBlockText = matchInfo.match[0];
+                scriptContentWithTags = jsonBlockText; // Full JSON block is the content with tags for replacement
+
+                try {
+                    const parsedJson = JSON.parse(jsonBlockText);
+
+                    if (typeof parsedJson.taylored !== 'number' || !Number.isInteger(parsedJson.taylored)) {
+                        console.warn(`Warning: JSON block in ${originalFilePath} at index ${matchInfo.index} has invalid or missing 'taylored' number. Skipping.`);
+                        continue;
+                    }
+                    numero = String(parsedJson.taylored);
+
+                    if (typeof parsedJson.content !== 'string') {
+                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} at index ${matchInfo.index} has invalid or missing 'content' string. Skipping.`);
+                        continue;
+                    }
+                    scriptContent = parsedJson.content;
+
+                    computeCharsToStrip = typeof parsedJson.compute === 'string' ? parsedJson.compute : undefined;
+                    asyncFlag = parsedJson.async === true; // Ensure boolean comparison
+                    isDisabled = parsedJson.disabled === true; // Ensure boolean comparison
+
+                } catch (e: any) {
+                    console.warn(`Warning: Parsing of JSON block in ${originalFilePath} at index ${matchInfo.index} failed. Content: "${jsonBlockText}". Error: ${e.message}. Skipping.`);
+                    continue;
+                }
+            }
 
             if (isDisabled) {
                 console.log(`Skipping disabled block ${numero} from ${originalFilePath}.`);
-                continue; 
+                continue;
             }
 
             const targetTayloredFileName = `${numero}${TAYLORED_FILE_EXTENSION}`;
@@ -631,7 +698,8 @@ export async function handleAutomaticOperation(
                 }
 
                 const fileLines = fileContent.split('\n');
-                const contentUpToMatch = fileContent.substring(0, match.index);
+                // Use matchInfo.index directly as it's populated for both XML and JSON types
+                const contentUpToMatch = fileContent.substring(0, matchInfo.index); 
                 const startLineNum = contentUpToMatch.split('\n').length;
                 const matchLinesCount = scriptContentWithTags.split('\n').length; // Use scriptContentWithTags here
                 const tempBranchName = `temp-taylored-${numero}-${Date.now()}`;

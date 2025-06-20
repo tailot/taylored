@@ -58,6 +58,7 @@
         *   [Arguments](#arguments-automatic)
         *   [Core Concept: Taylored Blocks](#core-concept-taylored-blocks)
         *   [Marker Syntax](#marker-syntax)
+        *   [JSON Block Syntax](#json-block-syntax)
         *   [Dynamic Content with `compute`](#dynamic-content-with-compute)
             *   [`compute="CHARS_TO_STRIP_PATTERNS"` attribute](#computecharstostrippatterns-attribute)
             *   [`async="true|false"` attribute](#asynctruefalse-attribute)
@@ -1172,6 +1173,82 @@ Taylored blocks are segments of code or text within your source files that are d
     function specialProcess() { /* Some logic */ } // <taylored number="30"> Special Comment Block </taylored>
     ```
     In this case, block `30` will include the entire line: `function specialProcess() { /* Some logic */ } // <taylored number="30"> Special Comment Block </taylored>`. For clarity, it's often better to place markers on their own lines unless you intentionally want to capture the whole line content along with the markers.
+
+
+#### JSON Block Syntax
+
+Taylored blocks for the `--automatic` command can also be defined in JSON format, offering an alternative to the XML-like syntax. JSON blocks are functionally equivalent to XML Taylored blocks and support the same features, including `compute` and `async` attributes.
+
+##### JSON Block Structure
+
+A JSON Taylored block is defined as a JSON object with the following key-value pairs:
+
+*   `taylored`: (Integer) This is the block number, which must be unique among all Taylored blocks. It is equivalent to the `number="NUMERO"` attribute in XML blocks.
+*   `compute`: (String, Optional) Defines the patterns for characters to be stripped from the `content` before execution. This is equivalent to the `compute="CHARS_TO_STRIP_PATTERNS"` attribute in XML. If this key is omitted, the `content` is treated as static text. If present (even as an empty string `""`), the `content` is treated as a script to be executed.
+*   `async`: (Boolean, Optional) Specifies whether the script execution should be asynchronous. Set to `true` for asynchronous execution or `false` for synchronous execution. If omitted, it defaults to `false` (synchronous). This is equivalent to the `async="true|false"` attribute in XML.
+*   `content`: (String) The actual content of the block. If the `compute` key is present, this string represents the script to be executed. If the `compute` key is absent, this string is static content.
+*   `disabled`: (Boolean, Optional) Set to `true` to disable the block, meaning it will not be processed. If `false` or omitted, the block will be processed. This is equivalent to the `disabled="true|false"` attribute in XML.
+
+##### JSON Block Examples
+
+Here are a couple of examples illustrating how to define Taylored blocks in JSON format.
+
+###### Synchronous JSON Compute Block
+
+This example defines a Taylored block that executes a simple shell script synchronously. The script will output a message including the current date and time.
+
+```json
+{
+  "taylored": 851,
+  "compute": "",
+  "async": false,
+  "content": "echo \"console.log('Synchronous block execution at: ' + new Date().toISOString() + ' by user $(whoami)');\""
+}
+```
+
+**Explanation:**
+
+*   `taylored: 851`: Assigns a unique block number.
+*   `compute: ""`: Indicates that the `content` is a script to be executed. An empty string means no specific character patterns need to be stripped from the script before execution.
+*   `async: false`: Specifies that the script will run synchronously. The processing of subsequent blocks (or the main command) will wait for this script to complete.
+*   `content`: Contains a shell command that uses `echo` to produce a JavaScript `console.log` statement. This statement, when executed by the target environment, will log the current timestamp and the user executing the script.
+
+**Expected output (in the target application's console):**
+
+```
+Synchronous block execution at: <current_timestamp> by user <username>
+```
+
+*(Note: `<current_timestamp>` and `<username>` will be replaced with actual values at runtime.)*
+
+###### Asynchronous JSON Compute Block
+
+This example demonstrates an asynchronous Taylored block. It uses a Node.js script that introduces a delay using `setTimeout` before logging a message.
+
+```json
+{
+  "taylored": 852,
+  "compute": "",
+  "async": true,
+  "content": "setTimeout(() => { console.log('Asynchronous block (852) finished after 2 seconds. Timestamp: ' + new Date().toISOString()); }, 2000);"
+}
+```
+
+**Explanation:**
+
+*   `taylored: 852`: Assigns a unique block number.
+*   `compute: ""`: Marks the `content` as an executable script.
+*   `async: true`: Specifies that the script will run asynchronously. The main process will not wait for this script to complete and will continue to process other tasks or blocks.
+*   `content`: Contains a Node.js script. It uses `setTimeout` to delay its execution for 2000 milliseconds (2 seconds). After the delay, it logs a message to the console indicating its completion along with a timestamp.
+
+**Expected output (in the target application's console, after approximately 2 seconds):**
+
+```
+Asynchronous block (852) finished after 2 seconds. Timestamp: <timestamp_after_2_seconds>
+```
+
+*(Note: `<timestamp_after_2_seconds>` will be the actual timestamp when the `console.log` executes.)*
+Because this block is asynchronous, other operations or console outputs might appear before this message, even if they are defined after this block.
 
 #### Dynamic Content with `compute`
 

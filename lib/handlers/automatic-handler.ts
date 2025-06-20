@@ -726,7 +726,7 @@ export async function handleAutomaticOperation(
                 }
 
                 const fileLines = fileContent.split('\n');
-                const contentUpToMatch = fileContent.substring(0, match.index);
+                const contentUpToMatch = fileContent.substring(0, matchInfo.match.index);
                 const startLineNum = contentUpToMatch.split('\n').length;
                 const matchLinesCount = scriptContentWithTags.split('\n').length; // Use scriptContentWithTags here
                 const tempBranchName = `temp-taylored-${numero}-${Date.now()}`;

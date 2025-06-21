@@ -1,10 +1,10 @@
 diff --git a/package.json b/package.json
-index c47adc4..5f5d1c4 100644
+index 42e69fc..a5cab59 100644
 --- a/package.json
 +++ b/package.json
 @@ -26,6 +26,45 @@
    "bin": {
-     "taylo": "dist/index.js"
+     "taylored": "dist/index.js"
    },
 +  "scripts": {
 +    "build": "tsc",
@@ -13,7 +13,7 @@ index c47adc4..5f5d1c4 100644
 +    "prepublishOnly": "npm run build",
 +    "prepublish:lite": "npx ts-node index.ts --automatic ts main --exclude tests,node_modules && npx ts-node index.ts --add 9002 && npx ts-node index.ts --add 9003 && npx ts-node index.ts --add 9001 && npm run build:lite && node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylo';pkg.bin={'taylo':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
 +    "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
-+    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove scripts && npx ts-node index.ts --remove lite && npm publish  --ignore-scripts",
++    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove lite && npx ts-node index.ts --remove scripts && npm publish  --ignore-scripts",
 +    "postpublish:lite": "node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylored';pkg.bin={'taylored':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
 +    "test": "jest --runInBand",
 +    "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",

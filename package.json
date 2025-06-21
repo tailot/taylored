@@ -1,6 +1,6 @@
 {
   "name": "taylored",
-  "version": "8.0.0",
+  "version": "8.0.1",
   "description": "Make changes to a branch a plugin. A command-line tool to manage and apply plugins '.taylored'. Supports applying, removing, verifying plugins, and generating them from branch (GIT).",
   "keywords": [
     "plugins",
@@ -45,6 +45,7 @@
     "test:e2e:core:save": "jest --runInBand tests/e2e/core/save.test.ts",
     "test:e2e:core:offset": "jest --runInBand tests/e2e/core/offset.test.ts",
     "test:e2e:core": "jest --runInBand tests/e2e/core/",
+    "test:e2e:automatic:json": "jest --runInBand tests/e2e/compute-blocks-json.test.ts",
     "test:e2e:automatic:compute": "jest --runInBand tests/e2e/automatic-compute.test.ts",
     "test:e2e:automatic:git": "jest --runInBand tests/e2e/automatic-git.test.ts",
     "test:e2e:automatic": "jest --runInBand tests/e2e/automatic-compute.test.ts tests/e2e/automatic-git.test.ts",

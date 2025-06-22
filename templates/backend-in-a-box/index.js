@@ -3,7 +3,7 @@ const express = require('express');
 const fs = require('fs').promises;
 const sqlite3 = require('sqlite3').verbose();
 const crypto = require('crypto');
-const paypal = require('@paypal/checkout-server-sdk');
+// const paypal = require('@paypal/paypal-server-sdk'); // Removed
 const path = require('path');
 const axios = require('axios'); // Make sure axios is required
 
@@ -45,11 +45,13 @@ const clientId = process.env.PAYPAL_CLIENT_ID;
 const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
 const webhookId = process.env.PAYPAL_WEBHOOK_ID; // Your webhook ID from PayPal developer dashboard
 
-const environment = process.env.PAYPAL_ENVIRONMENT === 'production'
-    ? new paypal.core.LiveEnvironment(clientId, clientSecret)
-    : new paypal.core.SandboxEnvironment(clientId, clientSecret);
-const client = new paypal.core.PayPalHttpClient(environment);
-const PAYPAL_API_BASE = environment.baseUrl;
+// const environment = process.env.PAYPAL_ENVIRONMENT === 'production' // Removed
+//     ? new paypal.core.LiveEnvironment(clientId, clientSecret) // Removed
+//     : new paypal.core.SandboxEnvironment(clientId, clientSecret); // Removed
+// const client = new paypal.core.PayPalHttpClient(environment); // Removed
+const PAYPAL_API_BASE = process.env.PAYPAL_ENVIRONMENT === 'production'
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com';
 
 // --- Helper function to get Access Token ---
 async function getPayPalAccessToken() {
@@ -133,7 +135,7 @@ app.get('/pay/:patchId', async (req, res) => {
     if (!patchId || !cliSessionId) {
         return res.status(400).json({ error: "patchId and cliSessionId are required." });
     }
-    
+
     const sanitizedPatchId = path.basename(patchId);
     if (sanitizedPatchId !== patchId) {
         return res.status(400).json({ error: "Invalid patchId format." });
@@ -155,9 +157,7 @@ app.get('/pay/:patchId', async (req, res) => {
     }
 
     const purchaseId = crypto.randomBytes(16).toString('hex');
-    const request = new paypal.orders.OrdersCreateRequest();
-    request.prefer("return=representation");
-    request.requestBody({
+    const orderPayload = {
         intent: 'CAPTURE',
         purchase_units: [{
             amount: {
@@ -171,23 +171,31 @@ app.get('/pay/:patchId', async (req, res) => {
             cancel_url: `${SERVER_BASE_URL}/paypal/cancel?cliSessionId=${cliSessionId}`,
             user_action: 'PAY_NOW',
         }
-    });
+    };
 
     try {
-        const order = await client.execute(request);
+        const accessToken = await getPayPalAccessToken();
+        const response = await axios.post(`${PAYPAL_API_BASE}/v2/checkout/orders`, orderPayload, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+
+        const order = response.data;
+
         db.run(`INSERT INTO purchases (id, patch_id, paypal_order_id, status, cli_session_id) VALUES (?, ?, ?, ?, ?)`,
-            [purchaseId, sanitizedPatchId, order.result.id, 'CREATED', cliSessionId],
+            [purchaseId, sanitizedPatchId, order.id, 'CREATED', cliSessionId],
             function(err) {
                 if (err) {
                     console.error("Error inserting purchase into the database:", err.message);
                     return res.status(500).json({ error: "Internal server error." });
                 }
-                //console.log(`New purchase inserted with ID: ${purchaseId}, PayPal Order ID: ${order.result.id}`);
-                const approveUrl = order.result.links.find(link => link.rel === 'approve').href;
+                const approveUrl = order.links.find(link => link.rel === 'approve').href;
                 res.redirect(approveUrl);
             });
     } catch (error) {
-        console.error("Error creating PayPal order:", error.message);
+        console.error("Error creating PayPal order:", error.response ? error.response.data : error.message);
         res.status(500).json({ error: "Error creating PayPal order." });
     }
 });

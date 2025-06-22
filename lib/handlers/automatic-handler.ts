@@ -342,7 +342,7 @@ export async function handleAutomaticOperation(
                         actualScriptContent = currentScriptContent.trim();
                     }
 
-                    const tempScriptPath = path.join(currentCWD, `taylored-temp-script-${Date.now()}`);
+                    const tempScriptPath = path.join(currentCWD, `taylored-temp-script-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
                     await fs.writeFile(tempScriptPath, actualScriptContent);
 
                     let scriptResult = '';
@@ -519,7 +519,7 @@ export async function handleAutomaticOperation(
                     }
 
                     // Create temp script file without extension, relying on shebang
-                    const tempScriptPath = path.join(CWD, `taylored-temp-script-${Date.now()}`);
+                    const tempScriptPath = path.join(CWD, `taylored-temp-script-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
                     await fs.writeFile(tempScriptPath, actualScriptContent);
 
                     let scriptResult = '';

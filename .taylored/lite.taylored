@@ -1,0 +1,14 @@
+diff --git a/package.json b/package.json
+index f21ab19..5f5d1c4 100644
+--- a/package.json
++++ b/package.json
+@@ -67,6 +67,8 @@
+   },
+   "dependencies": {
+     "fs-extra": "^11.3.0",
++    "inquirer": "^12.6.3",
++    "open": "^10.1.2",
+     "parse-diff": "^0.11.1"
+   }
+ }
+\ No newline at end of file

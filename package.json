@@ -1,6 +1,6 @@
 {
   "name": "taylored",
-  "version": "8.0.3",
+  "version": "8.0.6",
   "description": "Make changes to a branch a plugin. A command-line tool to manage and apply plugins '.taylored'. Supports applying, removing, verifying plugins, and generating them from branch (GIT).",
   "keywords": [
     "plugins",
@@ -17,23 +17,23 @@
   "license": "MIT",
   "author": "tailot@gmail.com",
   "type": "commonjs",
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
   "main": "dist/index.js",
   "bin": {
-    "taylored": "dist/index.js"
+    "taylo": "dist/index.js"
   },
-  "files": [
-    "dist/index.js",
-    "dist/lib/",
-    "dist/templates/"
-  ],
   "scripts": {
     "build": "tsc",
     "postbuild": "node -e \"require('fs-extra').copySync('templates/backend-in-a-box', 'dist/templates/backend-in-a-box', { overwrite: true })\"",
     "build:lite": "tsc && node -e \"['dist/templates','dist/lib/handlers/setup-backend-handler.js','dist/lib/handlers/setup-backend-handler.d.ts','dist/lib/handlers/create-taysell-handler.js','dist/lib/handlers/create-taysell-handler.d.ts','dist/lib/handlers/buy-handler.js','dist/lib/handlers/buy-handler.d.ts','dist/lib/taysell-utils.js','dist/lib/taysell-utils.d.ts'].forEach(p=>require('fs').rmSync(p,{recursive:true,force:true}))\"",
     "prepublishOnly": "npm run build",
     "prepublish:lite": "npx ts-node index.ts --automatic ts main --exclude tests,node_modules && npx ts-node index.ts --add 9002 && npx ts-node index.ts --add 9003 && npx ts-node index.ts --add 9001 && npm run build:lite && node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylo';pkg.bin={'taylo':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
-    "publish:full": "npm run build && npm publish",
-    "publish:lite": "npm run build:lite && npm publish  --ignore-scripts",
+    "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
+    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove scripts && npx ts-node index.ts --remove lite && npm publish  --ignore-scripts",
     "postpublish:lite": "node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylored';pkg.bin={'taylored':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
     "test": "jest --runInBand",
     "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",
@@ -51,12 +51,6 @@
     "test:e2e:automatic": "jest --runInBand tests/e2e/automatic-compute.test.ts tests/e2e/automatic-git.test.ts",
     "test:e2e": "jest --runInBand tests/e2e/"
   },
-  "dependencies": {
-    "fs-extra": "^11.3.0",
-    "inquirer": "^12.6.3",
-    "open": "^10.1.2",
-    "parse-diff": "^0.11.1"
-  },
   "devDependencies": {
     "@babel/core": "^7.27.4",
     "@babel/preset-env": "^7.27.2",
@@ -70,5 +64,11 @@
     "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.0",
+    "inquirer": "^12.6.3",
+    "open": "^10.1.2",
+    "parse-diff": "^0.11.1"
   }
 }

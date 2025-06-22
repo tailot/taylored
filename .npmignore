@@ -4,10 +4,12 @@
 .github
 .vscode
 tests
+templates
 node_modules
 index.ts
 tsconfig.json
 jest.config.js
+babel.config.js
 *.ts
 DOCUMENTATION.md
 SECURITY.md

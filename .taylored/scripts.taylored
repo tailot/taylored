@@ -1,0 +1,50 @@
+diff --git a/package.json b/package.json
+index c47adc4..5f5d1c4 100644
+--- a/package.json
++++ b/package.json
+@@ -26,6 +26,45 @@
+   "bin": {
+     "taylo": "dist/index.js"
+   },
++  "scripts": {
++    "build": "tsc",
++    "postbuild": "node -e \"require('fs-extra').copySync('templates/backend-in-a-box', 'dist/templates/backend-in-a-box', { overwrite: true })\"",
++    "build:lite": "tsc && node -e \"['dist/templates','dist/lib/handlers/setup-backend-handler.js','dist/lib/handlers/setup-backend-handler.d.ts','dist/lib/handlers/create-taysell-handler.js','dist/lib/handlers/create-taysell-handler.d.ts','dist/lib/handlers/buy-handler.js','dist/lib/handlers/buy-handler.d.ts','dist/lib/taysell-utils.js','dist/lib/taysell-utils.d.ts'].forEach(p=>require('fs').rmSync(p,{recursive:true,force:true}))\"",
++    "prepublishOnly": "npm run build",
++    "prepublish:lite": "npx ts-node index.ts --automatic ts main --exclude tests,node_modules && npx ts-node index.ts --add 9002 && npx ts-node index.ts --add 9003 && npx ts-node index.ts --add 9001 && npm run build:lite && node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylo';pkg.bin={'taylo':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
++    "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
++    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove scripts && npx ts-node index.ts --remove lite && npm publish  --ignore-scripts",
++    "postpublish:lite": "node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylored';pkg.bin={'taylored':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
++    "test": "jest --runInBand",
++    "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",
++    "test:e2e:core:list": "jest --runInBand tests/e2e/core/list.test.ts",
++    "test:e2e:core:verify-add": "jest --runInBand tests/e2e/core/verify-add.test.ts",
++    "test:e2e:core:add": "jest --runInBand tests/e2e/core/add.test.ts",
++    "test:e2e:core:verify-remove": "jest --runInBand tests/e2e/core/verify-remove.test.ts",
++    "test:e2e:core:remove": "jest --runInBand tests/e2e/core/remove.test.ts",
++    "test:e2e:core:save": "jest --runInBand tests/e2e/core/save.test.ts",
++    "test:e2e:core:offset": "jest --runInBand tests/e2e/core/offset.test.ts",
++    "test:e2e:core": "jest --runInBand tests/e2e/core/",
++    "test:e2e:automatic:json": "jest --runInBand tests/e2e/compute-blocks-json.test.ts",
++    "test:e2e:automatic:compute": "jest --runInBand tests/e2e/automatic-compute.test.ts",
++    "test:e2e:automatic:git": "jest --runInBand tests/e2e/automatic-git.test.ts",
++    "test:e2e:automatic": "jest --runInBand tests/e2e/automatic-compute.test.ts tests/e2e/automatic-git.test.ts",
++    "test:e2e": "jest --runInBand tests/e2e/"
++  },
++  "devDependencies": {
++    "@babel/core": "^7.27.4",
++    "@babel/preset-env": "^7.27.2",
++    "@types/fs-extra": "^11.0.4",
++    "@types/inquirer": "^9.0.8",
++    "@types/jest": "^29.5.14",
++    "@types/node": "^22.15.29",
++    "babel-jest": "^29.7.0",
++    "babel-plugin-transform-import-meta": "^2.3.3",
++    "jest": "^29.7.0",
++    "ts-jest": "^29.3.4",
++    "ts-node": "^10.9.2",
++    "typescript": "^5.8.3"
++  },
+   "dependencies": {
+     "fs-extra": "^11.3.0",
+     "inquirer": "^12.6.3",

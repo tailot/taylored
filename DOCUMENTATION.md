@@ -1965,8 +1965,7 @@ The Backend-in-a-Box template exposes the following key API endpoints:
 
 The PayPal integration introduces the following key Node.js dependencies to the Backend-in-a-Box template:
 
-*   `axios`: Used for making HTTP requests (though direct use in the final PayPal integration might be minimal if the SDK handles all communication).
-*   `@paypal/checkout-server-sdk`: The official PayPal SDK for Node.js to interact with the PayPal v2 API.
+*   `axios`: Used for making direct HTTP requests to the PayPal API for creating orders and verifying webhooks.
 *   `sqlite3`: For database operations to store purchase information.
 *   `express`: The web framework used.
 

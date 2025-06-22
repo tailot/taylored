@@ -186,7 +186,8 @@ export async function handleAutomaticOperation(
 
     // Corrected regex to properly capture number, other attributes, and content
     const blockRegex = /[^\n]*?<taylored\s+number="(\d+)"([^>]*)>([\s\S]*?)[^\n]*?<\/taylored>/g;
-    const jsonBlockRegex = /{[^}]*?"taylored":\s*(\d+)[^}]*?}/g;
+    const jsonBlockRegex = /(?:"[^"]+"\s*:\s*)?({[^{}]*?"taylored"\s*:\s*(\d+)[^}]*?})/g
+;
     let totalBlocksProcessed = 0;
     const asyncScriptPromises: Promise<void>[] = [];
 
@@ -251,30 +252,23 @@ export async function handleAutomaticOperation(
                 isDisabled = disabledMatch ? disabledMatch[1] === 'true' : false;
 
             } else { // type === 'json'
-                const jsonBlockText = matchInfo.match[0];
-                scriptContentWithTags = jsonBlockText; // Full JSON block is the content with tags for replacement
+                scriptContentWithTags = matchInfo.match[0];      // For la sostituzione, usiamo ancora la corrispondenza completa (es. "chiave": {...})
+                const jsonBlockText = matchInfo.match[1];        // Per il parsing, usiamo il 1° gruppo di cattura (es. {...})
+                numero = matchInfo.match[2];                     // Il numero è già disponibile nel 2° gruppo di cattura
 
                 try {
                     const parsedJson = JSON.parse(jsonBlockText);
 
-                    if (typeof parsedJson.taylored !== 'number' || !Number.isInteger(parsedJson.taylored)) {
-                        console.warn(`Warning: JSON block in ${originalFilePath} at index ${matchInfo.index} has invalid or missing 'taylored' number. Skipping.`);
-                        continue;
-                    }
-                    numero = String(parsedJson.taylored);
-
                     if (typeof parsedJson.content !== 'string') {
-                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} at index ${matchInfo.index} has invalid or missing 'content' string. Skipping.`);
+                        console.warn(`Warning: JSON block ${numero} in ${originalFilePath} has invalid or missing 'content' string. Skipping.`);
                         continue;
                     }
                     scriptContent = parsedJson.content;
-
                     computeCharsToStrip = typeof parsedJson.compute === 'string' ? parsedJson.compute : undefined;
-                    asyncFlag = parsedJson.async === true; // Ensure boolean comparison
-                    isDisabled = parsedJson.disabled === true; // Ensure boolean comparison
-
+                    asyncFlag = parsedJson.async === true;
+                    isDisabled = parsedJson.disabled === true;
                 } catch (e: any) {
-                    console.warn(`Warning: Parsing of JSON block in ${originalFilePath} at index ${matchInfo.index} failed. Content: "${jsonBlockText}". Error: ${e.message}. Skipping.`);
+                    console.warn(`Warning: Parsing of JSON block in ${originalFilePath} ... Skipping.`);
                     continue;
                 }
             }

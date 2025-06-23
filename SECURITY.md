@@ -35,3 +35,11 @@ The following items are considered out of scope for this security policy:
 
 * **Vulnerabilities in third-party dependencies**: Vulnerabilities found in packages such as the PayPal SDK, Express, \`fs-extra\`, etc., should be reported directly to their respective projects.
 * **Seller's Environment Configuration**: The security of the server environment where the "Backend-in-a-Box" is run is the responsibility of the user (the seller). This includes the proper management of API keys, environment variables, and general server hardening.
+
+### ⚠️ Security Warning: Only Run Commands in Trusted Repositories
+
+\`taylored\` is a powerful tool that interacts deeply with your local environment, your source code, and your Git repository. Some commands have the ability to modify files and execute local scripts.
+
+It is critically important to run \`taylored\` commands **only within repositories that you fully trust**. Running them in an untrusted or compromised repository could expose your system to security risks.
+
+As a general rule, treat \`.taylored\` files and the repositories containing them with the same caution you would treat any other executable script or code. Always review the code and patches before applying or executing them.

@@ -1,0 +1,10 @@
+--- a/target_current_add.txt
++++ b/target_current_add.txt
+@@ -1,4 +1,7 @@
+ Line 1
+ Line 2 (Top Frame)
++Added Line A
++Added Line B
++Added Line C
+ Line 3 (Bottom Frame)
+ Line 4

@@ -1,5 +1,3 @@
-diff --git a/package.json b/package.json
-index 42e69fc..a5cab59 100644
 --- a/package.json
 +++ b/package.json
 @@ -26,6 +26,45 @@
@@ -9,12 +7,12 @@ index 42e69fc..a5cab59 100644
 +  "scripts": {
 +    "build": "tsc",
 +    "postbuild": "node -e \"require('fs-extra').copySync('templates/backend-in-a-box', 'dist/templates/backend-in-a-box', { overwrite: true })\"",
-+    "build:lite": "tsc && node -e \"['dist/templates','dist/lib/handlers/setup-backend-handler.js','dist/lib/handlers/setup-backend-handler.d.ts','dist/lib/handlers/create-taysell-handler.js','dist/lib/handlers/create-taysell-handler.d.ts','dist/lib/handlers/buy-handler.js','dist/lib/handlers/buy-handler.d.ts','dist/lib/taysell-utils.js','dist/lib/taysell-utils.d.ts'].forEach(p=>require('fs').rmSync(p,{recursive:true,force:true}))\"",
++    "build:lite": "./scripts/build-lite.js",
 +    "prepublishOnly": "npm run build",
-+    "prepublish:lite": "npx ts-node index.ts --automatic ts main --exclude tests,node_modules && npx ts-node index.ts --add 9002 && npx ts-node index.ts --add 9003 && npx ts-node index.ts --add 9001 && npm run build:lite && npx ts-node index.ts --remove scripts && npx ts-node index.ts --remove lite && node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylo';pkg.bin={'taylo':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
++    "prepublish:lite": "./scripts/prepublish-lite.js",
 +    "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
-+    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove lite && npx ts-node index.ts --remove scripts && npm publish  --ignore-scripts",
-+    "postpublish:lite": "node -e \"const fs=require('fs'),p='./package.json',pkg=JSON.parse(fs.readFileSync(p));pkg.name='taylored';pkg.bin={'taylored':'dist/index.js'};fs.writeFileSync(p,JSON.stringify(pkg,null,2));\"",
++    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove lite && npx ts-node index.ts --remove scripts && npm publish --ignore-scripts",
++    "postpublish:lite": "./scripts/postpublish-lite.js",
 +    "test": "jest --runInBand",
 +    "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",
 +    "test:e2e:core:list": "jest --runInBand tests/e2e/core/list.test.ts",

@@ -54,7 +54,7 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
 
     const backendDestPath = path.join(cwd, 'taysell-server');
 
-    // 2. Copia i file del template "Backend-in-a-Box"
+    // 2. Copy "Backend-in-a-Box" template files
     try {
         const templateSourcePath = path.resolve(
             __dirname,
@@ -94,7 +94,7 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
 
     let answers;
 
-    // 3. Wizard interattivo per la configurazione
+    // 3. Interactive configuration wizard
     if (process.env.JEST_WORKER_ID) {
         console.log('Running in test environment, using default config for .env');
         answers = {
@@ -126,7 +126,7 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
                 message: 'Enter your PayPal Client Secret:',
                 validate: input => input.trim() !== '' || 'Client Secret cannot be empty.',
             },
-            // Aggiunto prompt per l'ID Webhook
+            // Added prompt for Webhook ID
             {
                 type: 'password',
                 name: 'paypalWebhookId',
@@ -169,7 +169,7 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
         ]);
     }
 
-    // 4. Scrivi nel file .env
+    // 4. Write to .env file
     const envContent = `
 # Node.js Environment
 NODE_ENV=production
@@ -199,7 +199,7 @@ DB_PATH=./db/taysell.sqlite
         process.exit(1);
     }
 
-    // 5. Fornisci istruzioni per il deployment
+    // 5. Provide deployment instructions
     if (!process.env.JEST_WORKER_ID) {
         console.log('\\n--- Backend Setup Complete ---');
         console.log(`Configuration written to ${envPath}`);

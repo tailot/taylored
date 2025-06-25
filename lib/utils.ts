@@ -246,3 +246,39 @@ export function extractMessageFromPatch(patchContent: string | null | undefined)
 
     return null;
 }
+
+export interface HunkHeaderInfo {
+    originalHeaderLine: string;
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+}
+
+export function parsePatchHunks(patchContent: string | null | undefined): HunkHeaderInfo[] {
+    if (!patchContent) {
+        return [];
+    }
+    const hunks: HunkHeaderInfo[] = [];
+    const lines = patchContent.split('\n');
+    const hunkHeaderRegex = /^@@ -(\d+)(,(\d+))? \+(\d+)(,(\d+))? @@/;
+
+    for (const line of lines) {
+        const match = line.match(hunkHeaderRegex);
+        if (match) {
+            const oldStart = parseInt(match[1], 10);
+            const oldLines = match[3] !== undefined ? parseInt(match[3], 10) : 1;
+            const newStart = parseInt(match[4], 10);
+            const newLines = match[6] !== undefined ? parseInt(match[6], 10) : 1;
+
+            hunks.push({
+                originalHeaderLine: line,
+                oldStart,
+                oldLines,
+                newStart,
+                newLines,
+            });
+        }
+    }
+    return hunks;
+}

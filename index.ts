@@ -14,10 +14,11 @@ import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';
 import { handleOffsetCommand } from './lib/handlers/offset-handler';
 import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
-import { resolveTayloredFileName, printUsageAndExit } from './lib/utils';
+import { resolveTayloredFileName, printUsageAndExit } from './lib/utils'; 
 
 // <taylored number="9001">
-// Import new Taysell handlers
+// Import new Taysell handlers 
+import { handleUpgradeCommand } from './lib/handlers/upgrade-handler'; // Add import
 import { handleSetupBackend } from './lib/handlers/setup-backend-handler';
 import { handleCreateTaysell } from './lib/handlers/create-taysell-handler';
 import { handleBuyCommand } from './lib/handlers/buy-handler';
@@ -127,7 +128,26 @@ async function main(): Promise<void> {
                 printUsageAndExit(`CRITICAL ERROR: Unknown or unexpected argument '${rawArgs[currentArgIndex]}' for --offset. Expected optional [BRANCH_NAME] only.`);
             }
             await handleOffsetCommand(argument, CWD, branchName);
-        } else if (mode === '--automatic') {
+        }
+        // <INIZIO BLOCCO DA AGGIUNGERE>
+        else if (mode === '--upgrade') {
+            if (rawArgs.length < 2) {
+                printUsageAndExit("CRITICAL ERROR: --upgrade option requires at least one <taylored_file_name> argument.");
+            }
+            argument = rawArgs[1];
+            if (argument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${argument}' for --upgrade.`);
+            }
+
+            branchName = undefined;
+            if (rawArgs.length > 2 && !rawArgs[2].startsWith('--')) {
+                branchName = rawArgs[2];
+            }
+
+            await handleUpgradeCommand(argument, CWD, branchName);
+        }
+        // <FINE BLOCCO DA AGGIUNGERE>
+        else if (mode === '--automatic') {
             // ... (existing --automatic logic)
             let extensionsInput: string;
             let branchNameArgument: string;
@@ -166,9 +186,9 @@ async function main(): Promise<void> {
             }
             await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD, excludeDirs);
         }
-        // <taylored number="9002">
-        // === New Taysell Commands Start Here ===
-        else if (mode === 'setup-backend') { // Changed from --setup-backend to setup-backend
+        // <taylored number="9002"> 
+        // === New Taysell Commands Start Here === 
+        else if (mode === 'setup-backend') { // Changed from --setup-backend to setup-backend 
             if (rawArgs.length !== 1) {
                 printUsageAndExit("CRITICAL ERROR: setup-backend command does not take any arguments.");
             }
@@ -240,9 +260,9 @@ async function main(): Promise<void> {
             }
 
             await handleBuyCommand(finalTaysellFile, isDryRun, CWD);
-        }
-        // === End New Taysell Commands ===
-        // </taylored>
+        } 
+        // === End New Taysell Commands === 
+        // </taylored> 
         else { // Original logic for --add, --remove, etc.
             const applyModes = ['--add', '--remove', '--verify-add', '--verify-remove'];
             if (applyModes.includes(mode)) {

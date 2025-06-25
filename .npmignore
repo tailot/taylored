@@ -4,6 +4,7 @@
 .github
 .vscode
 tests
+scripts
 templates
 node_modules
 index.ts

@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as fsExtra from 'fs-extra';
 import * as path from 'path';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
-import { getAndAnalyzeDiff } from '../utils';
+import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants'; // TAYLORED_FILE_EXTENSION will be added to constants.ts
+import { getAndAnalyzeDiff } from '../utils'; // getAndAnalyzeDiff will be added to utils.ts
 
 /**
  * Implements the `taylored --save <branch_name>` command functionality.

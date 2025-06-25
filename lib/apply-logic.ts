@@ -4,7 +4,7 @@
 
 import * as fs from 'fs/promises'; // Using fs/promises for async file operations
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execSync } from 'child_process'; // For git apply
 import { TAYLORED_DIR_NAME } from './constants';
 
 /**
@@ -107,4 +107,70 @@ export async function handleApplyOperation(
         }
         throw error; // Re-throw the error to be handled by the caller.
     }
+}
+
+// Import necessary utilities for applyAllPatches
+import { getTayloredFilePaths } from './utils';
+
+/**
+ * Applies one or more specified Taylored patch files.
+ * This function iterates through a list of patch filenames and applies each one
+ * using the `handleApplyOperation`.
+ *
+ * @param {string[]} patchFileNames - An array of .taylored filenames to apply.
+ * @param {string} CWD - The current working directory.
+ * @param {boolean} isAddMode - True if applying (add), false if reverting (remove).
+ */
+export async function applyPatch(patchFileNames: string[], CWD: string, isAddMode: boolean): Promise<void> {
+    if (patchFileNames.length === 0) {
+        console.log("No patch files specified to apply.");
+        return;
+    }
+
+    const modeName = isAddMode ? '--add' : '--remove';
+    console.log(`Starting ${modeName} operation for ${patchFileNames.length} patch(es)...`);
+
+    for (const fileName of patchFileNames) {
+        try {
+            await handleApplyOperation(fileName, false, !isAddMode, modeName, CWD);
+            console.log(`Successfully ${isAddMode ? 'applied' : 'removed'} patch: ${fileName}`);
+        } catch (error: any) {
+            console.error(`Failed to ${isAddMode ? 'apply' : 'remove'} patch ${fileName}: ${error.message}`);
+            // Decide whether to continue or stop on first error
+            throw new Error(`Operation aborted due to failure on patch: ${fileName}`);
+        }
+    }
+    console.log(`${modeName} operation completed.`);
+}
+
+/**
+ * Applies or removes all Taylored patch files found in the .taylored directory.
+ * This function discovers all .taylored files and then applies/removes them
+ * using the `handleApplyOperation`.
+ *
+ * @param {string} CWD - The current working directory.
+ * @param {boolean} isAddMode - True if applying (add), false if reverting (remove).
+ */
+export async function applyAllPatches(CWD: string, isAddMode: boolean): Promise<void> {
+    const allTayloredFiles = getTayloredFilePaths(CWD);
+
+    if (allTayloredFiles.length === 0) {
+        console.log("No .taylored files found to apply/remove.");
+        return;
+    }
+
+    const modeName = isAddMode ? '--add' : '--remove';
+    console.log(`Starting ${modeName} operation for all ${allTayloredFiles.length} found patch(es)...`);
+
+    for (const fileName of allTayloredFiles) {
+        try {
+            await handleApplyOperation(fileName, false, !isAddMode, modeName, CWD);
+            console.log(`Successfully ${isAddMode ? 'applied' : 'removed'} patch: ${fileName}`);
+        } catch (error: any) {
+            console.error(`Failed to ${isAddMode ? 'apply' : 'remove'} patch ${fileName}: ${error.message}`);
+            // Decide whether to continue or stop on first error
+            throw new Error(`Operation aborted due to failure on patch: ${fileName}`);
+        }
+    }
+    console.log(`${modeName} operation completed for all patches.`);
 }

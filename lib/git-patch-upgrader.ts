@@ -1,16 +1,20 @@
-// lib/git-patch-upgrader.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { exec } from 'child_process';
 import * as util from 'util';
 import { TAYLORED_DIR_NAME } from './constants';
-import { analyzeDiffContent, parsePatchHunks } from './utils';
+import { analyzeDiffContent, parsePatchHunks, HunkHeaderInfo } from './utils';
 
 const execAsync = util.promisify(exec);
 
+/**
+ * Executes a Git command in a specified repository root.
+ * @param repoRoot - The absolute path to the repository.
+ * @param args - An array of strings representing the Git command arguments.
+ * @returns A promise that resolves with the stdout and stderr of the command.
+ */
 async function execGit(repoRoot: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
-    // Adding quoting to handle paths with spaces
-    const command = `git ${args.map(arg => arg.includes(' ') ? `"${arg}"` : arg).join(' ')}`;
+    const command = `git ${args.join(' ')}`;
     try {
         const { stdout, stderr } = await execAsync(command, { cwd: repoRoot });
         return { stdout: stdout.trim(), stderr: stderr.trim() };
@@ -19,9 +23,18 @@ async function execGit(repoRoot: string, args: string[]): Promise<{ stdout: stri
     }
 }
 
+/**
+ * Attempts to upgrade a .taylored patch file.
+ * The upgrade is only performed if the new patch is "pure" (only additions or only deletions),
+ * maintains the same hunk structure, and has different content.
+ * @param patchFileName - The name of the patch file inside the .taylored directory.
+ * @param repoRoot - The absolute path to the Git repository.
+ * @param branchName - The optional base branch to compare against (defaults to 'main').
+ * @returns An object indicating whether the patch was upgraded and a descriptive message.
+ */
 export async function upgradePatch(
     patchFileName: string,
-    repoRoot: string, 
+    repoRoot: string,
     branchName?: string
 ): Promise<{ upgraded: boolean; message: string }> {
     const baseBranch = branchName || 'main';
@@ -29,12 +42,6 @@ export async function upgradePatch(
 
     if (!await fs.pathExists(absolutePatchFilePath)) {
         throw new Error(`Patch file not found: ${absolutePatchFilePath}`);
-    }
-
-    // Verify that the working directory is clean, it's a prerequisite for --3way
-    const statusResult = await execGit(repoRoot, ['status', '--porcelain']);
-    if (statusResult.stdout.trim() !== '') {
-        throw new Error("Working directory must be clean to perform an upgrade. Please commit or stash your changes.");
     }
 
     const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
@@ -49,23 +56,21 @@ export async function upgradePatch(
     const originalBranch = (await execGit(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout;
 
     try {
-        // Create a temporary branch from the base branch for the operation
+        // This Git flow is necessary to correctly calculate the new diff against the current state.
         await execGit(repoRoot, ['checkout', '-b', tempBranchName, baseBranch]);
-        
-        // Use `git apply --3way` to intelligently apply the obsolete patch.
-        // This command attempts a 3-way merge if the patch does not apply directly.
-        await execGit(repoRoot, ['apply', '--3way', absolutePatchFilePath]);
-        
+        // Apply the patch to the temporary branch. Using --whitespace=fix to avoid potential issues.
+        await execGit(repoRoot, ['apply', '--whitespace=fix', `"${absolutePatchFilePath}"`]);
         await execGit(repoRoot, ['add', '-A']);
         await execGit(repoRoot, ['commit', '--no-verify', '-m', 'Temp commit for upgrade check']);
         
+        // Generate a new diff from the temporary commit.
         const diffResult = await execGit(repoRoot, ['diff', baseBranch, 'HEAD']);
         newPatchContent = diffResult.stdout;
-    } catch (error: any) { 
-        // If --3way also fails, the patch is too divergent to be updated automatically.
-        throw new Error(`Failed to generate a potential new patch. Git apply --3way may have failed, meaning the patch is too divergent to be upgraded automatically. ${error.message}`);
-    } finally { 
-        // Always cleans up, returning to the original branch and deleting the temporary one.
+    } catch (error: any) {
+        // This block catches errors from the git commands, e.g., if the patch fails to apply.
+        throw new Error(`Failed to generate a potential new patch. Git apply may have failed. ${error.message}`);
+    } finally {
+        // Clean up: switch back to the original branch and delete the temporary one.
         await execGit(repoRoot, ['checkout', '-f', originalBranch]);
         await execGit(repoRoot, ['branch', '-D', tempBranchName]);
     }
@@ -75,6 +80,7 @@ export async function upgradePatch(
     }
 
     const newAnalysis = analyzeDiffContent(newPatchContent);
+    // Ensure the new patch is also pure and of the same type (add/del).
     if (!newAnalysis.isPure || 
         (originalAnalysis.additions > 0 && newAnalysis.additions === 0) ||
         (originalAnalysis.deletions > 0 && newAnalysis.deletions === 0)) {
@@ -88,12 +94,14 @@ export async function upgradePatch(
         return { upgraded: false, message: `Patch not upgraded: Number of hunks changed from ${originalHunks.length} to ${newHunks.length}.` };
     }
 
+    // Check if the line counts within each hunk have changed.
     for (let i = 0; i < originalHunks.length; i++) {
         if (originalHunks[i].oldLines !== newHunks[i].oldLines || originalHunks[i].newLines !== newHunks[i].newLines) {
             return { upgraded: false, message: `Patch not upgraded: Line counts in hunk #${i + 1} have changed.` };
         }
     }
 
+    // If all checks pass, overwrite the original patch file.
     await fs.writeFile(absolutePatchFilePath, newPatchContent);
     return { upgraded: true, message: `Patch '${patchFileName}' was successfully upgraded with new content.` };
 }

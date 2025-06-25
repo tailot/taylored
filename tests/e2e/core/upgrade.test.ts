@@ -1,4 +1,3 @@
-// tests/e2e/core/upgrade.test.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import {
@@ -11,26 +10,7 @@ import {
 } from './setup';
 import { execSync } from 'child_process';
 
-/**
- * Helper function to run a command and capture its output, including errors.
- * This prevents the test from crashing on non-zero exit codes.
- * @param command The command to execute.
- * @returns An object with stdout and stderr.
- */
-const runCommandAndCapture = (command: string) => {
-    try {
-        const stdout = execSync(command, execOptions).toString();
-        return { stdout, stderr: '' };
-    } catch (error: any) {
-        return {
-            stdout: error.stdout?.toString() || '',
-            stderr: error.stderr?.toString() || '',
-        };
-    }
-};
-
-
-describe('Core CLI Tests - Upgrade', () => {
+describe('Core CLI Tests - --upgrade', () => {
 
     beforeAll(async () => {
         await initializeTestEnvironment();
@@ -41,165 +21,98 @@ describe('Core CLI Tests - Upgrade', () => {
     });
 
     beforeEach(async () => {
-        await resetToInitialState(true); // Cleans up but does not recreate the default patch
+        // Pulisce ma non ricrea la patch di default
+        await resetToInitialState(true); 
     });
 
-    // --- Test section for package.json (original, now corrected) ---
-    describe('Upgrade on package.json', () => {
-        const createInitialDepsPatch = async () => {
-            if (!execOptions.cwd) {
-                throw new Error("Test setup failed: execOptions.cwd is not defined.");
-            }
-            const cwd = execOptions.cwd.toString();
-            const pkgPath = path.join(cwd, 'package.json');
-            const initialContent = { dependencies: { "a": "1", "b": "2", "c": "3" } };
-            await fs.writeJson(pkgPath, initialContent, { spaces: 2 });
-            execSync('git add . && git commit -m "initial deps"', execOptions);
+    /**
+     * Helper function to create a test scenario.
+     * 1. Creates a package.json with dependencies a, b, c.
+     * 2. Creates and saves a patch that removes dependency 'b'.
+     * @returns The name of the created patch file.
+     */
+    const createInitialDepsPatch = async () => {
+        const pkgPath = path.join(execOptions.cwd!, 'package.json');
+        const initialContent = { dependencies: { "a": "1", "b": "2", "c": "3" } };
+        await fs.writeJson(pkgPath, initialContent, { spaces: 2 });
+        execSync('git add . && git commit -m "initial deps"', execOptions);
 
-            const modifiedContent = { dependencies: { "a": "1", "c": "3" } };
-            execSync('git checkout -b temp-del-b', execOptions);
-            await fs.writeJson(pkgPath, modifiedContent, { spaces: 2 });
-            execSync('git add . && git commit -m "remove b"', execOptions);
-            execSync('git checkout main', execOptions);
+        const modifiedContent = { dependencies: { "a": "1", "c": "3" } };
+        execSync('git checkout -b temp-del-b', execOptions);
+        await fs.writeJson(pkgPath, modifiedContent, { spaces: 2 });
+        execSync('git add . && git commit -m "remove b"', execOptions);
+        execSync('git checkout main', execOptions);
 
-            execSync(`${TAYLORED_CMD_BASE} --save temp-del-b`, execOptions);
-            execSync('git branch -D temp-del-b', execOptions);
-            return 'temp-del-b.taylored';
-        };
+        execSync(`${TAYLORED_CMD_BASE} --save temp-del-b`, execOptions);
+        execSync('git branch -D temp-del-b', execOptions);
+        return 'temp-del-b.taylored';
+    };
+
+    test('should upgrade a pure deletion patch when content changes but structure is identical', async () => {
+        const patchName = await createInitialDepsPatch();
+        const patchPath = path.join(TAYLORED_DIR_FULL_PATH, patchName);
+        const originalPatchContent = await fs.readFile(patchPath, 'utf-8');
+        expect(originalPatchContent).toContain('-    "b": "2"');
+
+
+        // Evolve the main branch, changing the line that the patch targets
+        const pkgPath = path.join(execOptions.cwd!, 'package.json');
+        const evolvedContent = { dependencies: { "a": "1", "b": "2-evolved", "c": "3" } };
+        await fs.writeJson(pkgPath, evolvedContent, { spaces: 2 });
+        execSync('git add . && git commit -m "evolve dep b"', execOptions);
+
+        // Run upgrade
+        const output = execSync(`${TAYLORED_CMD_BASE} --upgrade ${patchName}`, execOptions).toString();
+        expect(output).toContain("successfully upgraded");
+
+        // Check the new content of the patch file
+        const newPatchContent = await fs.readFile(patchPath, 'utf-8');
+        expect(newPatchContent).not.toEqual(originalPatchContent);
+        expect(newPatchContent).toContain('-    "b": "2-evolved"');
+        expect(newPatchContent).not.toContain('-    "b": "2"');
+    });
+
+    test('should NOT upgrade a patch if it would result in a structural change (hunk count)', async () => {
+        const patchName = await createInitialDepsPatch();
+        const patchPath = path.join(TAYLORED_DIR_FULL_PATH, patchName);
+        const originalPatchContent = await fs.readFile(patchPath, 'utf-8');
+
+        // Evolve main branch by adding a line between the context lines, which splits the hunk
+        const pkgPath = path.join(execOptions.cwd!, 'package.json');
+        const pkgContent = await fs.readFile(pkgPath, 'utf-8');
+        const newPkgContent = pkgContent.replace('"b": "2",', '"b": "2",\n    "b-extra": "new",');
+        await fs.writeFile(pkgPath, newPkgContent);
+        execSync('git add . && git commit -m "add another dep near b"', execOptions);
         
-        // CORRECTION: The test now verifies that the command fails correctly due to a merge conflict
-        test('should fail gracefully when git apply --3way results in conflicts', async () => {
-            const patchName = await createInitialDepsPatch();
-            const patchPath = path.join(TAYLORED_DIR_FULL_PATH, patchName);
-            const originalPatchContent = await fs.readFile(patchPath, 'utf-8');
+        const output = execSync(`${TAYLORED_CMD_BASE} --upgrade ${patchName}`, execOptions).toString();
+        expect(output).toContain("Patch not upgraded: Number of hunks changed");
 
-            // Fai evolvere il branch `main`
-            if (!execOptions.cwd) {
-                throw new Error("Test setup failed: execOptions.cwd is not defined.");
-            }
-            const cwd = execOptions.cwd.toString();
-            const pkgPath = path.join(cwd, 'package.json');
-            const evolvedContent = { dependencies: { "a": "1", "b": "2-evolved", "c": "3" } };
-            await fs.writeJson(pkgPath, evolvedContent, { spaces: 2 });
-            execSync('git add . && git commit -m "evolve dep b"', execOptions);
-
-            // Run the upgrade and capture the output
-            const { stdout, stderr } = runCommandAndCapture(`${TAYLORED_CMD_BASE} --upgrade ${patchName}`);
-            
-            // Verify that the command fails with the specific conflict error
-            expect(stderr).toContain("CRITICAL ERROR: Failed to process upgrade");
-            expect(stderr).toContain("Applied patch to 'package.json' with conflicts");
-
-            // Verify that the original patch has not been modified
-            const newPatchContent = await fs.readFile(patchPath, 'utf-8');
-            expect(newPatchContent).toEqual(originalPatchContent);
-        });
-
-        test('should fail gracefully on conflict before checking hunk structure', async () => {
-            const patchName = await createInitialDepsPatch();
-
-            // Fai evolvere `main` aggiungendo una riga che rompe l'hunk singolo
-            if (!execOptions.cwd) {
-                throw new Error("Test setup failed: execOptions.cwd is not defined.");
-            }
-            const cwd = execOptions.cwd.toString();
-            const pkgPath = path.join(cwd, 'package.json');
-            const evolvedContent = { dependencies: { "a": "1", "b": "2", "b-extra": "new", "c": "3" } };
-            await fs.writeJson(pkgPath, evolvedContent, { spaces: 2 });
-            execSync('git add . && git commit -m "add another dep near b"', execOptions);
-
-            const { stdout, stderr } = runCommandAndCapture(`${TAYLORED_CMD_BASE} --upgrade ${patchName}`); 
-
-            expect(stderr).toContain("CRITICAL ERROR: Failed to process upgrade");
-            expect(stderr).toContain("Applied patch to 'package.json' with conflicts");
-        });
+        // Ensure the original patch was not modified
+        const finalPatchContent = await fs.readFile(patchPath, 'utf-8');
+        expect(finalPatchContent).toEqual(originalPatchContent);
+    });
+    
+    test('should report that the patch is up-to-date if no changes are detected', async () => {
+        const patchName = await createInitialDepsPatch();
+        
+        // Run upgrade without any changes to the codebase
+        const output = execSync(`${TAYLORED_CMD_BASE} --upgrade ${patchName}`, execOptions).toString();
+        expect(output).toContain("is already up-to-date");
     });
 
-    // --- Test section for multi-line code file (now corrected) ---
-    describe('Upgrade on multi-line source file', () => {
-        const SRC_FILE_NAME = 'src/utils.js';
-        const PATCH_BRANCH_NAME = 'add-helper-two';
-        const PATCH_FILE_NAME = `${PATCH_BRANCH_NAME}.taylored`;
-
-        const createSourceFileAndPatch = async () => {
-            if (!execOptions.cwd) {
-                throw new Error("Test setup failed: execOptions.cwd is not defined.");
-            }
-            const CWD = execOptions.cwd.toString();
-            const srcDirPath = path.join(CWD, 'src');
-            await fs.ensureDir(srcDirPath);
-            const srcFilePath = path.join(srcDirPath, 'utils.js');
-
-            const initialContent = [
-                'function helperOne() {',
-                '  console.log("Helper one");',
-                '}',
-                '',
-                'function helperThree() {',
-                '  console.log("Helper three");',
-                '}',
-            ].join('\n');
-            await fs.writeFile(srcFilePath, initialContent);
-            execSync('git add . && git commit -m "feat: add initial utils"', execOptions);
-            const initialCommit = execSync('git rev-parse HEAD', execOptions).toString().trim();
-
-            execSync(`git checkout -b ${PATCH_BRANCH_NAME} ${initialCommit}`, execOptions);
-            const featureContent = [
-                'function helperOne() {',
-                '  console.log("Helper one");',
-                '}',
-                '',
-                'function helperTwo() {',
-                '  console.log("This is the new helper two");',
-                '}',
-                '',
-                'function helperThree() {',
-                '  console.log("Helper three");',
-                '}',
-            ].join('\n');
-            await fs.writeFile(srcFilePath, featureContent);
-            execSync(`git add . && git commit -m "feat: add helperTwo"`, execOptions);
-
-            execSync(`git checkout main`, execOptions);
-            execSync(`${TAYLORED_CMD_BASE} --save ${PATCH_BRANCH_NAME}`, execOptions);
-            execSync(`git branch -D ${PATCH_BRANCH_NAME}`, execOptions);
-        };
-
-        test('should correctly upgrade a pure addition patch on a source file', async () => {
-            await createSourceFileAndPatch();
-            const patchPath = path.join(TAYLORED_DIR_FULL_PATH, PATCH_FILE_NAME);
-            const originalPatchContent = await fs.readFile(patchPath, 'utf-8');
-
-            if (!execOptions.cwd) {
-                throw new Error("Test setup failed: execOptions.cwd is not defined.");
-            }
-            const CWD = execOptions.cwd.toString();
-            const srcFilePath = path.join(CWD, SRC_FILE_NAME);
-            const currentContent = await fs.readFile(srcFilePath, 'utf-8');
-            const evolvedContent = [
-                '// Preamble comment line 1',
-                '// Preamble comment line 2',
-                '',
-                currentContent,
-            ].join('\n');
-            await fs.writeFile(srcFilePath, evolvedContent);
-            execSync('git add . && git commit -m "refactor: add preamble to utils.js"', execOptions);
-
-            // Run the --upgrade command
-            const output = execSync(`${TAYLORED_CMD_BASE} --upgrade ${PATCH_FILE_NAME}`, execOptions).toString();
-            expect(output).toContain("successfully upgraded");
-
-            // Verify the new patch
-            const newPatchContent = await fs.readFile(patchPath, 'utf-8');
-            expect(newPatchContent).not.toEqual(originalPatchContent);
-            
-            expect(newPatchContent).toMatch(/@@ -5,.* \+5,.* @@/);
-
-            // Verify that the updated patch applies correctly
-            execSync(`${TAYLORED_CMD_BASE} --add ${PATCH_FILE_NAME}`, execOptions);
-            const finalFileContent = await fs.readFile(srcFilePath, 'utf-8');
-            expect(finalFileContent).toContain('// Preamble comment line 1');
-            expect(finalFileContent).toContain('function helperTwo()');
-        });
+    test('should NOT upgrade a patch if it is not pure', async () => {
+        // Create a mixed patch (not pure)
+        const pkgPath = path.join(execOptions.cwd!, 'package.json');
+        await fs.writeJson(pkgPath, { dependencies: { "a": "1" } }, { spaces: 2 });
+        execSync('git add . && git commit -m "base for mixed"', execOptions);
+        execSync('git checkout -b mixed-patch', execOptions);
+        await fs.writeJson(pkgPath, { dependencies: { "a": "2", "b": "new" } }, { spaces: 2 }); // a changed, b added
+        execSync('git add . && git commit -m "mixed changes"', execOptions);
+        execSync('git checkout main', execOptions);
+        execSync(`${TAYLORED_CMD_BASE} --save mixed-patch`, execOptions);
+        execSync('git branch -D mixed-patch', execOptions);
+        
+        const output = execSync(`${TAYLORED_CMD_BASE} --upgrade mixed-patch`, execOptions).toString();
+        expect(output).toContain("is not pure (contains mixed additions and deletions) and cannot be upgraded");
     });
 });

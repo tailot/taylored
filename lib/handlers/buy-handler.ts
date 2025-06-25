@@ -2,9 +2,9 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as https from 'https';
 import { validateTaysellFileContent, TaysellFile } from '../taysell-utils';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
-//import { handleApplyOperation } from '../apply-logic';
-import { printUsageAndExit } from '../utils';
+import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants'; // TAYLORED_FILE_EXTENSION will be added to constants.ts
+import { handleApplyOperation } from '../apply-logic'; // Uncommented for future use
+import { printUsageAndExit } from '../utils'; // printUsageAndExit will be moved to utils.ts
 import * as crypto from 'crypto';
 import inquirer from 'inquirer';
 
@@ -356,7 +356,7 @@ export async function handleBuyCommand(
             await fs.writeFile(destinationPath, patchContent);
             console.log(`Patch downloaded and saved to: ${destinationPath}`);
 
-            //await handleApplyOperation(targetFileName, false, false, "buy", CWD);
+            await handleApplyOperation(targetFileName, false, false, "buy", CWD);
             console.log(`Purchase and application of patch '${metadata.name}' completed.`);
         }
     } catch (error: any) {

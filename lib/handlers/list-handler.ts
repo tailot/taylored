@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
+import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants'; // TAYLORED_FILE_EXTENSION will be added to constants.ts
 
 /**
  * Implements the `taylored --list` command functionality.

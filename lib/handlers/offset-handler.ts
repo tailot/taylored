@@ -1,6 +1,6 @@
 import * as path from 'path';
-import { updatePatchOffsets } from '../git-patch-offset-updater';
-import { resolveTayloredFileName } from '../utils';
+import { updatePatchWithOffset } from '../git-patch-offset-updater'; // Corrected import name
+import { resolveTayloredFileName } from '../utils'; 
 import { TAYLORED_DIR_NAME } from '../constants';
 
 /**
@@ -53,7 +53,7 @@ export async function handleOffsetCommand(
     
     try {
         // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
-        const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, undefined, branchName);
+        const result = await updatePatchWithOffset(resolvedTayloredFileName, CWD, branchName);
     } catch (error: any) {
         console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
         let message = error.message || 'An unknown error occurred during offset update.';

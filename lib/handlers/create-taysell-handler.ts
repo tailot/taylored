@@ -6,8 +6,8 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import inquirer from 'inquirer';
 import * as crypto from 'crypto'; // For generating patchId
-import { encryptAES256GCM } from '../taysell-utils'; // Corrected path
-import { TAYLORED_FILE_EXTENSION } from '../constants'; // Assuming this exists for .taylored extension
+import { encryptAES256GCM } from '../taysell-utils';
+import { TAYLORED_FILE_EXTENSION } from '../constants'; // TAYLORED_FILE_EXTENSION will be added to constants.ts
 
 // Helper function to read .env file
 /**

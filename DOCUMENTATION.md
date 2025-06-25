@@ -53,6 +53,11 @@
         *   [Arguments](#arguments-offset)
         *   [Use Cases](#use-cases-offset)
         *   [Examples](#examples-offset)
+    *   [`taylored --upgrade <taylored_file_name> [BRANCH_NAME]`](#taylored---upgrade-taylored_file_name-branch_name)
+        *   [Scopo (`--upgrade`)](#scopo-upgrade)
+        *   [Nuova Logica di Aggiornamento Dettagliata](#nuova-logica-di-aggiornamento-dettagliata)
+        *   [Argomenti (`--upgrade`)](#argomenti-upgrade)
+        *   [Esempi Pratici](#esempi-pratici)
     *   [`taylored --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`](#taylored---automatic-extensions-branch_name---exclude-dir_list)
         *   [Purpose](#purpose-automatic)
         *   [Arguments](#arguments-automatic)
@@ -1112,6 +1117,67 @@ The command may also embed a custom `Subject:` line (like a commit message summa
 *   **Review Changes**: After running `taylored --offset`, it's good practice to inspect the updated `.taylored` file (e.g., using `git diff .taylored/your_plugin.taylored`) to understand what changed, or try `taylored --verify-add` on it.
 
 The `taylored --offset` command is a powerful tool for maintaining the longevity of your Taylored plugins in an evolving codebase.
+
+---
+
+### `taylored --upgrade <taylored_file_name> [BRANCH_NAME]`
+
+#### Scopo (`--upgrade`)
+
+Il comando `taylored --upgrade` **aggiorna un file di patch `.taylored` obsoleto per renderlo compatibile con lo stato attuale del codice sorgente**. Questa operazione è necessaria quando il file che la patch dovrebbe modificare è cambiato nel tempo, ma la natura fondamentale della modifica rimane la stessa.
+
+A differenza del più generico comando `--offset`, `--upgrade` opera secondo una regola molto più stringente e sicura: l'aggiornamento avviene **solo e solo se la "cornice" contestuale di tutte le modifiche presenti nella patch è rimasta identica**.
+
+#### Nuova Logica di Aggiornamento Dettagliata
+
+Il processo di `upgrade` ora segue questi passaggi, senza utilizzare `git apply` che potrebbe portare a conflitti:
+
+1.  **Analisi della Patch:** Il comando legge la patch `.taylored` e ne analizza la struttura, identificando:
+    * Il file di destinazione (es. `src/app.js`).
+    * Tutti i blocchi di modifiche (detti "hunk").
+    * Per ogni hunk, le righe di "contesto": le linee di codice immediatamente sopra e sotto il blocco di modifiche, che devono rimanere invariate per garantire che l'aggiornamento sia sicuro.
+
+2.  **Verifica del Contesto (la "Cornice"):** Per ogni hunk, confronta le sue righe di contesto con le righe corrispondenti nel file di destinazione attuale.
+    * **Se tutte le cornici corrispondono:** L'operazione procede. Questo significa che le modifiche nel file di destinazione sono avvenute solo *all'interno* delle aree che la patch intende modificare.
+    * **Se anche una sola cornice NON corrisponde:** L'operazione viene annullata con un errore. Questo previene aggiornamenti errati se, ad esempio, una funzione è stata spostata o il codice circostante è stato refattorizzato.
+
+3.  **Riscrittura della Patch:** Se la verifica ha successo, lo strumento genera una nuova patch che riflette le modifiche di contenuto attuali all'interno di tutte le cornici originali e sovrascrive il vecchio file `.taylored`.
+
+#### Argomenti (`--upgrade`)
+
+* **`<taylored_file_name>` (Obbligatorio):** Il nome del file `.taylored` da aggiornare.
+* **`[BRANCH_NAME]` (Opzionale):** Il nome del branch Git da utilizzare come riferimento. **Nota:** Con la nuova logica, questo argomento è meno rilevante, poiché il confronto principale avviene con il file system attuale.
+
+#### Esempi Pratici
+
+##### Esempio 1: Aggiornamento di Successo (Singolo Hunk)
+
+* **Stato Iniziale:**
+    * `package.json` contiene: `"my-lib": "1.0.0"`.
+    * `update-lib.taylored` è una patch per aggiornare la versione a `1.1.0`.
+* **Evoluzione del Codice:**
+    * Modifichi manualmente `package.json` portando la versione a `"1.2.0"`. Le righe sopra e sotto non cambiano.
+* **Comando:** `taylored --upgrade update-lib`
+* **Risultato:** Il file `update-lib.taylored` viene **riscritto**. La nuova patch ora descriverà la modifica da `"1.0.0"` a `"1.2.0"`.
+
+##### Esempio 2: Aggiornamento di Successo (Multi-Hunk)
+
+* **Stato Iniziale:**
+    * Un file `config.yml` contiene `version: 1` all'inizio e `api_key: old_key` alla fine.
+    * `update_config.taylored` è una patch con **due hunk** per cambiare `version` in `2` e `api_key` in `new_key`.
+* **Evoluzione del Codice:**
+    * Modifichi manualmente `config.yml`, cambiando i valori in `version: 3` e `api_key: final_key`. Il resto del file (la "cornice" di entrambi gli hunk) rimane invariato.
+* **Comando:** `taylored --upgrade update_config`
+* **Risultato:** Il file `update_config.taylored` viene **riscritto**. La nuova patch (sempre con due hunk) ora descriverà le modifiche da `version: 1` a `version: 3` e da `api_key: old_key` a `api_key: final_key`.
+
+##### Esempio 3: Aggiornamento Fallito (Contesto Modificato)
+
+* **Stato Iniziale:**
+    * Come nell'Esempio 1, `update-lib.taylored` vuole modificare la riga di `"my-lib"`.
+* **Evoluzione del Codice:**
+    * In `package.json`, aggiungi una nuova dipendenza **subito sopra** la riga di `"my-lib"`. Hai modificato la "cornice" che la patch si aspetta di trovare.
+* **Comando:** `taylored --upgrade update-lib`
+* **Risultato:** L'operazione viene annullata con un errore perché il contesto è cambiato.
 
 ---
 

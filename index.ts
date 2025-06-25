@@ -14,6 +14,7 @@ import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';
 import { handleOffsetCommand } from './lib/handlers/offset-handler';
 import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
+import { handleUpgradeCommand } from './lib/handlers/upgrade-handler'; // Import for --upgrade
 import { resolveTayloredFileName, printUsageAndExit } from './lib/utils';
 
 // <taylored number="9001">
@@ -65,10 +66,10 @@ async function main(): Promise<void> {
     let argument: string | undefined;
     let branchName: string | undefined; // Re-used for some commands, ensure clarity
 
-    // List of modes that require a .git directory check (original list)
-    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--automatic'];
+    // List of modes that require a .git directory check
+    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--automatic', '--upgrade'];
 
-    // Only run .git check if it's one of the original commands
+    // Run .git check if the current mode requires it
     if (relevantModesForGitCheck.includes(mode)) {
         const gitDirPath = path.join(CWD, '.git');
         try {
@@ -165,6 +166,34 @@ async function main(): Promise<void> {
                 printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchNameArgument}' after --automatic <EXTENSIONS>. It cannot start with '--'.`);
             }
             await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD, excludeDirs);
+        } else if (mode === '--upgrade') {
+            if (rawArgs.length < 2) {
+                printUsageAndExit("CRITICAL ERROR: --upgrade option requires a <taylored_file_name> argument.");
+            }
+            argument = rawArgs[1]; // This is the <taylored_file_name>
+            if (argument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${argument}' for --upgrade. It cannot start with '--'.`);
+            }
+            // Check for path separators in the filename argument
+            if (argument.includes(path.sep) || argument.includes('/') || argument.includes('\\')) {
+                printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${argument}') must be a simple filename without path separators. It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
+            }
+
+            let optionalBranchName: string | undefined = undefined;
+            if (rawArgs.length > 2) { // If there's a third argument
+                if (!rawArgs[2].startsWith('--')) { // And it's not another option
+                    optionalBranchName = rawArgs[2];
+                } else {
+                    // If it starts with '--' it's an unexpected option, print usage.
+                     printUsageAndExit(`CRITICAL ERROR: Unknown or unexpected argument '${rawArgs[2]}' for --upgrade. Expected optional [BRANCH_NAME] only.`);
+                }
+            }
+            // If there are more than 3 arguments (e.g. --upgrade file branch extra_arg)
+            if (rawArgs.length > 3) {
+                 printUsageAndExit(`CRITICAL ERROR: Too many arguments for --upgrade. Expected <taylored_file_name> and optional [BRANCH_NAME].`);
+            }
+
+            await handleUpgradeCommand(argument, CWD, optionalBranchName);
         }
         // <taylored number="9002">
         // === New Taysell Commands Start Here ===

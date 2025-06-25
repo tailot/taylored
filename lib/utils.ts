@@ -55,6 +55,7 @@ Core Patching Commands (require to be run in a Git repository root):`);
         console.log(`  --save <branch_name>                Creates a patch from changes in <branch_name>.`);
         console.log(`  --list                              Lists all applied patches.`);
         console.log(`  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.`);
+        console.log(`  --upgrade <taylored_file_name> [BRANCH_NAME] Surgically updates an existing patch based on changes in the target file or branch.`);
         console.log(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
         console.log(`                                      Automatically computes and applies line offsets for patches based on Git history.`);
 
@@ -245,4 +246,42 @@ export function extractMessageFromPatch(patchContent: string | null | undefined)
     }
 
     return null;
+}
+
+// Moved from lib/git-patch-offset-updater.ts
+export interface Hunk {
+    originalHeaderLine: string;
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+}
+
+// Moved from lib/git-patch-offset-updater.ts
+export function parsePatchHunks(patchContent: string | null | undefined): Hunk[] {
+    if (!patchContent) {
+        return [];
+    }
+    const hunks: Hunk[] = [];
+    const lines = patchContent.split('\n');
+    const hunkHeaderRegex = /^@@ -(\d+)(,(\d+))? \+(\d+)(,(\d+))? @@/;
+
+    for (const line of lines) {
+        const match = line.match(hunkHeaderRegex);
+        if (match) {
+            const oldStart = parseInt(match[1], 10);
+            const oldLines = match[3] !== undefined ? parseInt(match[3], 10) : 1;
+            const newStart = parseInt(match[4], 10);
+            const newLines = match[6] !== undefined ? parseInt(match[6], 10) : 1;
+
+            hunks.push({
+                originalHeaderLine: line,
+                oldStart,
+                oldLines,
+                newStart,
+                newLines,
+            });
+        }
+    }
+    return hunks;
 }

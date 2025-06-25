@@ -1,6 +1,6 @@
 {
   "name": "taylored",
-  "version": "8.1.0",
+  "version": "8.1.1",
   "description": "Make changes to a branch a plugin. A command-line tool to manage and apply plugins '.taylored'. Supports applying, removing, verifying plugins, and generating them from branch (GIT).",
   "keywords": [
     "plugins",
@@ -33,8 +33,7 @@
     "prepublishOnly": "npm run build",
     "prepublish:lite": "./scripts/prepublish-lite.js",
     "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
-    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove lite && npx ts-node index.ts --remove scripts && npm publish --ignore-scripts",
-    "postpublish:lite": "./scripts/postpublish-lite.js",
+    "publish:lite": "npm publish --ignore-scripts",
     "test": "jest --runInBand",
     "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",
     "test:e2e:core:list": "jest --runInBand tests/e2e/core/list.test.ts",

@@ -11,7 +11,9 @@ const commands = [
   'npx ts-node index.ts --add 9002',
   'npx ts-node index.ts --add 9003',
   'npx ts-node index.ts --add 9001',
-  'npm run build:lite'
+  'npm run build:lite',
+  'npx ts-node index.ts --remove scripts',
+  'npx ts-node index.ts --remove lite'
 ];
 
 try {

@@ -1,6 +1,6 @@
 --- a/package.json
 +++ b/package.json
-@@ -26,6 +26,45 @@
+@@ -26,6 +26,44 @@
    "bin": {
      "taylored": "dist/index.js"
    },
@@ -11,8 +11,7 @@
 +    "prepublishOnly": "npm run build",
 +    "prepublish:lite": "./scripts/prepublish-lite.js",
 +    "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
-+    "publish:lite": "npm run build:lite && npx ts-node index.ts --remove lite && npx ts-node index.ts --remove scripts && npm publish --ignore-scripts",
-+    "postpublish:lite": "./scripts/postpublish-lite.js",
++    "publish:lite": "npm publish --ignore-scripts",
 +    "test": "jest --runInBand",
 +    "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",
 +    "test:e2e:core:list": "jest --runInBand tests/e2e/core/list.test.ts",

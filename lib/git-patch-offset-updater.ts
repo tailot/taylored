@@ -8,7 +8,7 @@ import { exec, ExecOptions as ChildProcessExecOptions } from 'child_process';
 import * as util from 'util';
 import { handleApplyOperation } from './apply-logic';
 import { TAYLORED_DIR_NAME } from './constants';
-import { extractMessageFromPatch } from './utils';
+import { extractMessageFromPatch, parsePatchHunks } from './utils';
 
 const execAsync = util.promisify(exec);
 
@@ -72,42 +72,6 @@ async function execGit(repoRoot: string, args: string[], options: ExecGitOptions
         const errorMessage = `Error executing git command: ${command}\nRepo: ${repoRoot}\nExit Code: ${error.code}\nStdout: ${error.stdout ? error.stdout.trim() : 'N/A'}\nStderr: ${error.stderr ? error.stderr.trim() : 'N/A'}`;
         throw new GitExecutionError(errorMessage, error);
     }
-}
-
-interface HunkHeaderInfo {
-    originalHeaderLine: string;
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-}
-
-function parsePatchHunks(patchContent: string | null | undefined): HunkHeaderInfo[] {
-    if (!patchContent) {
-        return [];
-    }
-    const hunks: HunkHeaderInfo[] = [];
-    const lines = patchContent.split('\n');
-    const hunkHeaderRegex = /^@@ -(\d+)(,(\d+))? \+(\d+)(,(\d+))? @@/;
-
-    for (const line of lines) {
-        const match = line.match(hunkHeaderRegex);
-        if (match) {
-            const oldStart = parseInt(match[1], 10);
-            const oldLines = match[3] !== undefined ? parseInt(match[3], 10) : 1;
-            const newStart = parseInt(match[4], 10);
-            const newLines = match[6] !== undefined ? parseInt(match[6], 10) : 1;
-
-            hunks.push({
-                originalHeaderLine: line,
-                oldStart,
-                oldLines,
-                newStart,
-                newLines,
-            });
-        }
-    }
-    return hunks;
 }
 
 /**
@@ -345,4 +309,4 @@ async function updatePatchOffsets(
     return { outputPath: absolutePatchFilePath };
 }
 
-export { updatePatchOffsets, parsePatchHunks, quoteForShell, GitExecutionError };
+export { updatePatchOffsets, quoteForShell, GitExecutionError };

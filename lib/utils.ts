@@ -246,3 +246,77 @@ export function extractMessageFromPatch(patchContent: string | null | undefined)
 
     return null;
 }
+
+export interface Hunk {
+    originalHeaderLine: string;
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[]; // Raw lines of the hunk, including context, additions, deletions
+    // Useful for detailed analysis or reconstruction if needed
+}
+
+export function parsePatchHunks(patchContent: string | null | undefined): Hunk[] {
+    if (!patchContent) {
+        return [];
+    }
+    const hunks: Hunk[] = [];
+    const lines = patchContent.split('\n');
+    const hunkHeaderRegex = /^@@ -(\d+)(,(\d+))? \+(\d+)(,(\d+))? @@(?: (.+))?/; // Added capture for section header
+
+    let currentHunk: Hunk | null = null;
+    let linesInCurrentHunk: string[] = [];
+
+    for (const line of lines) {
+        const match = line.match(hunkHeaderRegex);
+        if (match) {
+            // If there was a previous hunk, push it
+            if (currentHunk) {
+                currentHunk.lines = linesInCurrentHunk;
+                hunks.push(currentHunk);
+                linesInCurrentHunk = [];
+            }
+
+            const oldStart = parseInt(match[1], 10);
+            const oldLines = match[3] !== undefined ? parseInt(match[3], 10) : 1; // Default to 1 if not present
+            const newStart = parseInt(match[4], 10);
+            const newLines = match[6] !== undefined ? parseInt(match[6], 10) : 1; // Default to 1 if not present
+            // const sectionHeader = match[7] ? match[7].trim() : undefined; // Optional section header text
+
+            currentHunk = {
+                originalHeaderLine: line,
+                oldStart,
+                oldLines,
+                newStart,
+                newLines,
+                lines: [] // Initialize with empty array, will be populated later
+            };
+            linesInCurrentHunk.push(line); // Add the header line itself to the hunk's lines
+        } else if (currentHunk) {
+            // Only add lines if we are inside a hunk
+            // Also, check if the line is part of the diff content (starts with ' ', '+', or '-')
+            // or if it's a \ No newline at end of file marker
+            if (line.startsWith(' ') || line.startsWith('+') || line.startsWith('-') || line.startsWith('\\ No newline at end of file')) {
+                 linesInCurrentHunk.push(line);
+            } else {
+                // This line is not part of the hunk (e.g., diff --git, index, etc. or end of patch)
+                // If we have a currentHunk, it means its content has ended.
+                if (linesInCurrentHunk.length > 0) { // Ensure there are lines to save
+                    currentHunk.lines = linesInCurrentHunk;
+                    hunks.push(currentHunk);
+                }
+                currentHunk = null; // Reset currentHunk as we are outside of a hunk body
+                linesInCurrentHunk = [];
+            }
+        }
+    }
+
+    // Add the last hunk if it exists
+    if (currentHunk && linesInCurrentHunk.length > 0) {
+        currentHunk.lines = linesInCurrentHunk;
+        hunks.push(currentHunk);
+    }
+
+    return hunks;
+}

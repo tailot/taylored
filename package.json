@@ -54,6 +54,7 @@
   "devDependencies": {
     "@babel/core": "^7.27.4",
     "@babel/preset-env": "^7.27.2",
+    "@types/diff": "^7.0.2",
     "@types/fs-extra": "^11.0.4",
     "@types/inquirer": "^9.0.8",
     "@types/jest": "^29.5.14",
@@ -66,6 +67,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "diff": "^8.0.2",
     "fs-extra": "^11.3.0",
     "inquirer": "^12.6.3",
     "open": "^10.1.2",

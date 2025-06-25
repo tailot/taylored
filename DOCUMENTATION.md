@@ -48,6 +48,11 @@
         *   [Purpose](#purpose-list)
         *   [Use Cases](#use-cases-list)
         *   [Examples](#examples-list)
+    *   [`taylored --upgrade <taylored_file_name> [BRANCH_NAME]`](#taylored---upgrade-taylored_file_name-branch_name)
+        *   [Purpose](#purpose-upgrade)
+        *   [Arguments](#arguments-upgrade)
+        *   [Use Cases](#use-cases-upgrade)
+        *   [Examples](#examples-upgrade)
     *   [`taylored --offset <taylored_file_name> [BRANCH_NAME]`](#taylored---offset-taylored_file_name-branch_name)
         *   [Purpose](#purpose-offset)
         *   [Arguments](#arguments-offset)
@@ -93,6 +98,7 @@
     *   [`--add` / `--remove`](#how-add-remove-works)
     *   [`--verify-add` / `--verify-remove`](#how-verify-works)
     *   [`--list`](#how-list-works)
+    *   [`--upgrade`](#how-upgrade-works)
     *   [`--offset`](#how-offset-works)
     *   [`--automatic`](#how-automatic-works)
 6.  [Contributing](#contributing)
@@ -984,6 +990,187 @@ The `taylored --list` command is a simple yet essential utility for interacting 
 
 ---
 
+### `taylored --upgrade <taylored_file_name> [BRANCH_NAME]`
+
+#### Purpose (`--upgrade`)
+
+The `taylored --upgrade` command is a powerful maintenance tool designed to **update an existing `.taylored` patch file that has become obsolete due to changes in the target file's content.** It's the ideal solution when the conceptual change of the patch is still valid, but the specific lines it modifies have shifted or changed, rendering a direct `git apply` (as used by `taylored --add`) ineffective.
+
+The upgrade process operates under a strict "Contextual Frame Integrity" principle:
+
+A patch will be updated if and only if **all** of the following conditions are met for **all hunks (blocks of changes)** within the patch file:
+
+1.  **Integrity of Contextual Frame**: The lines of code that provide context for the change (those lines starting with a space in the patch file, immediately preceding or following the additions/deletions) must **still be present and identical** in the target file. This ensures that the "surrounding structure" of the code where the change was originally made has remained stable.
+2.  **Obsolete Content**: The actual content *within* at least one of these contextual frames (i.e., the lines that the original patch intended to delete or modify) must have **changed in the target file**, making the original patch outdated.
+
+If both conditions are met, Taylored will generate a new patch content that reflects the changes from the *original state described by the old patch* to the *current state of the target file*. This new content then overwrites the existing `.taylored` file.
+
+The target file for comparison is, by default, the version present in your local file system. However, you can specify an optional `[BRANCH_NAME]` to use the version of the file from that branch as the reference for the "current state."
+
+This command **does not** alter your working directory files directly; it only modifies the specified `.taylored` patch file.
+
+#### Arguments (`--upgrade`)
+
+*   **`<taylored_file_name>` (Required)**:
+    *   **Description**: The name of the Taylored plugin file you want to attempt to upgrade. Taylored will look for this file within the `.taylored/` directory.
+    *   **Format**: The filename of the plugin. You can include the `.taylored` extension, or omit it.
+    *   **Example**: `my_feature_patch`, `my_feature_patch.taylored`.
+
+*   **`[BRANCH_NAME]` (Optional)**:
+    *   **Description**: The name of the Git branch to use as the reference for the "current" state of the code. If omitted, the version of the target file present in your local file system (working directory) will be used.
+    *   **Format**: A valid Git branch name.
+    *   **Example**: `develop`, `feature/refactor`, `main`.
+
+#### Use Cases (`--upgrade`)
+
+*   **Refreshing Outdated Patches**: Your `main` branch has evolved, and an old plugin `feature-x.taylored` no longer applies cleanly. If the core logic around where `feature-x` made its changes is still intact (context frames match), `taylored --upgrade feature-x.taylored` can update it.
+*   **Adapting a Patch to a Different Code Lineage**: You have a patch `fix-a.taylored` created for `main`. A colleague has a branch `topic/experimental` where the context around the fix is the same, but the content that `fix-a.taylored` would modify is slightly different. `taylored --upgrade fix-a.taylored topic/experimental` can update `fix-a.taylored` to apply to the state of the file on `topic/experimental`.
+*   **Maintaining Patches Before `--offset`**: If `--offset` (which is more powerful for structural changes) seems too aggressive or fails, `--upgrade` offers a safer, more constrained update mechanism focused on content changes within stable contexts.
+*   **Automated Patch Maintenance**: In a CI script, you could try `taylored --upgrade` on plugins against a target branch. If it succeeds, the plugin is kept up-to-date. If it fails, it might signal that a more significant change (requiring `--offset` or manual intervention) has occurred.
+
+#### Examples (`--upgrade`)
+
+**Scenario 1: Standard Upgrade (Local File System)**
+
+1.  **Initial Setup**:
+    *   File `config.yml` (Original state when patch was created):
+        ```yaml
+        settings:
+          version: 1.0
+          mode: "production"
+          feature_x_enabled: false
+        ```
+    *   `.taylored/update_config.taylored` exists and was created to change `feature_x_enabled: false` to `feature_x_enabled: true` within the context of `mode: "production"`.
+        ```diff
+        --- a/config.yml
+        +++ b/config.yml
+        @@ -2,3 +2,3 @@
+           version: 1.0
+           mode: "production"
+        -  feature_x_enabled: false
+        +  feature_x_enabled: true
+        ```
+2.  **Local File Changes**: You (or someone else) later modify `config.yml` locally, changing the `version` but keeping the context around `feature_x_enabled` intact:
+    ```yaml
+    // Current local config.yml
+    settings:
+      version: 1.1  # Content changed
+      mode: "production" # Context line, still matches
+      feature_x_enabled: false # Content to be changed by patch, still as original
+    ```
+3.  **Run `taylored --upgrade`**:
+    ```bash
+    taylored --upgrade update_config.taylored
+    ```
+4.  **Result**:
+    *   `update_config.taylored` is updated.
+    *   The new patch content will now be a diff from the *original state* (version 1.0, feature_x_enabled false) to the *current local state* (version 1.1, feature_x_enabled false) but *intending* to make feature_x_enabled true.
+    *   More accurately, it will generate a patch from the original `version: 1.0`, `feature_x_enabled: false` state to the current `version: 1.1`, `feature_x_enabled: true` state, because the command's job is to make the *original conceptual change* (enable feature_x) valid against the *current file*.
+    *   The new patch might look like:
+        ```diff
+        --- a/config.yml
+        +++ b/config.yml
+        @@ -1,4 +1,4 @@
+         settings:
+        -  version: 1.0
+        +  version: 1.1
+           mode: "production"
+        -  feature_x_enabled: false
+        +  feature_x_enabled: true
+        ```
+    *   Output: `Patch 'update_config.taylored' aggiornata con successo.`
+
+**Scenario 2: Upgrade Against a Specific Branch**
+
+1.  **Initial Setup**:
+    *   File `src/app.js` on `main` (when patch `patch.taylored` was created):
+        ```javascript
+        // main @ commit_A
+        console.log("Line 1: Base");
+        console.log("Line 2: Feature V1"); // This line is targeted by the patch
+        console.log("Line 3: Context");
+        ```
+    *   `.taylored/patch.taylored` was created to change "Feature V1" to "Feature V2":
+        ```diff
+        --- a/src/app.js
+        +++ b/src/app.js
+        @@ -1,3 +1,3 @@
+         console.log("Line 1: Base");
+        -console.log("Line 2: Feature V1");
+        +console.log("Line 2: Feature V2");
+         console.log("Line 3: Context");
+        ```
+2.  **Branch State**:
+    *   **`feature-branch`**: `src/app.js` has evolved:
+        ```javascript
+        // feature-branch
+        console.log("Line 1: Base"); // Context matches
+        console.log("Line 2: Feature V3 on branch"); // Content inside frame changed
+        console.log("Line 3: Context"); // Context matches
+        ```
+    *   **Local `src/app.js` (on `main` or other branch)**:
+        ```javascript
+        // Local file system
+        console.log("Line 1: Base");
+        console.log("Line 2: LOCAL MODIFICATION");
+        console.log("Line 3: Context");
+        ```
+3.  **Run `taylored --upgrade` targeting `feature-branch`**:
+    ```bash
+    taylored --upgrade patch.taylored feature-branch
+    ```
+4.  **Result**:
+    *   `patch.taylored` is updated.
+    *   The command ignores your local `src/app.js` ("LOCAL MODIFICATION").
+    *   It compares the state of `src/app.js` on `feature-branch` ("Feature V3 on branch") with the state implied by the original patch (which expected "Feature V1").
+    *   The new patch in `.taylored/patch.taylored` will now describe the change from "Line 2: Feature V1" to "Line 2: Feature V3 on branch".
+        ```diff
+        --- a/src/app.js
+        +++ b/src/app.js
+        @@ -1,3 +1,3 @@
+         console.log("Line 1: Base");
+        -console.log("Line 2: Feature V1");
+        +console.log("Line 2: Feature V3 on branch");
+         console.log("Line 3: Context");
+        ```
+    *   Output: `Patch 'patch.taylored' aggiornata con successo.`
+
+**Scenario 3: Failure - Context Frame Changed**
+
+1.  **Initial Setup**: Same as Scenario 1.
+2.  **Local File Changes**: The context line `mode: "production"` is altered.
+    ```yaml
+    // Current local config.yml
+    settings:
+      version: 1.0
+      mode: "development" # Context line changed!
+      feature_x_enabled: false
+    ```
+3.  **Run `taylored --upgrade`**:
+    ```bash
+    taylored --upgrade update_config.taylored
+    ```
+4.  **Result**:
+    *   The command fails because the contextual frame (`mode: "production"`) is no longer identical.
+    *   `update_config.taylored` is **not** changed.
+    *   Output: `La patch 'update_config.taylored' non può essere aggiornata: la cornice contestuale di almeno un hunk è cambiata.` (or similar error).
+
+**Scenario 4: Patch Already Up-to-Date or No Relevant Changes**
+
+1.  **Initial Setup**: Same as Scenario 1.
+2.  **Local File Changes**: No changes are made to `config.yml` after the patch was created, OR the only changes are outside the patch's scope and the content within the patch's context frames is already what the patch would produce.
+3.  **Run `taylored --upgrade`**:
+    ```bash
+    taylored --upgrade update_config.taylored
+    ```
+4.  **Result**:
+    *   `update_config.taylored` is **not** changed.
+    *   Output: `La patch 'update_config.taylored' è già aggiornata o il file di destinazione non presenta modifiche rilevanti all'interno delle cornici contestuali.` (or similar).
+
+The `taylored --upgrade` command provides a precise way to keep patches relevant when content shifts but structural context remains, bridging the gap between a simple `git apply` and the more complex `taylored --offset`.
+
+---
+
 ### `taylored --offset <taylored_file_name> [BRANCH_NAME]`
 
 #### Purpose (`--offset`)
@@ -1747,6 +1934,31 @@ This section delves into the technical details of how Taylored performs its oper
     1.  Taylored scans the `.taylored/` directory.
     2.  It lists all files that end with the `.taylored` extension.
     3.  The output is typically a simple list of these filenames.
+
+### `--upgrade <taylored_file_name> [BRANCH_NAME]` <a name="how-upgrade-works"></a>
+
+*   **Core Logic**: Involves parsing the patch file, reading the target file (from local FS or specified branch via `git show <branch>:<file>`), and then applying the "Contextual Frame Integrity" rules.
+*   **Process**:
+    1.  Reads the specified `<taylored_file_name>`.
+    2.  Parses the patch to identify individual hunks (change blocks).
+    3.  Determines the target filename from the patch header (e.g., `diff --git a/path/to/file.ext b/path/to/file.ext`).
+    4.  **Load Target File Content**:
+        *   If `[BRANCH_NAME]` is provided, executes `git show [BRANCH_NAME]:path/to/file.ext` to get the content of the file from that branch.
+        *   Otherwise, reads `path/to/file.ext` from the local filesystem.
+    5.  **Verification per Hunk**:
+        *   **Contextual Frame Check**: For each hunk in the patch, it verifies that all context lines (lines starting with a space in the patch) are still present and identical in the loaded target file content at the expected locations. If any hunk's context frame doesn't match, the upgrade process stops, and an error is reported.
+        *   **Obsolete Content Check**: For each hunk (assuming its context frame matched), it checks if the content *that the original patch intended to modify or remove* within that frame has actually changed in the loaded target file.
+    6.  **Decision to Upgrade**:
+        *   If all hunks' context frames match **AND** at least one hunk's content is found to be obsolete (i.e., different in the target file than what the original patch expected to find/remove), the patch is eligible for an upgrade.
+        *   If all context frames match but *no* content is obsolete, the patch is considered already up-to-date or the target file is in a state where the original patch would still apply to achieve its original goal. No upgrade is performed.
+        *   If any context frame does not match, no upgrade is performed.
+    7.  **Generate New Patch**:
+        *   If an upgrade is needed, a new patch is generated. This new patch describes the changes from the *original state of the file as implied by the old patch* to the *current state of the loaded target file*. The `diff` library is used for this, typically by:
+            *   Reconstructing the "old file content" by taking all context lines and all deleted lines (`-` lines) from the original patch.
+            *   Using the loaded target file content as the "new file content."
+            *   Creating a new patch from these two versions.
+    8.  **Overwrite Original Patch**: If the newly generated patch content is different from the original patch content, the `<taylored_file_name>` is overwritten with the new patch content.
+*   **Error Handling**: Reports errors if the patch file is not found, the target file (local or in branch) is not found, context frames don't match, or other issues occur during the process.
 
 ### `--offset <taylored_file_name> [BRANCH_NAME]`
 

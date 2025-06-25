@@ -14,6 +14,7 @@ import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';
 import { handleOffsetCommand } from './lib/handlers/offset-handler';
 import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
+import { handleUpgradeCommand } from './lib/handlers/upgrade-handler';
 import { resolveTayloredFileName, printUsageAndExit } from './lib/utils';
 
 // <taylored number="9001">
@@ -102,6 +103,22 @@ async function main(): Promise<void> {
                 printUsageAndExit("CRITICAL ERROR: --list option does not take any arguments.");
             }
             await handleListOperation(CWD);
+        } else if (mode === '--upgrade') {
+            if (rawArgs.length < 2) {
+                printUsageAndExit("CRITICAL ERROR: --upgrade option requires a <taylored_file_name> argument.");
+            }
+            argument = rawArgs[1];
+            if (argument.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${argument}' for --upgrade.`);
+            }
+
+            // Reintroduce il parsing del nome del branch opzionale
+            let branchName: string | undefined = undefined;
+            if (rawArgs.length > 2 && !rawArgs[2].startsWith('--')) {
+                branchName = rawArgs[2];
+            }
+
+            await handleUpgradeCommand(argument, CWD, branchName);
         } else if (mode === '--offset') {
             // ... (existing --offset logic)
             if (rawArgs.length < 2) {

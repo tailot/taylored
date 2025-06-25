@@ -74,6 +74,13 @@
             *   [Excluding Directories](#excluding-directories)
             *   [Example 6: Using `compute` with Python](#example-6-using-compute-with-python)
             *   [Example 7: Using `compute` with a Shell Script](#example-7-using-compute-with-a-shell-script)
+    *   [`taylored --upgrade <patch_file> [target_file_path]`](#taylored---upgrade-patch_file-target_file_path)
+        *   [Purpose](#purpose-upgrade)
+        *   [Arguments](#arguments-upgrade)
+        *   [Process Deep Dive](#process-deep-dive-upgrade)
+        *   [Use Cases](#use-cases-upgrade)
+        *   [Examples](#examples-upgrade)
+        *   [Key Considerations and Limitations](#key-considerations-and-limitations-upgrade)
     *   [`taylored setup-backend`](#taylored-setup-backend)
         *   [Purpose](#purpose-setup-backend)
         *   [Process](#process-setup-backend)
@@ -1527,6 +1534,211 @@ The `taylored --automatic` command will wait for all synchronous scripts and all
         replaces the original Taylored block in the generated patch.
 
 The `taylored --automatic` command is a sophisticated feature that combines code scanning, Git automation, and optional dynamic content generation to provide a flexible way of managing code as plugins. Careful use of markers, the `compute` attribute, and exclusions is key to leveraging its full potential.
+
+---
+
+### `taylored --upgrade <patch_file> [target_file_path]`
+
+#### Purpose (`--upgrade`)
+
+The `taylored --upgrade <patch_file> [target_file_path]` command is a utility designed to **verify the structural integrity of a `.taylored` patch file against a target source code file and, if the structure is sound, update the patch's content to match the latest version of the code in the target file.**
+
+Its primary goal is to help keep `.taylored` plugins synchronized with minor, non-structural changes that occur in the codebase over time. It works by checking "frames"—the context lines immediately surrounding the code segments modified by the patch. If these frames are intact in the target file, the command assumes the patch's core intent is still valid and updates the actual lines of code within the patch to reflect what's currently in the target file between those frames.
+
+If the frames are found to be modified or missing, the patch is considered "corrupted" (in terms of its applicability for an automatic upgrade) and is not updated, preventing potential errors.
+
+#### Arguments (`--upgrade`)
+
+*   **`<patch_file>` (Required)**:
+    *   **Description**: The path to the `.taylored` plugin file that you want to verify and potentially upgrade. Taylored typically expects this file to be in or relative to the `.taylored/` directory, but a full or relative path can be provided.
+    *   **Format**: The filename or path to the plugin file.
+    *   **Example**: `my_feature.taylored`, `.taylored/hotfix-123.taylored`, `../patches/custom-mod.taylored`.
+
+*   **`[target_file_path]` (Optional)**:
+    *   **Description**: The explicit path to the source code file against which the `<patch_file>` should be verified and potentially upgraded. If this argument is omitted, Taylored will attempt to determine the target file path automatically by inspecting the headers within the `<patch_file>` (e.g., `--- a/path/to/your/file.js` or `+++ b/path/to/your/file.js`).
+    *   **Format**: A relative or absolute path to a source file.
+    *   **Example**: `src/app.js`, `lib/modules/utils.py`.
+
+#### Process Deep Dive (`--upgrade`) <a name="process-deep-dive-upgrade"></a>
+
+The `taylored --upgrade` command follows a systematic process:
+
+1.  **Parse Patch**: The specified `<patch_file>` is read and its diff content is parsed into a structured format, identifying individual hunks and changes.
+2.  **Determine Target File**:
+    *   If `[target_file_path]` is provided, that path is used.
+    *   Otherwise, the patch headers (e.g., `--- a/original_file` and `+++ b/modified_file`) are examined to infer the target file. Preference might be given to the `newFile` path if it's not `/dev/null`.
+3.  **Read Target File Content**: The content of the determined target source code file is read into memory.
+4.  **Identify Modification Blocks**: For each hunk in the patch, the command identifies "modification blocks." These are contiguous sequences of purely additive (`+` lines) or purely deletive (`-` lines).
+5.  **Identify Context Frames**: For each modification block, it identifies its "top frame" (the last context line in the patch immediately preceding the block) and its "bottom frame" (the first context line in the patch immediately following the block). These frames anchor the modification.
+6.  **Verify Frame Integrity**: Each frame (top and bottom) is checked against the current content of the target file:
+    *   **Content Match**: The textual content of the frame line from the patch (whitespace trimmed) must match the content of the corresponding line in the target file (whitespace trimmed).
+    *   **Line Number Match**: The line number where the frame is found in the target file must match the line number expected from the patch's perspective.
+    *   A frame is considered "intact" only if both content and line number match.
+7.  **Conditional Patch Content Update**:
+    *   If **all** top and bottom frames for **all** modification blocks associated with the target file are found to be "intact," the command proceeds to update the patch.
+    *   The actual content of the modification lines (the `+` or `-` lines) within the in-memory representation of the patch is replaced with the current content found between the corresponding intact top and bottom frames in the target source file.
+    *   For example, if a patch originally added `console.log("Old message");` and the surrounding context lines (frames) are unchanged in `target_file.js`, but `target_file.js` now contains `console.log("New message // updated");` at that exact location, the patch will be updated to reflect this new line.
+8.  **Save Updated Patch**:
+    *   If any part of the patch content was updated, the original `<patch_file>` is backed up by creating a copy with a `.backup` suffix (e.g., `my_feature.taylored.backup`).
+    *   The modified patch content (with updated lines) is then written back to the original `<patch_file>` path.
+9.  **Report Generation**: The command outputs a report to the console detailing:
+    *   The target file(s) processed.
+    *   The status of each modification block (e.g., "intact", "corrupted").
+    *   For each frame (top and bottom):
+        *   Whether it was intact or modified/missing.
+        *   Expected vs. actual content if mismatched.
+        *   Expected line number.
+    *   A summary message indicating if the patch file was updated.
+
+#### Use Cases (`--upgrade`) <a name="use-cases-upgrade"></a>
+
+*   **Maintaining Patch Freshness**: Automatically update patches to account for minor, non-structural code changes (e.g., comment changes, trivial logic adjustments within a patched block) in the surrounding codebase, ensuring they remain applicable.
+*   **Pre-application Check for Drifting Code**: Before attempting a `taylored --add`, especially if the codebase has evolved, use `taylored --upgrade` to see if the patch's anchor points (frames) are still valid. If it reports "corrupted," the patch might need manual review or regeneration via `taylored --offset` or `taylored --save`.
+*   **Automated Patch Maintenance**: Incorporate `taylored --upgrade` into CI/CD pipelines to periodically check and attempt to upgrade stored `.taylored` plugins against the latest codebase, flagging those that can no longer be automatically upgraded.
+*   **Safely Updating Patched-in Logging or Configurations**: If a patch introduces logging statements or configuration values, and those statements/values are later slightly modified in the main source file (while surrounding code remains stable), `--upgrade` can sync these changes back into the patch.
+
+#### Examples (`--upgrade`) <a name="examples-upgrade"></a>
+
+**Scenario 1: Successful Upgrade**
+
+1.  **Original `src/feature.js`**:
+    ```javascript
+    // src/feature.js
+    function init() {
+        console.log("Initializing feature...");
+    }
+
+    function oldMethod() {
+        console.log("This is an old implementation."); // Line targeted by patch
+    }
+
+    function finalize() {
+        console.log("Feature finalized.");
+    }
+
+    init();
+    oldMethod();
+    finalize();
+    ```
+
+2.  **`.taylored/update_method.taylored` (Patch to be upgraded)**:
+    ```diff
+    --- a/src/feature.js
+    +++ b/src/feature.js
+    @@ -3,7 +3,7 @@
+     }
+
+     function oldMethod() {
+    -    console.log("This is an old implementation.");
+    +    console.log("Original patched message."); // Content from patch
+     }
+
+     function finalize() {
+    ```
+    This patch targets the line inside `oldMethod`.
+    *   Top Frame (implicit): `function oldMethod() {`
+    *   Bottom Frame (implicit): `}` (closing `oldMethod`)
+
+3.  **Modified `src/feature.js` (Frames intact, content within block changed)**:
+    ```javascript
+    // src/feature.js
+    function init() {
+        console.log("Initializing feature..."); // Some new comments added above
+    }
+
+    function oldMethod() {
+        console.log("This is the NEW live implementation in the file."); // Content changed
+    }
+
+    function finalize() {
+        console.log("Feature finalized."); // Some new comments added below
+    }
+
+    init();
+    oldMethod();
+    finalize();
+    ```
+    The lines `function oldMethod() {` and `}` are still present and effectively at their expected positions relative to the change.
+
+4.  **Run Command**:
+    ```bash
+    taylored --upgrade .taylored/update_method.taylored src/feature.js
+    ```
+
+5.  **Result**:
+    *   A backup `.taylored/update_method.taylored.backup` is created.
+    *   `.taylored/update_method.taylored` is updated to:
+        ```diff
+        --- a/src/feature.js
+        +++ b/src/feature.js
+        @@ -3,7 +3,7 @@
+         }
+
+         function oldMethod() {
+        -    console.log("This is an old implementation.");
+        +    console.log("This is the NEW live implementation in the file."); // Content updated from target file
+         }
+
+         function finalize() {
+        ```
+    *   The console report indicates that frames were intact and the patch was updated.
+
+**Scenario 2: Frames Not Intact (Patch Not Updated)**
+
+1.  **Using the same initial `.taylored/update_method.taylored` from Scenario 1.**
+
+2.  **Modified `src/feature.js` (Frames changed)**:
+    ```javascript
+    // src/feature.js
+    function init() {
+        console.log("Initializing feature...");
+    }
+
+    // function oldMethod() { // Top frame commented out / changed
+    //     console.log("This is the NEW live implementation in the file.");
+    // }
+    function newMethodSignature() { // Name changed, effectively a different frame
+        console.log("Content of what might have been oldMethod.");
+    }
+
+    function finalize() {
+        console.log("Feature finalized.");
+    }
+
+    init();
+    // oldMethod(); // Call might be removed or changed
+    newMethodSignature();
+    finalize();
+    ```
+    The top frame `function oldMethod() {` is no longer present as it was.
+
+3.  **Run Command**:
+    ```bash
+    taylored --upgrade .taylored/update_method.taylored src/feature.js
+    ```
+
+4.  **Result**:
+    *   `.taylored/update_method.taylored` is **not** changed. No backup is created.
+    *   The console report indicates that frames (specifically the top frame for the modification block) were "modified/missing" or "corrupted."
+    *   The message will state that the patch was not updated due to frame integrity issues.
+
+**Scenario 3: Using `[target_file_path]` Explicitly**
+
+If `my_patch.taylored` was originally created for `lib/old_path/component.js` but the file has moved to `lib/new_path/component.js` (and the patch headers still point to the old path):
+
+```bash
+taylored --upgrade .taylored/my_patch.taylored lib/new_path/component.js
+```
+This forces the command to use `lib/new_path/component.js` for verification and content sourcing, overriding what the patch headers might suggest.
+
+#### Key Considerations and Limitations (`--upgrade`) <a name="key-considerations-and-limitations-upgrade"></a>
+
+*   **Homogeneous Blocks**: The `--upgrade` command is most effective with "homogeneous" modification blocks (sequences of only additions or only deletions). Patches with complex intermingled additions and deletions within a single hunk might not be fully processed for upgrade or might yield unexpected results.
+*   **Frame Stability is Key**: The reliability of the upgrade process hinges on the stability of the context lines (frames) immediately surrounding the patched code. If these frames have been significantly altered or have shifted such that their line numbers are no longer predictable from the original patch, the upgrade will likely not proceed.
+*   **Not a Replacement for `--offset`**: If a patch fails to apply due to major shifts in line numbers throughout the file (but the code structure is generally similar), `taylored --offset` might be more appropriate to adjust the patch's overall line number context. `--upgrade` focuses on content changes *within* stable frames.
+*   **Review Recommended**: While `--upgrade` aims to be safe, it's good practice to review the changes made to a `.taylored` file after an upgrade, especially if the changes are critical, for instance by using `git diff .taylored/your_plugin.taylored` before committing the updated plugin.
+
+The `taylored --upgrade` command provides a valuable mechanism for reducing the maintenance burden of `.taylored` plugins in projects with ongoing development.
 
 ---
 

@@ -57,6 +57,9 @@ Core Patching Commands (require to be run in a Git repository root):`);
         console.log(`  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.`);
         console.log(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
         console.log(`                                      Automatically computes and applies line offsets for patches based on Git history.`);
+        console.log(`  --upgrade <patch_file> [target_file_path]`);
+        console.log(`                                      Analyzes patch frames against the target file (or inferred file).`);
+        console.log(`                                      If frames are intact, updates the patch content from the target file.`);
 
         // <taylored number="9003">
         console.log(`

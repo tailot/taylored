@@ -1,0 +1,7 @@
+Line 1
+Line 2 (Top Frame)
+New Content X
+New Content Y
+New Content Z
+Line 3 (Bottom Frame)
+Line 4

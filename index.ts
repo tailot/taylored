@@ -23,6 +23,9 @@ import { handleCreateTaysell } from './lib/handlers/create-taysell-handler';
 import { handleBuyCommand } from './lib/handlers/buy-handler';
 // </taylored>
 
+// Add import for PatchAnalyzer
+import { PatchAnalyzer } from './lib/PatchAnalyzer';
+
 /**
  * Main command-line interface for the Taylored application.
  *
@@ -47,10 +50,10 @@ import { handleBuyCommand } from './lib/handlers/buy-handler';
  *
  * @async
  * @returns {Promise<void>} A promise that resolves when the command processing is complete,
- *                          or rejects if an unhandled error occurs.
+ * or rejects if an unhandled error occurs.
  * @throws {Error} Throws an error if critical issues prevent command execution,
- *                 though most specific errors are handled by calling `printUsageAndExit`
- *                 and exiting the process.
+ * though most specific errors are handled by calling `printUsageAndExit`
+ * and exiting the process.
  */
 async function main(): Promise<void> {
     const rawArgs: string[] = process.argv.slice(2);
@@ -66,7 +69,8 @@ async function main(): Promise<void> {
     let branchName: string | undefined; // Re-used for some commands, ensure clarity
 
     // List of modes that require a .git directory check (original list)
-    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--automatic'];
+    // Add '--upgrade' here
+    const relevantModesForGitCheck = ['--add', '--remove', '--verify-add', '--verify-remove', '--save', '--list', '--offset', '--automatic', '--upgrade'];
 
     // Only run .git check if it's one of the original commands
     if (relevantModesForGitCheck.includes(mode)) {
@@ -119,7 +123,7 @@ async function main(): Promise<void> {
             if (rawArgs.length > currentArgIndex && !rawArgs[currentArgIndex].startsWith('--')) {
                 branchName = rawArgs[currentArgIndex];
                 if (branchName.startsWith('--')) {
-                     printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchName}' provided for --offset. It cannot start with '--'.`);
+                    printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchName}' provided for --offset. It cannot start with '--'.`);
                 }
                 currentArgIndex++;
             }
@@ -147,7 +151,7 @@ async function main(): Promise<void> {
                 }
                 excludeDirs = excludeArgument.split(',').map(dir => dir.trim()).filter(dir => dir.length > 0);
                 if (excludeDirs.length === 0 && excludeArgument.length > 0) {
-                     printUsageAndExit(`CRITICAL ERROR: Exclude argument '${excludeArgument}' resulted in an empty list of directories.`);
+                    printUsageAndExit(`CRITICAL ERROR: Exclude argument '${excludeArgument}' resulted in an empty list of directories.`);
                 } else if (excludeDirs.length === 0 && excludeArgument.length === 0) {
                     excludeDirs = undefined;
                 }
@@ -165,6 +169,62 @@ async function main(): Promise<void> {
                 printUsageAndExit(`CRITICAL ERROR: Invalid branch name '${branchNameArgument}' after --automatic <EXTENSIONS>. It cannot start with '--'.`);
             }
             await handleAutomaticOperation(extensionsInput, branchNameArgument, CWD, excludeDirs);
+        } else if (mode === '--upgrade') { // Add block for the --upgrade command
+            if (rawArgs.length < 2 || rawArgs.length > 3) {
+                printUsageAndExit("CRITICAL ERROR: --upgrade option requires a <patch_file> argument and optionally a [target_file_path].");
+            }
+            const patchFile = rawArgs[1];
+            if (patchFile.startsWith('--')) {
+                printUsageAndExit(`CRITICAL ERROR: Invalid patch file argument '${patchFile}'. It cannot start with '--'.`);
+            }
+            // Verify that the patch file is in the .taylored/ directory or is a valid path.
+            // For simplicity, we expect a relative path from CWD.
+            const resolvedPatchFileName = resolveTayloredFileName(patchFile);
+            const fullPatchPath = path.join(CWD, TAYLORED_DIR_NAME, resolvedPatchFileName);
+            
+            let targetFilePath: string | undefined;
+            if (rawArgs.length === 3) {
+                targetFilePath = path.resolve(CWD, rawArgs[2]);
+            }
+
+            try {
+                const analyzer = new PatchAnalyzer();
+                const results = await analyzer.verifyIntegrityAndUpgrade(fullPatchPath, targetFilePath);
+
+                console.log(`\n=== Report for --upgrade command ===`);
+                results.forEach(result => {
+                    console.log(`File: ${result.file}`);
+                    console.log(`Status: ${result.status.toUpperCase()}`);
+                    console.log(`Message: ${result.message}`);
+                    if (result.updated) {
+                        console.log(`Patch updated: YES`);
+                    } else {
+                        console.log(`Patch updated: NO`);
+                    }
+                    if (result.blocks && result.blocks.length > 0) {
+                        console.log(`  Modification blocks checked: ${result.blocks.length}`);
+                        result.blocks.forEach((blockCheck, index) => {
+                            console.log(`    Block ${index + 1} (${blockCheck.blockType}):`);
+                            console.log(`      Top Frame: ${blockCheck.topFrame.intact ? 'INTACT' : 'MODIFIED/MISSING'}`);
+                            if (!blockCheck.topFrame.intact) {
+                                console.log(`        Expected: "${blockCheck.topFrame.expected}"`);
+                                console.log(`        Actual:    "${blockCheck.topFrame.actual}"`);
+                            }
+                            console.log(`      Bottom Frame: ${blockCheck.bottomFrame.intact ? 'INTACT' : 'MODIFIED/MISSING'}`);
+                            if (!blockCheck.bottomFrame.intact) {
+                                console.log(`        Expected: "${blockCheck.bottomFrame.expected}"`);
+                                console.log(`        Actual:    "${blockCheck.bottomFrame.actual}"`);
+                            }
+                        });
+                    }
+                    console.log('-----------------------------------');
+                });
+                console.log(`\n--upgrade command completed.`);
+
+            } catch (error: any) {
+                console.error(`CRITICAL ERROR: Failed to execute --upgrade command. Details: ${error.message}`);
+                throw error;
+            }
         }
         // <taylored number="9002">
         // === New Taysell Commands Start Here ===
@@ -212,7 +272,7 @@ async function main(): Promise<void> {
             }
             const taysellFile = rawArgs[1];
             if (taysellFile.startsWith('--') && taysellFile !== '--dry-run') {
-                 printUsageAndExit(`CRITICAL ERROR: Invalid <file.taysell> argument '${taysellFile}'. It cannot start with '--' unless it's --dry-run.`);
+                printUsageAndExit(`CRITICAL ERROR: Invalid <file.taysell> argument '${taysellFile}'. It cannot start with '--' unless it's --dry-run.`);
             }
 
             let isDryRun = false;
@@ -228,14 +288,14 @@ async function main(): Promise<void> {
                 if (rawArgs[2] === '--dry-run') {
                     isDryRun = true;
                     if (rawArgs.length > 3) {
-                         printUsageAndExit("CRITICAL ERROR: Unknown argument after --buy <file.taysell> --dry-run.");
+                        printUsageAndExit("CRITICAL ERROR: Unknown argument after --buy <file.taysell> --dry-run.");
                     }
                 } else {
                     printUsageAndExit(`CRITICAL ERROR: Unknown argument '${rawArgs[2]}' for --buy.`);
                 }
             }
-             const finalTaysellFile = rawArgs[taysellFileArgIndex];
-             if (finalTaysellFile.startsWith('--')) {
+            const finalTaysellFile = rawArgs[taysellFileArgIndex];
+            if (finalTaysellFile.startsWith('--')) {
                 printUsageAndExit(`CRITICAL ERROR: Invalid <file.taysell> argument '${finalTaysellFile}' for --buy. It cannot start with '--'.`);
             }
 
@@ -252,7 +312,7 @@ async function main(): Promise<void> {
                 const userInputFileName = rawArgs[1];
 
                 if (userInputFileName.startsWith('--')) {
-                     printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${userInputFileName}' after ${mode}. It cannot start with '--'.`);
+                    printUsageAndExit(`CRITICAL ERROR: Invalid taylored file name '${userInputFileName}' after ${mode}. It cannot start with '--'.`);
                 }
                 if (userInputFileName.includes(path.sep) || userInputFileName.includes('/') || userInputFileName.includes('\\')) {
                     printUsageAndExit(`CRITICAL ERROR: <taylored_file_name> ('${userInputFileName}') must be a simple filename without path separators (e.g., 'my_patch'). It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`);
@@ -277,8 +337,8 @@ async function main(): Promise<void> {
         // console.error(`Error caught in main: ${error.message}`); // Keep for debugging if needed
         // Ensure specific error messages from handlers are preserved if they printUsageAndExit themselves.
         // If error is thrown and not caught by a printUsageAndExit, it will be caught by the final catch block.
-        if (!error.message.includes("CRITICAL ERROR")) { // Avoid double printing if already handled
-             console.error(`An unexpected error occurred: ${error.message}`);
+        if (!error.message.includes("CRITICAL ERROR")) { // Avoid double printing
+            console.error(`An unexpected error occurred: ${error.message}`);
         }
         process.exit(1); // Exit for errors not handled by printUsageAndExit
     }

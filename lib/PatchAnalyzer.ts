@@ -60,6 +60,9 @@ interface VerificationResult {
 }
 
 export class PatchAnalyzer {
+    /**
+     * Constructs a new PatchAnalyzer instance.
+     */
     constructor() {
         // Patches are processed one by one, so no need for this.patches array at class level for now
     }

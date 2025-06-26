@@ -93,59 +93,75 @@ export async function handleCreateTaysell(
 
     // 1. Validate input .taylored file
     if (!tayloredFilePath.endsWith(TAYLORED_FILE_EXTENSION)) {
-         console.error(`CRITICAL ERROR: Input file must be a .taylored file. Received: ${tayloredFilePath}`);
+         console.error(`CRITICAL ERROR: Input file must be a .taylored file. Received: ${tayloredFilePath}. Example: 'myfeature.taylored'`);
          process.exit(1);
     }
     const fullTayloredPath = path.resolve(cwd, tayloredFilePath);
     if (!await fs.pathExists(fullTayloredPath)) {
-        console.error(`CRITICAL ERROR: Taylored file not found at: ${fullTayloredPath}`);
+        console.error(`CRITICAL ERROR: Taylored patch file not found at: ${fullTayloredPath}. Please ensure the path is correct.`);
         process.exit(1);
     }
-    const patchFileNameBase = path.basename(tayloredFilePath);
+    const patchFileNameBase = path.basename(tayloredFilePath); // e.g., "myfeature.taylored"
 
-    // 2. Look for local backend configuration
+    // 2. Look for local backend configuration in `taysell-server/.env`
     const envPath = path.join(cwd, 'taysell-server', '.env');
     const envConfig = await readEnvFile(envPath);
+    console.log(envConfig.PATCH_ID ? `Found PATCH_ID in .env: ${envConfig.PATCH_ID}` : 'PATCH_ID not found in .env, will prompt or generate.');
+
 
     let {
-        SERVER_BASE_URL: serverBaseUrl,
-        PATCH_ENCRYPTION_KEY: patchEncryptionKey,
-        // Allow reading patchId from .env if users want to pre-define it, though typically it's per-patch
-        PATCH_ID: patchIdFromEnv
+        SERVER_BASE_URL: serverBaseUrl, // From .env or prompted
+        PATCH_ENCRYPTION_KEY: patchEncryptionKey, // From .env or prompted
+        PATCH_ID: patchIdFromEnv, // From .env, used as default for prompt
+        SELLER_NAME: sellerNameFromEnv,
+        SELLER_WEBSITE: sellerWebsiteFromEnv,
+        SELLER_CONTACT: sellerContactFromEnv
     } = envConfig;
 
-    const questions: any[] = []; // Use any[] to bypass QuestionCollection type issue in test
+    const questions: inquirer.QuestionCollection<any> = [];
+
     if (!serverBaseUrl) {
         questions.push({
-            type: 'input', name: 'serverBaseUrl', message: 'Enter the SERVER_BASE_URL of your Taysell backend:',
-            validate: (input: string) => input.trim() !== '' || 'Server URL cannot be empty.'
+            type: 'input', name: 'serverBaseUrl',
+            message: 'Enter the base URL of your Taysell server (e.g., https://your-taysell-server.com):',
+            validate: (input: string) => {
+                try {
+                    new URL(input); // Validate if it's a URL
+                    return input.trim() !== '' || 'Server URL cannot be empty.';
+                } catch (_) {
+                    return 'Please enter a valid URL.';
+                }
+            }
         });
     }
     if (!patchEncryptionKey) {
         questions.push({
-            type: 'password', name: 'patchEncryptionKey', message: 'Enter the PATCH_ENCRYPTION_KEY for encrypting patches:',
-            validate: (input: string) => input.trim().length >= 32 || 'Encryption key must be at least 32 characters.'
+            type: 'password', name: 'patchEncryptionKey',
+            message: 'Enter the encryption key for your patches (must be at least 32 characters):',
+            mask: '*',
+            validate: (input: string) => input.trim().length >= 32 || 'Encryption key must be at least 32 characters long.'
         });
     }
 
+    // General patch info
     questions.push(
-        { type: 'input', name: 'patchName', message: 'Enter the commercial name for this patch:', default: patchFileNameBase.replace(TAYLORED_FILE_EXTENSION, '') },
-        { type: 'input', name: 'patchDescription', message: 'Enter a description for this patch:', default: descriptionInput || 'No description provided.'},
-            { type: 'input', name: 'patchId', message: 'Enter a unique ID for this patch (or press Enter to generate one):', default: patchIdFromEnv || crypto.randomUUID() },
-        { type: 'input', name: 'tayloredVersion', message: 'Enter the required taylored CLI version (e.g., >=6.8.21):', default: '>=6.8.21'}, // TODO: Read from current CLI version?
-        { type: 'input', name: 'price', message: 'Enter the price (e.g., 9.99):', default: priceInput, validate: (input: string) => !isNaN(parseFloat(input)) || 'Invalid price.' },
-        { type: 'input', name: 'currency', message: 'Enter the currency code (e.g., USD, EUR):', default: 'USD', validate: (input: string) => input.trim().length === 3 || 'Currency code must be 3 letters.'}
+        { type: 'input', name: 'patchName', message: 'Enter a commercial name for this patch:', default: patchFileNameBase.replace(TAYLORED_FILE_EXTENSION, '') },
+        { type: 'input', name: 'patchDescription', message: 'Enter a brief description for this patch:', default: descriptionInput || `Patch for ${patchFileNameBase.replace(TAYLORED_FILE_EXTENSION, '')}` },
+        { type: 'input', name: 'patchId', message: 'Enter a unique ID for this patch (press Enter to generate one):', default: patchIdFromEnv || crypto.randomUUID() },
+        { type: 'input', name: 'tayloredVersion', message: 'Enter the minimum Taylored CLI version required by this patch (e.g., 1.0.0):', default: '1.0.0' }, // Consider fetching current CLI version
+        { type: 'input', name: 'price', message: 'Enter the price for this patch (e.g., 9.99):', default: priceInput || '0.00', validate: (input: string) => !isNaN(parseFloat(input)) || 'Please enter a valid price number.' },
+        { type: 'input', name: 'currency', message: 'Enter the 3-letter currency code (e.g., USD, EUR):', default: 'USD', validate: (input: string) => /^[A-Z]{3}$/i.test(input.trim()) || 'Currency code must be 3 letters.' }
     );
-    // Seller info
+    // Seller information
     questions.push(
-        { type: 'input', name: 'sellerName', message: 'Enter your seller name/company name:', default: envConfig.SELLER_NAME || '' },
-        { type: 'input', name: 'sellerWebsite', message: 'Enter your seller website (URL):', default: envConfig.SELLER_WEBSITE || '' },
-        { type: 'input', name: 'sellerContact', message: 'Enter your seller contact email:', default: envConfig.SELLER_CONTACT || '' }
+        { type: 'input', name: 'sellerName', message: 'Enter your seller/company name:', default: sellerNameFromEnv || '' },
+        { type: 'input', name: 'sellerWebsite', message: 'Enter your seller website URL:', default: sellerWebsiteFromEnv || '', validate: (input: string) => { try { new URL(input); return true; } catch (_) { return 'Please enter a valid URL or leave blank.'; } } },
+        { type: 'input', name: 'sellerContact', message: 'Enter your seller contact email:', default: sellerContactFromEnv || '', validate: (input: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input) || input === '' || 'Please enter a valid email address or leave blank.' }
     );
 
-    let answers;
+    let answers: any; // To hold answers from inquirer or defaults for testing
 
-    // Check if the code is running inside a Jest test worker
+    // Skip prompts if in a test environment (e.g., Jest)
     if (process.env.JEST_WORKER_ID) {
         // If in a test, use default values instead of prompting
         console.log('Running in test environment, skipping interactive prompts.');

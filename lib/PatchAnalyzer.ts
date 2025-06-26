@@ -1,71 +1,146 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+/**
+ * Represents a single change (addition, deletion, or context) within a hunk.
+ */
 interface Change {
+    /** The type of change: ' ' (context), '+' (addition), or '-' (deletion). */
     type: string;
+    /** The content of the line, excluding the type character. */
     content: string;
-    lineNumber: number; // This was in the original JS, though calculateLineNumber was not fully implemented
+    /** The original line number in the patch file (may not be accurate for file context). */
+    lineNumber: number;
 }
 
+/**
+ * Represents a hunk of changes in a patch file.
+ * A hunk is a contiguous block of changes.
+ */
 interface Hunk {
+    /** The starting line number of the hunk in the old file. */
     oldStart: number;
+    /** The number of lines the hunk covers in the old file. */
     oldCount: number;
+    /** The starting line number of the hunk in the new file. */
     newStart: number;
+    /** The number of lines the hunk covers in the new file. */
     newCount: number;
+    /** An array of changes within this hunk. */
     changes: Change[];
-    context: any[]; // Original JS had this, seems unused, keeping for now
+    /** Context information, originally from JS version, seems unused. */
+    context: any[];
 }
 
+/**
+ * Represents a single patch, typically for one file.
+ * A patch file can contain multiple such patches if it's a combined diff.
+ */
 interface Patch {
+    /** The path to the old file (e.g., 'a/path/to/file.txt'). */
     oldFile: string;
+    /** The path to the new file (e.g., 'b/path/to/file.txt'), or null if the file was deleted. */
     newFile: string | null;
+    /** An array of hunks that make up this patch. */
     hunks: Hunk[];
 }
 
+/**
+ * Represents a context line used as a frame for a modification block.
+ * Frames help anchor modification blocks to the target file content.
+ */
 interface Frame {
+    /** The content of the context line. */
     content: string;
+    /** The line number of this frame in the old file version. */
     oldLineNumber: number;
+    /** The line number of this frame in the new file version. */
     newLineNumber: number;
 }
 
+/**
+ * Represents a block of homogeneous modifications (all additions or all deletions)
+ * and its surrounding context frames.
+ */
 interface ModificationBlock {
+    /** The type of modification: 'addition' or 'deletion'. */
     type: 'addition' | 'deletion';
+    /** An array of change objects that form this block. */
     changes: Change[];
+    /** The context frame immediately preceding this block, if any. */
     topFrame: Frame | null;
+    /** The context frame immediately following this block, if any. */
     bottomFrame: Frame | null;
+    /** The index of the hunk within the patch where this block is located. */
     hunkIndex: number;
-    startLineNumber: number; // Line number in the file where the block starts
+    /** The 1-based starting line number of this block in the relevant file (old for deletion, new for addition). */
+    startLineNumber: number;
 }
 
+/**
+ * Represents the result of checking a single frame's integrity.
+ */
 interface FrameCheckResult {
+    /** Whether the frame content matches the expected content in the target file. */
     intact: boolean;
+    /** A message describing the outcome of the check. */
     message: string;
+    /** The expected content of the frame from the patch. Null if no frame. */
     expected: string | null;
+    /** The actual content found at the expected line in the target file. Null if line is out of bounds or no frame. */
     actual: string | null;
+    /** The 1-based line number where the frame was expected in the target file. */
     lineNumber?: number;
 }
 
+/**
+ * Represents the results of checking the top and bottom frames of a modification block.
+ */
 interface BlockCheck {
+    /** The type of the modification block ('addition' or 'deletion'). */
     blockType: 'addition' | 'deletion';
+    /** The result of checking the top frame. */
     topFrame: FrameCheckResult;
+    /** The result of checking the bottom frame. */
     bottomFrame: FrameCheckResult;
 }
 
+/**
+ * Represents the overall result of verifying a patch against a target file,
+ * including the status and details of any frame checks.
+ */
 interface VerificationResult {
+    /** The path to the file being verified. */
     file: string;
+    /** The status of the verification: 'intact', 'corrupted', or 'error'. */
     status: 'intact' | 'corrupted' | 'error';
+    /** A summary message of the verification result. */
     message: string;
+    /** Detailed results of checks for each modification block, if applicable. */
     blocks?: BlockCheck[];
+    /** Whether the patch content was updated based on the target file. */
     updated?: boolean;
 }
 
+/**
+ * Analyzes patch files to verify their integrity against target files and
+ * can upgrade patch content if context frames are intact.
+ * This class is primarily used for the `--upgrade` functionality.
+ */
 export class PatchAnalyzer {
+    /**
+     * Initializes a new instance of the PatchAnalyzer.
+     * The constructor currently does not perform any specific setup.
+     */
     constructor() {
         // Patches are processed one by one, so no need for this.patches array at class level for now
     }
 
     /**
-     * Reads and parses a patch file
+     * Reads a patch file from the specified path and parses its content.
+     * @param patchPath The path to the .patch file.
+     * @returns An array of Patch objects parsed from the file.
+     * @throws Error if the patch file cannot be read or parsed.
      */
     public readPatch(patchPath: string): Patch[] {
         try {
@@ -77,10 +152,12 @@ export class PatchAnalyzer {
     }
 
     /**
-     * Parses the content of a patch
+     * Parses the string content of a patch file into structured Patch objects.
+     * @param patchContent The string content of the patch file.
+     * @returns An array of Patch objects.
      */
     private parsePatch(patchContent: string): Patch[] {
-        const lines = patchContent.split('\n'); // Corrected line split
+        const lines = patchContent.split('\n');
         const patches: Patch[] = [];
         let currentPatch: Patch | null = null;
         let currentHunk: Hunk | null = null;
@@ -121,7 +198,7 @@ export class PatchAnalyzer {
                 currentHunk.changes.push({
                     type: changeType,
                     content: content,
-                    // lineNumber calculation was placeholder in original, will be handled by actual line calculation
+                    // lineNumber is a placeholder, actual line calculation is handled elsewhere if needed.
                     lineNumber: 0
                 });
             }
@@ -134,34 +211,36 @@ export class PatchAnalyzer {
     }
 
     /**
-     * Parses the hunk header (e.g., @@ -1,4 +1,4 @@)
+     * Parses a hunk header line (e.g., "@@ -1,4 +1,4 @@") to extract line numbers and counts.
+     * @param header The hunk header string.
+     * @returns An object containing old/new start lines and counts.
+     * @throws Error if the hunk header format is invalid.
      */
     private parseHunkHeader(header: string): { oldStart: number, oldCount: number, newStart: number, newCount: number } {
-        const match = header.match(/@@\s*-(\d+)(?:,(\d+))?\s*\+(\d+)(?:,(\d+))?\s*@@/); // Corrected regex
+        const match = header.match(/@@\s*-(\d+)(?:,(\d+))?\s*\+(\d+)(?:,(\d+))?\s*@@/);
         if (!match) {
             throw new Error(`Invalid hunk header: ${header}`);
         }
         return {
             oldStart: parseInt(match[1], 10),
-            oldCount: parseInt(match[2], 10) || 1,
+            oldCount: parseInt(match[2], 10) || 1, // Default count is 1 if not specified
             newStart: parseInt(match[3], 10),
-            newCount: parseInt(match[4], 10) || 1
+            newCount: parseInt(match[4], 10) || 1  // Default count is 1 if not specified
         };
     }
 
     /**
-     * Identifies modification blocks (sequences of only additions or only deletions)
+     * Identifies homogeneous modification blocks (sequences of only additions or only deletions)
      * and their surrounding context frames within a single patch object.
-     * A block is considered homogeneous if it contains only '+' lines or only '-' lines.
      * Context lines (' ') delimit these blocks.
+     * @param patch The Patch object to analyze.
+     * @returns An array of ModificationBlock objects found in the patch.
      */
     private identifyModificationBlocks(patch: Patch): ModificationBlock[] {
         const blocks: ModificationBlock[] = [];
 
         patch.hunks.forEach((hunk, hunkIndex) => {
             let currentBlock: ModificationBlock | null = null;
-            // lastContextLine stores the most recent context line encountered,
-            // which can become the topFrame for a new modification block.
             let lastContextLine: Frame | null = null;
 
             for (let i = 0; i < hunk.changes.length; i++) {
@@ -171,7 +250,6 @@ export class PatchAnalyzer {
                     const currentOldLine = this.calculateActualLineNumber(hunk, i, 'old');
                     const currentNewLine = this.calculateActualLineNumber(hunk, i, 'new');
 
-                    // If a modification block was being built, this context line is its bottomFrame.
                     if (currentBlock && !currentBlock.bottomFrame) {
                         currentBlock.bottomFrame = {
                             content: change.content,
@@ -179,45 +257,36 @@ export class PatchAnalyzer {
                             newLineNumber: currentNewLine
                         };
                         blocks.push(currentBlock);
-                        currentBlock = null; // Reset for the next block
+                        currentBlock = null;
                     }
-                    // Update lastContextLine for potential use as a topFrame for a subsequent block.
                     lastContextLine = {
                         content: change.content,
                         oldLineNumber: currentOldLine,
                         newLineNumber: currentNewLine
                     };
                 } else if (change.type === '+' || change.type === '-') { // Modification line
-                    // Start a new block if one isn't active
                     if (!currentBlock) {
                         currentBlock = {
                             type: change.type === '+' ? 'addition' : 'deletion',
                             changes: [],
-                            topFrame: lastContextLine, // The preceding context line is the topFrame
-                            bottomFrame: null, // To be found
+                            topFrame: lastContextLine,
+                            bottomFrame: null,
                             hunkIndex: hunkIndex,
-                            // startLineNumber is the 1-based line number in the relevant file (old for deletions, new for additions)
-                            // where this block of changes begins.
                             startLineNumber: this.calculateActualLineNumber(hunk, i, change.type === '+' ? 'new' : 'old')
                         };
                     }
 
-                    // Ensure block homogeneity (all additions or all deletions)
                     const expectedType = currentBlock.type === 'addition' ? '+' : '-';
                     if (change.type !== expectedType) {
-                        // Mixed block type encountered. Current approach is to warn and discard the current block.
-                        // This means the current change and subsequent changes in this mixed segment won't be part of an upgradeable block.
-                        console.warn(`Warning: Mixed modification block (e.g., additions interspersed with deletions without intermediate context) detected in hunk ${hunkIndex}. Current block processing stopped.`);
+                        console.warn(`Warning: Mixed modification block detected in hunk ${hunkIndex}. Current block processing stopped.`);
                         currentBlock = null;
-                        lastContextLine = null; // Reset context, as the continuity is broken for upgrade purposes.
-                        continue; // Skip this change, look for a new potential block start.
+                        lastContextLine = null;
+                        continue;
                     }
                     currentBlock.changes.push(change);
                 }
             }
 
-            // If a block is still open at the end of all changes in the hunk (e.g., patch ends with +/- lines),
-            // it implies there's no bottom frame within this hunk.
             if (currentBlock) {
                 blocks.push(currentBlock);
             }
@@ -226,15 +295,17 @@ export class PatchAnalyzer {
     }
 
     /**
-     * Calculates the 1-based line number for the change at `changeIndexInHunk` within the given `hunk`.
-     * `lineType` specifies whether to return the line number in the 'old' or 'new' file context.
-     * Hunk start numbers are 1-based.
+     * Calculates the 1-based actual line number for a change within a hunk,
+     * relative to the start of the hunk in either the 'old' or 'new' file version.
+     * @param hunk The Hunk object containing the change.
+     * @param changeIndexInHunk The 0-based index of the target change within the hunk's `changes` array.
+     * @param lineType Specifies whether to calculate for the 'old' or 'new' file version.
+     * @returns The 1-based line number.
      */
     private calculateActualLineNumber(hunk: Hunk, changeIndexInHunk: number, lineType: 'old' | 'new'): number {
         let oldLineCounter = hunk.oldStart;
         let newLineCounter = hunk.newStart;
 
-        // Iterate through changes *before* the target change to update counters
         for (let i = 0; i < changeIndexInHunk; i++) {
             const change = hunk.changes[i];
             if (change.type === ' ') {
@@ -246,22 +317,17 @@ export class PatchAnalyzer {
                 newLineCounter++;
             }
         }
-        // The counters now reflect the starting line number of the change at `changeIndexInHunk`.
-        if (lineType === 'old') {
-            // If change is an addition '+', it doesn't have an old line number per se,
-            // but oldLineCounter represents the line in the old file *before* which this new content is conceptually inserted.
-            return oldLineCounter;
-        } else { // 'new'
-            // If change is a deletion '-', it doesn't have a new line number per se,
-            // but newLineCounter represents the line in the new file *after* which this old content was conceptually removed.
-            return newLineCounter;
-        }
+        return lineType === 'old' ? oldLineCounter : newLineCounter;
     }
 
 
     /**
-     * Updates the content of the blocks in the patch object based on fileLines from the target file.
-     * Modifies the `patch` object directly. This is done only if all frames are intact.
+     * Updates the content of modification blocks within a patch object based on lines from the target file.
+     * This method directly modifies the `patch` object. It is intended to be called only if all
+     * context frames for the blocks are verified as intact.
+     * @param patch The Patch object to update. This object is modified directly.
+     * @param blocks An array of ModificationBlock objects identified in the patch.
+     * @param fileLines An array of strings, where each string is a line from the target file.
      */
     private updatePatchBlocks(patch: Patch, blocks: ModificationBlock[], fileLines: string[]): void {
         for (const block of blocks) {
@@ -270,69 +336,58 @@ export class PatchAnalyzer {
                 continue;
             }
 
-            // Determine the 0-based index in `fileLines` where the content *of the block* should start.
-            // This is the line immediately after the topFrame's corresponding line in the target file.
             const topFrameLineInFile = block.type === 'addition' ? block.topFrame.newLineNumber : block.topFrame.oldLineNumber;
-
             let actualBlockStartInFile = -1; // 0-based index for fileLines
 
-            // Search for the top frame's content in the fileLines to anchor the block.
-            // Start searching from around where the top frame is expected.
-            // topFrameLineInFile is 1-based.
-            for (let i = Math.max(0, topFrameLineInFile - 5); i < fileLines.length; i++) { // Search a small window around expected
+            // Search for the top frame's content to anchor the block
+            for (let i = Math.max(0, topFrameLineInFile - 5); i < Math.min(fileLines.length, topFrameLineInFile + 5); i++) {
                  if (fileLines[i]?.trim() === block.topFrame.content.trim()) {
-                    // Found potential top frame. Now verify its position relative to the original patch.
-                    // And if bottom frame exists, verify it too.
                     const expectedTopFrameIndex = (block.type === 'addition' ? block.topFrame.newLineNumber : block.topFrame.oldLineNumber) -1;
-
-                    if (i === expectedTopFrameIndex) { // Top frame is exactly where expected
+                    if (i === expectedTopFrameIndex) {
                         if (block.bottomFrame) {
-                            const expectedBottomFrameIndex = i + 1 + block.changes.length;
+                            const expectedBottomFrameIndex = i + 1 + block.changes.length; // Line after top frame + number of changes
+                            // The line number for bottomFrame in the patch is relative to its position *after* the block's changes.
+                            const expectedBottomFrameLineInFile = (block.type === 'addition' ? block.bottomFrame.newLineNumber : block.bottomFrame.oldLineNumber) -1;
+
                             if (expectedBottomFrameIndex < fileLines.length &&
-                                fileLines[expectedBottomFrameIndex]?.trim() === block.bottomFrame.content.trim()) {
+                                fileLines[expectedBottomFrameIndex]?.trim() === block.bottomFrame.content.trim() &&
+                                expectedBottomFrameIndex === expectedBottomFrameLineInFile // Also check if the bottom frame is at its expected line
+                                ) {
                                 actualBlockStartInFile = i + 1; // Content starts on the line after top frame
                                 break;
                             } else {
-                                // Top frame matched at expected location, but bottom frame didn't.
-                                // This implies content between frames changed length or bottom frame itself changed.
-                                // For auto-upgrade, we require bottom frame to also be stable if present in patch.
-                                console.warn(`Warning: Top frame matched at line ${i+1}, but bottom frame did not match as expected. Block update skipped for safety.`);
-                                actualBlockStartInFile = -1; // Reset, effectively skipping this block
+                                console.warn(`Warning: Top frame matched at line ${i+1}, but bottom frame did not match or was misplaced. Expected bottom at ${expectedBottomFrameLineInFile +1}, found context at ${expectedBottomFrameIndex +1}. Block update skipped.`);
+                                actualBlockStartInFile = -1;
                                 break;
                             }
-                        } else { // No bottom frame in the patch block (e.g., patch modifies to end of file)
+                        } else { // No bottom frame in the patch block
                             actualBlockStartInFile = i + 1;
                             break;
                         }
                     }
-                    // If top frame content found, but not at exact expected line, it's considered a misplacement.
-                    // The current logic in checkFrame would have already marked such a frame as not intact.
-                    // This loop is more of a sanity check or could be enhanced for smarter anchoring if needed.
                 }
             }
 
 
             if (actualBlockStartInFile !== -1) {
                 const hunk = patch.hunks[block.hunkIndex];
+                let firstChangeInHunkIndex = -1;
 
                 // Find the starting index of this block's changes within the Hunk's original changes array.
-                // This is essential because block.changes is a filtered list (only +/-).
-                // We need to modify the original hunk.changes array.
-                let firstChangeInHunkIndex = -1;
+                // This relies on block.startLineNumber being correctly calculated by identifyModificationBlocks.
                 let tempOldLine = hunk.oldStart;
                 let tempNewLine = hunk.newStart;
-                let changesMatched = 0;
 
                 for(let hunkChangeIndex = 0; hunkChangeIndex < hunk.changes.length; hunkChangeIndex++) {
                     const currentHunkChange = hunk.changes[hunkChangeIndex];
-                    const currentBlockChange = block.changes[changesMatched];
+                    const isAdditionBlock = block.type === 'addition';
+                    const isDeletionBlock = block.type === 'deletion';
 
-                    if(currentBlockChange &&
-                       currentHunkChange.type === currentBlockChange.type &&
-                       ( (block.type === 'addition' && tempNewLine === block.startLineNumber) ||
-                         (block.type === 'deletion' && tempOldLine === block.startLineNumber) ) ) {
+                    // Check if current position matches the start of the block
+                    if ((isAdditionBlock && currentHunkChange.type === '+' && tempNewLine === block.startLineNumber) ||
+                        (isDeletionBlock && currentHunkChange.type === '-' && tempOldLine === block.startLineNumber)) {
 
-                        // Potential start of the block. Verify if the sequence matches.
+                        // Potential start. Verify if the sequence of changes matches.
                         let sequenceMatches = true;
                         for(let k=0; k < block.changes.length; k++) {
                             if (hunkChangeIndex + k >= hunk.changes.length ||
@@ -366,7 +421,6 @@ export class PatchAnalyzer {
                         const correspondingFileLineIndex = actualBlockStartInFile + i;
 
                         if (correspondingFileLineIndex < fileLines.length) {
-                            // Update the content of the line in the patch, keeping the original +/- type.
                             changeToUpdateInHunk.content = fileLines[correspondingFileLineIndex];
                         } else {
                             console.warn(`Warning: Target file content ended before block of type '${block.type}' could be fully updated. Hunk ${block.hunkIndex}.`);
@@ -374,11 +428,9 @@ export class PatchAnalyzer {
                         }
                     }
                 } else {
-                     console.warn(`Warning: Could not find matching start of block in hunk for update. Hunk ${block.hunkIndex}. This may indicate an issue with startLineNumber calculation or block identification.`);
+                     console.warn(`Warning: Could not find matching start of block in hunk for update. Hunk ${block.hunkIndex}. Start line: ${block.startLineNumber}, Type: ${block.type}. This may indicate an issue with startLineNumber calculation or block identification.`);
                 }
             } else {
-                // This case should ideally be prevented by prior frame checks.
-                // If frames weren't intact, allFramesIntact would be false.
                 console.warn(`Warning: Could not find block's starting position in the target file based on its top frame. Top frame content from patch: "${block.topFrame.content.trim()}". Block update skipped. Hunk ${block.hunkIndex}.`);
             }
         }
@@ -386,13 +438,15 @@ export class PatchAnalyzer {
 
 
     /**
-     * Reconstructs the patch content from parsed data.
+     * Reconstructs the patch file content from an array of Patch objects.
+     * @param patches An array of Patch objects.
+     * @returns A string representing the content of a patch file.
      */
     public reconstructPatch(patches: Patch[]): string {
         let patchContent = '';
         for (const patch of patches) {
             patchContent += `--- ${patch.oldFile}\n`;
-            patchContent += `+++ ${patch.newFile}\n`;
+            patchContent += `+++ ${patch.newFile || '/dev/null'}\n`; // Use /dev/null if newFile is null (deletion)
 
             for (const hunk of patch.hunks) {
                 patchContent += `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@\n`;
@@ -405,7 +459,10 @@ export class PatchAnalyzer {
     }
 
     /**
-     * Saves the updated patch, creating a backup of the original.
+     * Saves the provided patch content to a file, creating a backup of the original file if it exists.
+     * @param patchPath The path where the patch file should be saved.
+     * @param patchContent The string content of the patch to save.
+     * @throws Error if there is an issue saving the patch file or creating the backup.
      */
     public savePatch(patchPath: string, patchContent: string): void {
         const backupPath = patchPath + '.backup';
@@ -422,8 +479,18 @@ export class PatchAnalyzer {
     }
 
     /**
-     * Verifies frame integrity and optionally updates the patch.
-     * This is the main public method to be called by the CLI.
+     * Verifies the integrity of context frames in a patch file against a target file.
+     * If all frames are intact, it attempts to update the content of the modification blocks
+     * in the patch based on the current content of the target file.
+     *
+     * This is the main public method intended for use by CLI commands like `--upgrade`.
+     *
+     * @async
+     * @param patchPath The path to the .patch file to verify and potentially upgrade.
+     * @param targetFilePathOverride Optional. If provided, this path will be used as the target file
+     *                               for verification, overriding the file path derived from the patch itself.
+     * @returns A Promise that resolves to an array of VerificationResult objects, one for each
+     *          patch processed from the input patch file.
      */
     public async verifyIntegrityAndUpgrade(patchPath: string, targetFilePathOverride?: string): Promise<VerificationResult[]> {
         const parsedPatches = this.readPatch(patchPath);
@@ -432,8 +499,9 @@ export class PatchAnalyzer {
         for (const singlePatch of parsedPatches) {
             let filePath = targetFilePathOverride;
             if (!filePath) {
+                // Determine file path from patch (e.g., strip 'a/' or 'b/')
                 filePath = singlePatch.oldFile.startsWith('a/') ? singlePatch.oldFile.substring(2) : singlePatch.oldFile;
-                if ((!filePath || filePath === '/dev/null') && singlePatch.newFile) {
+                if ((!filePath || filePath === '/dev/null') && singlePatch.newFile && singlePatch.newFile !== '/dev/null') {
                      filePath = singlePatch.newFile.startsWith('b/') ? singlePatch.newFile.substring(2) : singlePatch.newFile;
                 }
             }
@@ -463,7 +531,7 @@ export class PatchAnalyzer {
             if (modificationBlocks.length === 0) {
                 results.push({
                     file: filePath,
-                    status: 'intact',
+                    status: 'intact', // Or 'info' if preferred for no blocks
                     message: 'No homogeneous modification blocks found to verify or upgrade.',
                     blocks: []
                 });
@@ -474,7 +542,6 @@ export class PatchAnalyzer {
             let allFramesIntact = true;
 
             for (const block of modificationBlocks) {
-                // It's crucial that checkFrame uses line numbers relevant to the *current* state of fileLines.
                 const topFrameCheck = this.checkFrame(fileLines, block.topFrame, 'top', block);
                 const bottomFrameCheck = this.checkFrame(fileLines, block.bottomFrame, 'bottom', block);
 
@@ -489,22 +556,20 @@ export class PatchAnalyzer {
                 }
             }
 
-            results.push({
+            const resultEntry: VerificationResult = {
                 file: filePath,
                 status: allFramesIntact ? 'intact' : 'corrupted',
                 message: allFramesIntact ? 'All frames are intact.' : 'Some frames are modified or not found. Patch not updated.',
                 blocks: blockChecks,
                 updated: false
-            });
+            };
+            results.push(resultEntry);
 
             if (allFramesIntact && modificationBlocks.length > 0) {
                 console.log(`Frames are intact for ${filePath}. Attempting to upgrade patch content...`);
                 this.updatePatchBlocks(singlePatch, modificationBlocks, fileLines);
-                const lastResult = results[results.length - 1];
-                if(lastResult) {
-                    lastResult.updated = true; // Mark that an update attempt was made and content was changed.
-                    lastResult.message = 'All frames are intact. Patch content has been updated from the target file.';
-                }
+                resultEntry.updated = true;
+                resultEntry.message = 'All frames are intact. Patch content has been updated from the target file.';
             }
         }
 
@@ -519,32 +584,33 @@ export class PatchAnalyzer {
     }
 
     /**
-     * Checks a single frame's integrity against the provided fileLines.
-     * block.startLineNumber is 1-based.
-     * frame.oldLineNumber/newLineNumber are 1-based from patch.
+     * Checks a single context frame's integrity against the lines of a target file.
+     * @param fileLines An array of strings representing the lines of the target file.
+     * @param frame The Frame object to check. If null, the frame is considered intact (as it's not present).
+     * @param position A string indicating whether this is the 'top' or 'bottom' frame, for messaging.
+     * @param block The ModificationBlock to which this frame belongs. Used to determine expected line numbers.
+     * @returns A FrameCheckResult object detailing whether the frame is intact and why.
      */
     private checkFrame(fileLines: string[], frame: Frame | null, position: 'top' | 'bottom', block: ModificationBlock): FrameCheckResult {
         if (!frame) {
             return {
-                intact: true,
+                intact: true, // A non-existent frame doesn't break integrity for this check's purpose.
                 message: `Frame ${position} not present in patch block definition.`,
                 expected: null,
                 actual: null
             };
         }
 
-        // Determine the 0-based line index in `fileLines` where this frame's content is expected.
-        let frameLineIndexInFile: number;
+        let frameLineIndexInFile: number; // 0-based index in fileLines
 
         if (position === 'top') {
-            // topFrame is the line *before* the block's first change.
-            // Its line number in the patch (frame.oldLineNumber or frame.newLineNumber)
-            // should correspond to its position in the current fileLines.
+            // For top frame, its line number in the patch (old or new context) is its expected position.
             frameLineIndexInFile = (block.type === 'addition' ? frame.newLineNumber : frame.oldLineNumber) - 1;
         } else { // bottom frame
-            // bottomFrame is the line *after* the block's last change.
+            // For bottom frame, its line number in the patch (old or new context) is its expected position.
             frameLineIndexInFile = (block.type === 'addition' ? frame.newLineNumber : frame.oldLineNumber) - 1;
         }
+
 
         if (frameLineIndexInFile < 0 || frameLineIndexInFile >= fileLines.length) {
             return {
@@ -557,7 +623,8 @@ export class PatchAnalyzer {
         }
 
         const actualContent = fileLines[frameLineIndexInFile];
-        const intact = actualContent?.trim() === frame.content.trim(); // Trim whitespace for comparison robustness
+        // Trim whitespace for comparison robustness, as patch context lines might have different whitespace than file lines.
+        const intact = actualContent?.trim() === frame.content.trim();
 
         return {
             intact: intact,
@@ -568,6 +635,11 @@ export class PatchAnalyzer {
         };
     }
 
+    /**
+     * Generates a human-readable report string from an array of verification results.
+     * @param results An array of VerificationResult objects.
+     * @returns A string formatted as a report.
+     */
     public generateReport(results: VerificationResult[]): string {
         let report = '=== FRAME INTEGRITY VERIFICATION REPORT ===\n\n';
 
@@ -592,7 +664,7 @@ export class PatchAnalyzer {
                     if (!blockCheck.topFrame.intact && blockCheck.topFrame.expected !== null) {
                         report += `        Expected: "${blockCheck.topFrame.expected}"\n`;
                         report += `        Actual:   "${blockCheck.topFrame.actual}"\n`;
-                    } else if (!blockCheck.topFrame.intact) {
+                    } else if (!blockCheck.topFrame.intact && blockCheck.topFrame.message && blockCheck.topFrame.expected === null) { // Message when expected is null (e.g. out of bounds)
                         report += `        Message: ${blockCheck.topFrame.message}\n`;
                     }
 
@@ -604,7 +676,7 @@ export class PatchAnalyzer {
                     if (!blockCheck.bottomFrame.intact && blockCheck.bottomFrame.expected !== null) {
                         report += `        Expected: "${blockCheck.bottomFrame.expected}"\n`;
                         report += `        Actual:   "${blockCheck.bottomFrame.actual}"\n`;
-                    } else if (!blockCheck.bottomFrame.intact) {
+                    } else if (!blockCheck.bottomFrame.intact && blockCheck.bottomFrame.message && blockCheck.bottomFrame.expected === null) {
                         report += `        Message: ${blockCheck.bottomFrame.message}\n`;
                     }
                 });

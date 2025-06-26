@@ -120,37 +120,42 @@ export async function handleAutomaticOperation(
 ): Promise<void> {
     let originalBranchName: string;
     try {
+        // Attempt to get the current branch name.
         originalBranchName = execSync('git rev-parse --abbrev-ref HEAD', { cwd: CWD, ...execOpts }).trim();
-        if (originalBranchName === 'HEAD') { 
-            const errorMessage = "CRITICAL ERROR: Repository is in a detached HEAD state. Please checkout a branch.";
+        // 'HEAD' indicates a detached HEAD state.
+        if (originalBranchName === 'HEAD') {
+            const errorMessage = "CRITICAL ERROR: Repository is in a detached HEAD state. Please check out a branch before running --automatic.";
             console.error(errorMessage);
             throw new Error(errorMessage);
         }
     } catch (error: any) {
-        const errorMessage = `CRITICAL ERROR: Failed to get current Git branch. Details: ${error.message}`;
+        // Handle errors during Git command execution (e.g., not a Git repository).
+        const errorMessage = `CRITICAL ERROR: Failed to get current Git branch. Ensure you are in a Git repository. Details: ${error.message}`;
         console.error(errorMessage);
-        if (error.stderr) console.error("STDERR:\n" + error.stderr);
-        if (error.stdout) console.error("STDOUT:\n" + error.stdout);
+        if (error.stderr) console.error("Git STDERR:\n" + error.stderr);
+        if (error.stdout) console.error("Git STDOUT:\n" + error.stdout); // Should be empty on error, but good practice.
         throw new Error(errorMessage);
     }
 
     try {
+        // Check for uncommitted changes or untracked files.
         const gitStatus = execSync('git status --porcelain', { cwd: CWD, ...execOpts }).trim();
         if (gitStatus) {
-            const errorMessage = "CRITICAL ERROR: Uncommitted changes or untracked files in the repository. Please commit or stash them before running --automatic.";
+            const errorMessage = "CRITICAL ERROR: Uncommitted changes or untracked files detected in the repository. Please commit, stash, or .gitignore them before running --automatic.";
             console.error(errorMessage);
-            console.error("Details:\n" + gitStatus);
+            console.error("Git status details:\n" + gitStatus);
             throw new Error(errorMessage);
         }
     } catch (error: any) {
+        // Handle errors during 'git status' execution.
         const errorMessage = `CRITICAL ERROR: Failed to check Git status. Details: ${error.message}`;
         console.error(errorMessage);
-        if (error.stderr) console.error("STDERR:\n" + error.stderr);
-        if (error.stdout) console.error("STDOUT:\n" + error.stdout);
+        if (error.stderr) console.error("Git STDERR:\n" + error.stderr);
+        if (error.stdout) console.error("Git STDOUT:\n" + error.stdout);
         throw new Error(errorMessage);
     }
 
-    console.log(`Starting automatic taylored block extraction for extensions '${extensionsInput}' in directory '${CWD}'. Original branch: '${originalBranchName}'`);
+    console.log(`Starting automatic Taylored block extraction for extensions '${extensionsInput}' in directory '${CWD}'. Original branch: '${originalBranchName}', Target branch for compute diffs: '${branchName}'.`);
 
     const tayloredDir = path.join(CWD, TAYLORED_DIR_NAME);
     try {

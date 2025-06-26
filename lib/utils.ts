@@ -3,14 +3,17 @@ import * as parseDiffModule from 'parse-diff';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
 
 /**
- * Ensures a Taylored filename ends with the standard .taylored extension.
+ * Ensures a Taylored filename ends with the standard `.taylored` extension.
  *
- * If the provided filename already has the correct extension, it's returned as is.
- * Otherwise, the .taylored extension is appended. This helps standardize
- * Taylored file naming and retrieval.
+ * If the provided filename already has the correct extension, it is returned as is.
+ * Otherwise, the `.taylored` extension (defined by `TAYLORED_FILE_EXTENSION`)
+ * is appended to the filename. This function helps in standardizing Taylored
+ * file naming and simplifies file retrieval operations.
  *
- * @param userInputFileName The filename input by the user, potentially without an extension.
- * @returns The fully resolved Taylored filename including the .taylored extension.
+ * @param {string} userInputFileName - The filename as input by the user. This may or may not
+ *                                   already include the `.taylored` extension.
+ * @returns {string} The fully resolved Taylored filename, guaranteed to include the
+ *                   `.taylored` extension.
  * @example
  * resolveTayloredFileName("my_patch") // returns "my_patch.taylored"
  * resolveTayloredFileName("feature.taylored") // returns "feature.taylored"
@@ -23,27 +26,35 @@ export function resolveTayloredFileName(userInputFileName: string): string {
 }
 
 /**
- * Prints usage information or an error message to the console and exits the process.
+ * Prints usage information and/or an error message to the console, then exits the process.
  *
- * This function is typically called when the CLI is used incorrectly (e.g., wrong arguments)
- * or when a user requests help (though full help might be triggered by `printFullUsage`).
- * It displays a general error message if provided, followed by the command usage summary.
- * The process exits with code 1 if an error message is provided, and code 0 otherwise (graceful exit).
+ * This utility function is typically invoked when the CLI encounters an error in command-line
+ * argument parsing, when a user requests help, or when an invalid operation is attempted.
  *
- * The usage information includes core patching commands and Taysell monetization commands,
- * giving users a quick reference.
+ * If an error `message` is provided, it is printed to `console.error`.
+ * The full usage text (listing all commands and options) is printed if `printFullUsage`
+ * is true or if an error `message` was provided (to guide the user after an error).
  *
- * @param message An optional error message to display before the usage information.
- *                If provided, the process will exit with a status code of 1.
- * @param printFullUsage If true, or if a message is provided, the full usage text is printed.
- *                       Defaults to false.
- * @returns {void} This function does not return a value as it exits the process.
+ * The process exits with a status code of 1 if an error `message` was given, indicating
+ * an error state. Otherwise, it exits with a status code of 0 (e.g., after successfully
+ * displaying help information requested by the user).
+ *
+ * @param {string} [message] - An optional error message to display. If provided, the process
+ *                             will exit with code 1.
+ * @param {boolean} [printFullUsage=false] - If `true`, or if `message` is provided,
+ *                                           the full command usage text is printed to `console.log`.
+ * @returns {void} This function does not return a value as it unconditionally exits the process.
  */
 export function printUsageAndExit(message?: string, printFullUsage: boolean = false): void {
     if (message) {
-        console.error(message);
+        console.error(message); // Print error messages to stderr
     }
-    if (printFullUsage || message) { // Always print usage if there's a message
+
+    // Determine if full usage should be printed
+    const shouldPrintFullUsage = printFullUsage || !!message;
+
+    if (shouldPrintFullUsage) {
+        // Using console.log for usage information as it's informational, not an error.
         console.log(`
 Usage: taylored <option> [arguments]`);
         console.log(`

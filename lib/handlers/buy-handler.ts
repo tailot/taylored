@@ -194,15 +194,21 @@ function displayPurchaseAssistanceMessage(
  * For more details on this command and the Taysell system, refer to `DOCUMENTATION.md`.
  *
  * @async
+ * @function handleBuyCommand
  * @param {string} taysellFilePath - Path to the `.taysell` metadata file for the patch to be purchased.
- * @param {boolean} isDryRun - If true, simulates the purchase and prints the patch content
- *                             instead of saving and applying it.
- * @param {string} CWD - The current working directory, used for resolving file paths.
+ * @param {boolean} isDryRun - If `true`, simulates the purchase process: it will attempt to get the
+ *                             purchase token and download the patch content, but will print the
+ *                             patch content to the console instead of saving it to a file or
+ *                             attempting to apply it. If `false`, it proceeds with saving
+ *                             and (intended future feature) applying the patch.
+ * @param {string} CWD - The current working directory. This is used for resolving the
+ *                       `taysellFilePath` and for determining where to save the downloaded
+ *                       patch file (within `<CWD>/.taylored/`).
  * @returns {Promise<void>} A promise that resolves when the buy operation (or dry run) is complete,
- *                          or if the user aborts the process.
- * @throws {Error} This function typically handles its own errors by calling `printUsageAndExit`
- *                 or `displayPurchaseAssistanceMessage` which terminate the process. It doesn't
- *                 usually throw errors to be caught by the main CLI handler.
+ *                          or if the user aborts the process (e.g., at the confirmation prompt).
+ *                          The function handles its own errors by calling `printUsageAndExit` or
+ *                          `displayPurchaseAssistanceMessage`, which terminate the process, so it
+ *                          doesn't typically throw errors to be caught by the caller.
  */
 export async function handleBuyCommand(
     taysellFilePath: string,
@@ -210,49 +216,59 @@ export async function handleBuyCommand(
     CWD: string
 ): Promise<void> {
     if (!taysellFilePath.endsWith('.taysell')) {
-        printUsageAndExit(`Invalid file type for '${taysellFilePath}'. Expected a .taysell file.`);
-        return;
+        printUsageAndExit(`Invalid file type for '${taysellFilePath}'. Expected a .taysell file. Please provide the path to a valid .taysell metadata file.`);
+        return; // Exits via printUsageAndExit
     }
 
     const fullTaysellPath = path.resolve(CWD, taysellFilePath);
     if (!await fs.pathExists(fullTaysellPath)) {
-        printUsageAndExit(`CRITICAL ERROR: Taysell file not found at: ${fullTaysellPath}`);
-        return;
+        printUsageAndExit(`CRITICAL ERROR: Taysell file not found at the specified path: ${fullTaysellPath}. Please check the path and try again.`);
+        return; // Exits via printUsageAndExit
     }
 
     let taysellData: TaysellFile;
     try {
         const fileContent = await fs.readFile(fullTaysellPath, 'utf-8');
-        taysellData = JSON.parse(fileContent);
-        validateTaysellFileContent(taysellData);
+        taysellData = JSON.parse(fileContent); // Can throw SyntaxError
+        validateTaysellFileContent(taysellData); // Can throw Error
     } catch (error: any) {
-        printUsageAndExit(`Error reading or parsing taysell file ${taysellFilePath}: ${error.message}`);
-        return;
+        printUsageAndExit(`CRITICAL ERROR: Failed to read or parse the .taysell file at '${fullTaysellPath}'. Details: ${error.message}`);
+        return; // Exits via printUsageAndExit
     }
 
-    const { endpoints, patchId, metadata } = taysellData;
+    // Destructure after validation to ensure properties exist
+    const { endpoints, patchId, metadata, sellerInfo } = taysellData;
 
+    // Validate essential properties from taysellData again, as validateTaysellFileContent might be too generic for this stage.
+    // Or rely on validateTaysellFileContent to be strict enough. Assuming it is for now.
+    // Redundant checks like below can be removed if validateTaysellFileContent is comprehensive.
     if (!endpoints?.initiatePaymentUrl || !endpoints?.getPatchUrl) {
-        printUsageAndExit('Endpoint URLs (initiatePaymentUrl or getPatchUrl) are not defined in the taysell file.');
-        return;
+        printUsageAndExit('CRITICAL ERROR: Endpoint URLs (initiatePaymentUrl or getPatchUrl) are missing or invalid in the .taysell file.');
+        return; // Exits via printUsageAndExit
     }
     if (!patchId) {
-        printUsageAndExit('Patch ID is not defined in the taysell file.');
-        return;
+        printUsageAndExit('CRITICAL ERROR: Patch ID (patchId) is missing or invalid in the .taysell file.');
+        return; // Exits via printUsageAndExit
     }
 
-    const getPatchUrlObj = new URL(endpoints.getPatchUrl);
-    if (getPatchUrlObj.protocol !== 'https:') {
-        printUsageAndExit('CRITICAL ERROR: for security reasons, getPatchUrl must use HTTPS.');
-        return;
+    try {
+        const getPatchUrlObj = new URL(endpoints.getPatchUrl); // Can throw if URL is invalid
+        if (getPatchUrlObj.protocol !== 'https:') {
+            printUsageAndExit('CRITICAL ERROR: For security reasons, the getPatchUrl specified in the .taysell file must use HTTPS.');
+            return; // Exits via printUsageAndExit
+        }
+    } catch (urlError: any) {
+        printUsageAndExit(`CRITICAL ERROR: The getPatchUrl ('${endpoints.getPatchUrl}') in the .taysell file is not a valid URL. Details: ${urlError.message}`);
+        return; // Exits via printUsageAndExit
     }
 
-    // Added to avoid prompt if in test mode
+
+    // User confirmation step (skipped in test environments)
     if (!process.env.JEST_WORKER_ID) {
         const { proceed } = await inquirer.prompt([{
             type: 'confirm',
             name: 'proceed',
-            message: `You are about to purchase the patch "${metadata.name}" from "${taysellData.sellerInfo.name}". Continue?`,
+            message: `You are about to initiate the purchase of the patch "${metadata.name}" from seller "${sellerInfo.name}".\nThis will open a browser window for payment.\nPrice: ${taysellData.payment.price} ${taysellData.payment.currency}.\n\nContinue?`,
             default: true,
         }]);
         if (!proceed) {

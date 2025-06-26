@@ -50,17 +50,38 @@ export async function handleOffsetCommand(
     branchName?: string
 ): Promise<void> {
     const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
-    
+    const targetFilePathDisplay = path.join(TAYLORED_DIR_NAME, resolvedTayloredFileName); // For display purposes
+
+    console.log(`INFO: Attempting to update offsets for '${targetFilePathDisplay}'...`);
+    if (branchName) {
+        console.log(`INFO: Using target branch '${branchName}' for diff calculation.`);
+    } else {
+        console.log(`INFO: No target branch specified, will use default (likely 'main') for diff calculation.`);
+    }
+
     try {
-        // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
+        // The `_customCommitMessage` (third argument) to updatePatchOffsets is now undefined,
+        // as custom messages are handled internally by updatePatchOffsets or ignored.
         const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, undefined, branchName);
+        console.log(`SUCCESS: Offsets updated successfully for '${targetFilePathDisplay}'. Output saved to '${result.outputPath}'.`);
     } catch (error: any) {
-        console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
-        let message = error.message || 'An unknown error occurred during offset update.';
-        console.error(`  Error: ${message}`);
-        if (error.stderr) {
-            console.error(`  Git STDERR details: ${error.stderr}`);
+        // Log a more user-friendly critical error message, then the specific error.
+        console.error(`\nCRITICAL ERROR: Failed to update offsets for '${targetFilePathDisplay}'.`);
+
+        // Check if it's a GitExecutionError to provide more specific Git-related info
+        if (error.name === 'GitExecutionError' && error.code !== undefined) {
+            console.error(`  Git command failed with exit code ${error.code}.`);
+            if (error.stdout) console.error(`  Git STDOUT:\n${error.stdout}`);
+            if (error.stderr) console.error(`  Git STDERR:\n${error.stderr}`);
+        } else if (error.message) {
+            // General error message
+            console.error(`  Error details: ${error.message}`);
+        } else {
+            console.error('  An unknown error occurred during the offset update process.');
         }
+
+        // Re-throw the error so that the main CLI handler can catch it and exit appropriately.
+        // The main handler might also log this or decide on the exit code.
         throw error;
     }
 }

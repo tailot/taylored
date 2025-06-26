@@ -36,12 +36,25 @@ interface ExecGitResult {
     error?: Error & { stdout?: string; stderr?: string; code?: number };
 }
 
+/**
+ * Custom error class for Git execution failures.
+ * Encapsulates the original error and provides direct access to stdout, stderr, and exit code.
+ */
 class GitExecutionError extends Error {
+    /** The original error object, if available. */
     originalError?: Error & { stdout?: string; stderr?: string; code?: number };
+    /** Standard output from the failed Git command. */
     stdout?: string;
+    /** Standard error from the failed Git command. */
     stderr?: string;
+    /** Exit code of the failed Git command. */
     code?: number;
 
+    /**
+     * Constructs a GitExecutionError.
+     * @param {string} message - The error message.
+     * @param {Error & { stdout?: string; stderr?: string; code?: number }} [originalError] - The original error from execAsync.
+     */
     constructor(message: string, originalError?: Error & { stdout?: string; stderr?: string; code?: number }) {
         super(message);
         this.name = 'GitExecutionError';
@@ -54,6 +67,15 @@ class GitExecutionError extends Error {
     }
 }
 
+/**
+ * Executes a Git command asynchronously.
+ * @async
+ * @param {string} repoRoot - The root directory of the Git repository.
+ * @param {string[]} args - An array of arguments for the Git command.
+ * @param {ExecGitOptions} [options={}] - Options for execution, including whether to allow failure.
+ * @returns {Promise<ExecGitResult>} A promise that resolves with the execution result.
+ * @throws {GitExecutionError} If the command fails and `options.allowFailure` is not true.
+ */
 async function execGit(repoRoot: string, args: string[], options: ExecGitOptions = {}): Promise<ExecGitResult> {
     const command = `git ${args.map(quoteForShell).join(' ')}`;
     const execOptions: ChildProcessExecOptions = { cwd: repoRoot, ...options.execOptions };
@@ -82,6 +104,11 @@ interface HunkHeaderInfo {
     newLines: number;
 }
 
+/**
+ * Parses a patch content string and extracts information about each hunk.
+ * @param {string | null | undefined} patchContent - The content of the patch file.
+ * @returns {HunkHeaderInfo[]} An array of objects, each representing a hunk with its original header line and parsed line numbers/counts. Returns an empty array if patchContent is null, undefined, or empty.
+ */
 function parsePatchHunks(patchContent: string | null | undefined): HunkHeaderInfo[] {
     if (!patchContent) {
         return [];
@@ -180,6 +207,45 @@ interface SimplifiedUpdatePatchOffsetsResult {
     outputPath: string;
 }
 
+/**
+ * Updates the line number offsets in a given .taylored patch file.
+ * This function performs a series of Git operations to re-calculate the diff
+ * against a target branch (or 'main' by default) and then overwrites the
+ * original patch file with the new diff.
+ *
+ * Workflow:
+ * 1. Checks for uncommitted changes; throws an error if any exist.
+ * 2. Verifies the existence of the patch file and the base branch.
+ * 3. Saves the current Git branch/commit.
+ * 4. Creates a temporary branch.
+ * 5. Tries to apply the patch in reverse (remove), then attempts to apply it normally (add) if removal fails.
+ *    This step aims to get the codebase to a state *before* the patch was applied, or *with* the patch applied,
+ *    to correctly generate the forward diff later.
+ * 6. If the apply/remove step is successful, stages all changes and creates a temporary commit.
+ * 7. Generates a `git diff` between the specified `baseBranch` and the current `HEAD` of the temporary branch.
+ * 8. Extracts the original commit message from the input patch file, if present.
+ * 9. Compares hunks of the original patch and the new diff. If all hunks appear "inverted"
+ *    (meaning the new diff looks like the reverse of the original patch, which can happen
+ *    if the initial apply/remove logic resulted in the patch's effects being *added* to the
+ *    temporary branch instead of *removed*), it uses the body of the *original* patch content
+ *    for the final output, but with the (potentially new) embedded message. Otherwise, it uses the new diff content.
+ *10. Writes the resulting content (either the adjusted original patch body or the new diff body,
+ *    with the embedded message) back to the original patch file, but only if the content has changed.
+ *11. Cleans up by checking out the original branch/commit and deleting the temporary branch.
+ *
+ * @async
+ * @param {string} patchFileName - The name of the .taylored file (e.g., "myfeature.taylored")
+ *                                 located in the .taylored/ directory.
+ * @param {string} repoRoot - The absolute path to the root of the Git repository.
+ * @param {string} [_customCommitMessage] - This parameter is ignored. The commit message is
+ *                                          extracted from the patch file itself if present.
+ * @param {string} [branchName] - Optional. The name of the branch to diff against.
+ *                                Defaults to 'main'.
+ * @returns {Promise<SimplifiedUpdatePatchOffsetsResult>} A promise that resolves with an object
+ *          containing the `outputPath` of the updated patch file.
+ * @throws {Error} If the repository has uncommitted changes, the patch file or base branch
+ *                 doesn't exist, Git operations fail, or the patch cannot be processed.
+ */
 async function updatePatchOffsets(
     patchFileName: string,
     repoRoot: string,

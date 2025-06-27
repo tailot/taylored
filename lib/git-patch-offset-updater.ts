@@ -219,32 +219,32 @@ interface SimplifiedUpdatePatchOffsetsResult {
  * 3. Saves the current Git branch/commit.
  * 4. Creates a temporary branch.
  * 5. Tries to apply the patch in reverse (remove), then attempts to apply it normally (add) if removal fails.
- *    This step aims to get the codebase to a state *before* the patch was applied, or *with* the patch applied,
- *    to correctly generate the forward diff later.
+ * This step aims to get the codebase to a state *before* the patch was applied, or *with* the patch applied,
+ * to correctly generate the forward diff later.
  * 6. If the apply/remove step is successful, stages all changes and creates a temporary commit.
  * 7. Generates a `git diff` between the specified `baseBranch` and the current `HEAD` of the temporary branch.
  * 8. Extracts the original commit message from the input patch file, if present.
  * 9. Compares hunks of the original patch and the new diff. If all hunks appear "inverted"
- *    (meaning the new diff looks like the reverse of the original patch, which can happen
- *    if the initial apply/remove logic resulted in the patch's effects being *added* to the
- *    temporary branch instead of *removed*), it uses the body of the *original* patch content
- *    for the final output, but with the (potentially new) embedded message. Otherwise, it uses the new diff content.
+ * (meaning the new diff looks like the reverse of the original patch, which can happen
+ * if the initial apply/remove logic resulted in the patch's effects being *added* to the
+ * temporary branch instead of *removed*), it uses the body of the *original* patch content
+ * for the final output, but with the (potentially new) embedded message. Otherwise, it uses the new diff content.
  *10. Writes the resulting content (either the adjusted original patch body or the new diff body,
- *    with the embedded message) back to the original patch file, but only if the content has changed.
+ * with the embedded message) back to the original patch file, but only if the content has changed.
  *11. Cleans up by checking out the original branch/commit and deleting the temporary branch.
  *
  * @async
  * @param {string} patchFileName - The name of the .taylored file (e.g., "myfeature.taylored")
- *                                 located in the .taylored/ directory.
+ * located in the .taylored/ directory.
  * @param {string} repoRoot - The absolute path to the root of the Git repository.
  * @param {string} [_customCommitMessage] - This parameter is ignored. The commit message is
- *                                          extracted from the patch file itself if present.
+ * extracted from the patch file itself if present.
  * @param {string} [branchName] - Optional. The name of the branch to diff against.
- *                                Defaults to 'main'.
+ * Defaults to 'main'.
  * @returns {Promise<SimplifiedUpdatePatchOffsetsResult>} A promise that resolves with an object
- *          containing the `outputPath` of the updated patch file.
+ * containing the `outputPath` of the updated patch file.
  * @throws {Error} If the repository has uncommitted changes, the patch file or base branch
- *                 doesn't exist, Git operations fail, or the patch cannot be processed.
+ * doesn't exist, Git operations fail, or the patch cannot be processed.
  */
 async function updatePatchOffsets(
     patchFileName: string,
@@ -287,6 +287,7 @@ async function updatePatchOffsets(
     const tempBranchName = `temp/offset-automation-${Date.now()}`;
     let operationSucceeded = false;
     let cliEquivalentCallSucceeded = false;
+    let finalOutputContentToWrite: string | null = null; // --- MODIFICA 1: Variabile per memorizzare il contenuto
 
     try {
         await execGit(repoRoot, ['checkout', '-b', tempBranchName, originalBranchOrCommit, '--quiet']);
@@ -295,15 +296,10 @@ async function updatePatchOffsets(
             await handleApplyOperation(patchFileName, false, true, '--remove (invoked by offset)', repoRoot);
             cliEquivalentCallSucceeded = true;
         } catch (removeError: any) {
-            // Error during initial 'remove' attempt.
-            // The original code had an empty if block here.
-            // Now, attempting 'add' as a fallback.
             try {
                 await handleApplyOperation(patchFileName, false, false, '--add (invoked by offset, after remove failed)', repoRoot);
                 cliEquivalentCallSucceeded = true;
             } catch (addError: any) {
-                // Error during fallback 'add' attempt.
-                // The original code had an empty if block here.
                 cliEquivalentCallSucceeded = false;
             }
         }
@@ -321,9 +317,6 @@ async function updatePatchOffsets(
 
             const originalPatchContent = await fs.readFile(absolutePatchFilePath, 'utf-8');
             const rawNewDiffContent = diffCmdResult.stdout || "";
-
-            // Custom commit message is no longer supported for --offset.
-            // Always extract from the original patch if present.
             const effectiveMessageToEmbed: string | null = extractMessageFromPatch(originalPatchContent);
 
             if (diffCmdResult.error && diffCmdResult.error.code !== 0 && diffCmdResult.error.code !== 1) {
@@ -354,28 +347,16 @@ async function updatePatchOffsets(
                     }
                 }
 
-                let finalOutputContentToWrite: string;
                 const cleanedDiffContent = rawNewDiffContent.split('\n').map(line => line.trimEnd()).join('\n');
 
                 if (allHunksAreConsideredInverted) {
                     const bodyOfOriginalPatch = getActualDiffBody(originalPatchContent);
                     finalOutputContentToWrite = embedMessageInContent(bodyOfOriginalPatch, effectiveMessageToEmbed);
                 } else {
-                    // The original code had an empty 'if' block here checking for
-                    // mismatched hunk lengths under certain conditions.
-                    // This condition (originalHunks.length !== newHunks.length etc.)
-                    // didn't change the program flow as the block was empty.
-                    // If specific handling for this case is needed, it would be added here.
                     finalOutputContentToWrite = embedMessageInContent(cleanedDiffContent, effectiveMessageToEmbed);
                 }
+                
 
-                // Refined write condition
-                if (finalOutputContentToWrite === originalPatchContent) {
-                    // Content is identical, no need to write the file.
-                    // Original code had an empty 'if' branch here.
-                } else {
-                    await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
-                }
                 operationSucceeded = true;
             }
         } else { 
@@ -397,14 +378,19 @@ async function updatePatchOffsets(
                 await execGit(repoRoot, ['branch', '-D', tempBranchName, '--quiet']);
             }
         } catch (cleanupErr: any) {
-            // Errors during cleanup are logged to console.error by default by execGit if not caught.
-            // However, this catch block was empty, meaning cleanup errors were intentionally suppressed.
-            // Consider if logging `cleanupErr.message` is appropriate here if issues arise.
-            // For now, maintaining the behavior of suppressing cleanup errors.
+            console.warn(`Warning: Failed to cleanup temporary branch: ${cleanupErr.message}`);
         }
     }
 
-    if (!operationSucceeded) {
+    if (operationSucceeded && finalOutputContentToWrite !== null) {
+        try {
+            await fs.writeFile(absolutePatchFilePath, finalOutputContentToWrite);
+            console.log(`Successfully updated patch file: ${patchFileName}`);
+        } catch (writeError: any) {
+            // Se la scrittura fallisce qui, l'utente vedrà un errore ma il repository sarà già pulito.
+            throw new Error(`Failed to write updated patch content to ${absolutePatchFilePath}. Error: ${writeError.message}`);
+        }
+    } else if (!operationSucceeded) {
         throw new Error(`WARNING: The taylored file '${patchFileName}' is obsolete or could not be processed for offset update.`);
     }
 

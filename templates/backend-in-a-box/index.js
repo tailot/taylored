@@ -3,7 +3,6 @@ const express = require('express');
 const fs = require('fs').promises;
 const sqlite3 = require('sqlite3').verbose();
 const crypto = require('crypto');
-// const paypal = require('@paypal/paypal-server-sdk'); // Removed
 const path = require('path');
 const axios = require('axios'); // Make sure axios is required
 
@@ -294,27 +293,35 @@ app.post('/get-patch', async (req, res) => {
         return res.status(400).json({ error: "Invalid patchId format." });
     }
 
-    db.get(`SELECT id, token_used_at FROM purchases WHERE patch_id = ? AND purchase_token = ? AND status = 'COMPLETED'`, [sanitizedPatchId, purchaseToken], async (err, row) => {
-        if (err || !row) {
-            return res.status(401).json({ error: "Invalid or unauthorized purchase token." });
-        }
-        if (row.token_used_at) {
-            return res.status(403).json({ error: "Purchase token has already been used." });
+    const sql = `
+        UPDATE purchases
+        SET token_used_at = CURRENT_TIMESTAMP
+        WHERE patch_id = ?
+          AND purchase_token = ?
+          AND status = 'COMPLETED'
+          AND token_used_at IS NULL
+    `;
+
+    // Use a standard function() callback to access `this.changes`.
+    db.run(sql, [sanitizedPatchId, purchaseToken], async function(err) {
+        if (err) {
+            console.error("Database error during patch retrieval:", err.message);
+            return res.status(500).json({ error: "Internal server error." });
         }
 
+        // `this.changes` will be 1 if a row was updated (token was valid and unused), 0 otherwise.
+        if (this.changes === 0) {
+            return res.status(403).json({ error: "Invalid or already-used purchase token." });
+        }
+
+        // If we get here, the token was valid and has been consumed. Proceed to send the patch.
         const encryptedFilePath = path.join(__dirname, 'patches', `${sanitizedPatchId}.taylored.enc`);
         try {
             const encryptedContent = await fs.readFile(encryptedFilePath, 'utf-8');
             const decryptedContent = decryptAES256GCM(encryptedContent, encryptionKey);
-
-            db.run(`UPDATE purchases SET token_used_at = CURRENT_TIMESTAMP WHERE id = ?`, [row.id], (updateErr) => {
-                if (updateErr) {
-                    console.error(`Failed to mark token as used for purchase ID ${row.id}:`, updateErr.message);
-                    return res.status(500).json({ error: "Server error processing request." });
-                }
-                res.setHeader('Content-Type', 'text/plain');
-                res.status(200).send(decryptedContent);
-            });
+            
+            res.setHeader('Content-Type', 'text/plain');
+            res.status(200).send(decryptedContent);
         } catch (fileError) {
             if (fileError.code === 'ENOENT') {
                 return res.status(404).json({ error: "Patch not found." });

@@ -7,9 +7,9 @@ import * as path from 'path';
 import inquirer from 'inquirer';
 import * as crypto from 'crypto'; // For generating patchId
 import { encryptAES256GCM } from '../taysell-utils'; // Corrected path
-import { TAYLORED_FILE_EXTENSION } from '../constants'; // Assuming this exists for .taylored extension
-
-// Helper function to read .env file
+import { TAYLORED_FILE_EXTENSION } from '../constants';
+import { CliUsageError, FileNotFoundError, BackendSetupError } from '../errors'; // Using BackendSetupError for config issues
+import { formatUsageMessage } from '../utils'; // For formatting usage messages
 /**
  * Reads a simple .env file and parses its key-value pairs.
  *
@@ -76,12 +76,7 @@ async function readEnvFile(envPath: string): Promise<Record<string, string>> {
  * @param {string} cwd - The current working directory. Used to resolve file paths and locate
  *                       the `taysell-server/.env` file.
  * @returns {Promise<void>} A promise that resolves when the Taysell package creation is complete.
- * @throws {Error} The function may terminate the process with `process.exit(1)` if critical
- *                 errors occur, such as:
- *                 - Invalid input file (not a .taylored file, or does not exist).
- *                 - Failure to read the patch file or write encrypted/metadata files.
- *                 It handles errors by logging to console and exiting, rather than throwing
- *                 to be caught by the main CLI handler.
+ * @throws {CliUsageError | FileNotFoundError | BackendSetupError | Error} Throws custom errors on failure.
  */
 export async function handleCreateTaysell(
     tayloredFilePath: string,
@@ -91,19 +86,16 @@ export async function handleCreateTaysell(
 ): Promise<void> {
     console.log(`Starting .taysell package creation for: ${tayloredFilePath}`);
 
-    // 1. Validate input .taylored file
     if (!tayloredFilePath.endsWith(TAYLORED_FILE_EXTENSION)) {
-         console.error(`CRITICAL ERROR: Input file must be a .taylored file. Received: ${tayloredFilePath}`);
-         process.exit(1);
+         throw new CliUsageError(formatUsageMessage(`Input file must be a .taylored file. Received: ${tayloredFilePath}`));
     }
     const fullTayloredPath = path.resolve(cwd, tayloredFilePath);
     if (!await fs.pathExists(fullTayloredPath)) {
-        console.error(`CRITICAL ERROR: Taylored file not found at: ${fullTayloredPath}`);
-        process.exit(1);
+        throw new FileNotFoundError(`Taylored file not found at: ${fullTayloredPath}`);
     }
     const patchFileNameBase = path.basename(tayloredFilePath);
 
-    // 2. Look for local backend configuration
+    // Look for local backend configuration
     const envPath = path.join(cwd, 'taysell-server', '.env');
     const envConfig = await readEnvFile(envPath);
 

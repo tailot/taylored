@@ -1,9 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
-
-/**
- * Implements the `taylored --list` command functionality.
+import { FileNotFoundError } from '../errors'; // Import custom error
  *
  * This function lists all Taylored patch files (files ending with `.taylored`)
  * found within the `.taylored/` directory in the specified current working directory (CWD).
@@ -20,31 +18,33 @@ import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
  *                       Git repository where Taylored operations are performed. The
  *                       `.taylored/` directory is expected to be a direct child of CWD.
  * @returns {Promise<void>} A promise that resolves when the listing operation is complete.
- * @throws {Error} Throws an error if there's an issue accessing the `.taylored`
- *                 directory (other than it not existing or not being a directory,
- *                 which are handled gracefully) or if reading its contents fails.
+ * @throws {FileNotFoundError | Error} Throws FileNotFoundError or a generic Error for other FS issues.
  */
 export async function handleListOperation(CWD: string): Promise<void> {
     const tayloredDirPath = path.join(CWD, TAYLORED_DIR_NAME);
     console.log(`INFO: Listing ${TAYLORED_FILE_EXTENSION} files from '${tayloredDirPath}'...`);
-    try {
-        try {
-            const stats = await fs.stat(tayloredDirPath);
-            if (!stats.isDirectory()) {
-                console.log(`INFO: Expected '${TAYLORED_DIR_NAME}' to be a directory, but it's not (found at '${tayloredDirPath}').`);
-                console.log("No taylored files to list.");
-                return;
-            }
-        } catch (statError: any) {
-            if (statError.code === 'ENOENT') {
-                console.log(`INFO: Directory '${TAYLORED_DIR_NAME}' not found at '${tayloredDirPath}'.`);
-                console.log("No taylored files to list.");
-                return;
-            }
-            console.error(`CRITICAL ERROR: Could not access directory '${tayloredDirPath}'. Details: ${statError.message}`);
-            throw statError;
-        }
 
+    try {
+        const stats = await fs.stat(tayloredDirPath);
+        if (!stats.isDirectory()) {
+            // This is an unexpected state, but not strictly "file not found" for the dir itself.
+            // Log info and return, as per original logic.
+            console.log(`INFO: Expected '${TAYLORED_DIR_NAME}' to be a directory, but it's not (found at '${tayloredDirPath}').`);
+            console.log("No taylored files to list.");
+            return;
+        }
+    } catch (statError: any) {
+        if (statError.code === 'ENOENT') {
+            // Directory doesn't exist, this is not an error condition for list, just means no files.
+            console.log(`INFO: Directory '${TAYLORED_DIR_NAME}' not found at '${tayloredDirPath}'.`);
+            console.log("No taylored files to list.");
+            return;
+        }
+        // For other stat errors (e.g., permission issues), throw a generic error.
+        throw new Error(`Could not access directory '${tayloredDirPath}'. Details: ${statError.message}`);
+    }
+
+    try {
         const entries = await fs.readdir(tayloredDirPath);
         const tayloredFilesList: string[] = [];
 

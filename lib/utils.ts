@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
+import { GitOperationError, PatchPurityError } from './errors';
 
 /**
  * Ensures a Taylored filename ends with the standard .taylored extension.
@@ -37,43 +38,39 @@ export function resolveTayloredFileName(userInputFileName: string): string {
  *                If provided, the process will exit with a status code of 1.
  * @param printFullUsage If true, or if a message is provided, the full usage text is printed.
  *                       Defaults to false.
- * @returns {void} This function does not return a value as it exits the process.
+ * @returns {string} The formatted usage message.
  */
-export function printUsageAndExit(message?: string, printFullUsage: boolean = false): void {
-    if (message) {
-        console.error(message);
+export function formatUsageMessage(errorMessage?: string, printFullUsage: boolean = false): string {
+    let usageText = "";
+    if (errorMessage) {
+        usageText += errorMessage + "\n\n";
     }
-    if (printFullUsage || message) { // Always print usage if there's a message
-        console.log(`
-Usage: taylored <option> [arguments]`);
-        console.log(`
-Core Patching Commands (require to be run in a Git repository root):`);
-        console.log(`  --add <taylored_file_name>          Applies the patch.`);
-        console.log(`  --remove <taylored_file_name>       Reverses the patch.`);
-        console.log(`  --verify-add <taylored_file_name>   Verifies if the patch can be applied.`);
-        console.log(`  --verify-remove <taylored_file_name> Verifies if the patch can be reversed.`);
-        console.log(`  --save <branch_name>                Creates a patch from changes in <branch_name>.`);
-        console.log(`  --list                              Lists all applied patches.`);
-        console.log(`  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.`);
-        console.log(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
-        console.log(`                                      Automatically computes and applies line offsets for patches based on Git history.`);
-        console.log(`  --upgrade <patch_file> [target_file_path]`);
-        console.log(`                                      Analyzes patch frames against the target file (or inferred file).`);
-        console.log(`                                      If frames are intact, updates the patch content from the target file.`);
+
+    if (printFullUsage || errorMessage) { // Always include usage details if there's an error message or full usage is requested
+        usageText += `Usage: taylored <option> [arguments]\n`;
+        usageText += `\nCore Patching Commands (require to be run in a Git repository root):\n`;
+        usageText += `  --add <taylored_file_name>          Applies the patch.\n`;
+        usageText += `  --remove <taylored_file_name>       Reverses the patch.\n`;
+        usageText += `  --verify-add <taylored_file_name>   Verifies if the patch can be applied.\n`;
+        usageText += `  --verify-remove <taylored_file_name> Verifies if the patch can be reversed.\n`;
+        usageText += `  --save <branch_name>                Creates a patch from changes in <branch_name>.\n`;
+        usageText += `  --list                              Lists all applied patches.\n`;
+        usageText += `  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.\n`;
+        usageText += `  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]\n`;
+        usageText += `                                      Automatically computes and applies line offsets for patches based on Git history.\n`;
+        usageText += `  --upgrade <patch_file> [target_file_path]\n`;
+        usageText += `                                      Analyzes patch frames against the target file (or inferred file).\n`;
+        usageText += `                                      If frames are intact, updates the patch content from the target file.\n`;
 
         // <taylored number="9003">
-        console.log(`
-Taysell Monetization Commands:`);
-        console.log(`  setup-backend                       Sets up the Taysell 'Backend-in-a-Box'.`);
-        console.log(`  create-taysell <file.taylored> [--price <price>] [--desc "description"]`);
-        console.log(`                                      Creates a .taysell package for selling a patch.`);
-        console.log(`  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.`);
+        usageText += `\nTaysell Monetization Commands:\n`;
+        usageText += `  setup-backend                       Sets up the Taysell 'Backend-in-a-Box'.\n`;
+        usageText += `  create-taysell <file.taylored> [--price <price>] [--desc "description"]\n`;
+        usageText += `                                      Creates a .taysell package for selling a patch.\n`;
+        usageText += `  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.\n`;
         // </taylored>
     }
-    if (!message) {
-        process.exit(0);
-    }
-    process.exit(1);
+    return usageText.trim();
 }
 
 
@@ -144,52 +141,47 @@ export function analyzeDiffContent(diffOutput: string | undefined): { additions:
  *          - `errorMessage`: An optional error message if the command or analysis failed.
  *          - `success`: Boolean indicating overall success of both fetching and analyzing the diff.
  */
-export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput?: string; additions: number; deletions: number; isPure: boolean; errorMessage?: string; success: boolean } {
-    const command = `git diff HEAD "${branchName.replace(/"/g, '\\"')}"`; // Basic quoting for branch name
-    let diffOutput: string | undefined;
-    let errorMessage: string | undefined;
-    let commandSuccess = false;
-    let additions = 0;
-    let deletions = 0;
-    let isPure = false;
+export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput: string; additions: number; deletions: number; isPure: boolean } {
+    const command = `git diff HEAD "${branchName.replace(/"/g, '\\"')}"`;
+    let diffOutput: string;
 
     try {
         diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
-        commandSuccess = true; // Command succeeded, implies diffOutput is valid (even if empty)
     } catch (error: any) {
         if (error.status === 1 && typeof error.stdout === 'string') {
-            // git diff found differences and exited with 1. This is not an error for getAndAnalyzeDiff's purpose.
+            // git diff found differences and exited with 1. This is normal.
             diffOutput = error.stdout;
-            commandSuccess = true;
         } else {
             // Actual error from execSync or git diff
-            errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
-            if (error.status) { errorMessage += ` Exit status: ${error.status}.`; }
-            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-                errorMessage += ` Git stderr: ${error.stderr.trim()}.`;
+            let errMsg = `'git diff' command failed for branch '${branchName}'.`;
+            if (error.status) { errMsg += ` Exit status: ${error.status}.`; }
+            // error.stderr might be a Buffer, ensure it's stringified
+            const stderrString = error.stderr ? error.stderr.toString().trim() : '';
+            if (stderrString) {
+                errMsg += ` Git stderr: ${stderrString}.`;
             } else if (error.message) {
-                errorMessage += ` Error message: ${error.message}.`;
+                errMsg += ` Error message: ${error.message}.`;
             }
-            errorMessage += ` Attempted command: ${command}.`;
-            commandSuccess = false;
-            // diffOutput remains undefined
+            throw new GitOperationError(errMsg, command, stderrString);
         }
     }
 
-    if (commandSuccess) { // diffOutput could be an empty string (no diff) or the diff content
-        const analysis = analyzeDiffContent(diffOutput); // diffOutput is defined if commandSuccess is true
-        if (analysis.success) {
-            additions = analysis.additions;
-            deletions = analysis.deletions;
-            isPure = analysis.isPure;
-        } else {
-            errorMessage = (errorMessage ? errorMessage + "\n" : "") + `CRITICAL ERROR: Post-diff analysis failed. ${analysis.errorMessage}`;
-            commandSuccess = false; // Mark overall success as false if parsing/analysis fails
-        }
+    const analysis = analyzeDiffContent(diffOutput);
+    if (!analysis.success) {
+        // This case should ideally not happen if diffOutput is always a string.
+        // If analyzeDiffContent itself fails (e.g. due to unexpected undefined input, though guarded),
+        // it's an internal error.
+        throw new Error(`Post-diff analysis failed unexpectedly. ${analysis.errorMessage || ''}`);
     }
-    // If !commandSuccess initially, diffOutput is undefined. additions, deletions, isPure remain 0, false.
 
-    return { diffOutput, additions, deletions, isPure, errorMessage, success: commandSuccess };
+    if (!analysis.isPure) {
+        throw new PatchPurityError(
+            `The diff between "${branchName}" and HEAD contains a mix of content line additions and deletions.`,
+            { additions: analysis.additions, deletions: analysis.deletions }
+        );
+    }
+
+    return { diffOutput, additions: analysis.additions, deletions: analysis.deletions, isPure: analysis.isPure };
 }
 
 /**

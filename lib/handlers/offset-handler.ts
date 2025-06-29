@@ -1,10 +1,8 @@
 import * as path from 'path';
-import { updatePatchOffsets } from '../git-patch-offset-updater';
+import { updatePatchOffsets, GitExecutionError } from '../git-patch-offset-updater'; // Import GitExecutionError
 import { resolveTayloredFileName } from '../utils';
 import { TAYLORED_DIR_NAME } from '../constants';
-
-/**
- * Implements the `taylored --offset <taylored_file_name> [BRANCH_NAME]` command.
+import { GitOperationError, FileNotFoundError } from '../errors'; // Import custom errors
  *
  * This function is responsible for updating the line number offsets within a specified
  * `.taylored` patch file. This is crucial when the underlying codebase has changed since
@@ -39,10 +37,7 @@ import { TAYLORED_DIR_NAME } from '../constants';
  *                                typically defaults to the 'main' branch or a similar primary branch.
  * @returns {Promise<void>} A promise that resolves if the patch file's offsets are
  *                          successfully updated.
- * @throws {Error} Throws an error if `updatePatchOffsets` fails. This can happen due to
- *                 various reasons including a dirty Git repository, inability to apply the
- *                 original patch even temporarily, or issues generating the new diff.
- *                 The error message from `updatePatchOffsets` will be logged.
+ * @throws {GitOperationError | FileNotFoundError | Error} Throws custom errors on failure.
  */
 export async function handleOffsetCommand(
     userInputFileName: string,
@@ -50,17 +45,40 @@ export async function handleOffsetCommand(
     branchName?: string
 ): Promise<void> {
     const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
+    const fullPatchPath = path.join(CWD, TAYLORED_DIR_NAME, resolvedTayloredFileName);
+
+    // It's good practice for the handler to check if the file exists before calling deeper logic,
+    // though updatePatchOffsets also checks. This provides a clearer error source.
+    try {
+        const stats = await fs.promises.stat(fullPatchPath); // fs needs to be imported if not already
+        if (!stats.isFile()) {
+            throw new FileNotFoundError(`Patch file '${resolvedTayloredFileName}' not found or is not a file at path '${fullPatchPath}'.`);
+        }
+    } catch (error: any) {
+        if (error.code === 'ENOENT') {
+            throw new FileNotFoundError(`Patch file '${resolvedTayloredFileName}' not found at path '${fullPatchPath}'.`);
+        }
+        throw new Error(`Error accessing patch file '${resolvedTayloredFileName}': ${error.message}`);
+    }
     
     try {
-        // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
-        const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, undefined, branchName);
+        await updatePatchOffsets(resolvedTayloredFileName, CWD, undefined, branchName);
+        console.log(`Successfully updated offsets for '${resolvedTayloredFileName}'.`); // Add success log
     } catch (error: any) {
-        console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
-        let message = error.message || 'An unknown error occurred during offset update.';
-        console.error(`  Error: ${message}`);
-        if (error.stderr) {
-            console.error(`  Git STDERR details: ${error.stderr}`);
+        let message = error.message || `An unknown error occurred during offset update for '${resolvedTayloredFileName}'.`;
+        let stderr: string | undefined;
+        let command: string | undefined;
+
+        if (error instanceof GitExecutionError) { // This is the error from updatePatchOffsets
+            message = `Failed to update offsets for '${resolvedTayloredFileName}'. Git operation failed: ${error.message}`;
+            stderr = error.stderr;
+            // command = error.command; // GitExecutionError in git-patch-offset-updater does not currently store command
+            throw new GitOperationError(message, command, stderr);
+        } else if (error.message.includes("Patch file") && error.message.includes("not found")) { // From updatePatchOffsets' own checks
+             throw new FileNotFoundError(message);
         }
-        throw error;
+        // For other errors, re-throw as a generic error, or a more specific one if identifiable.
+        // The existing console.error is removed, error will be handled by index.ts
+        throw new Error(message);
     }
 }

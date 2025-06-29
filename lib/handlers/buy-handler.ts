@@ -4,9 +4,10 @@ import * as https from 'https';
 import { validateTaysellFileContent, TaysellFile } from '../taysell-utils';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 //import { handleApplyOperation } from '../apply-logic';
-import { printUsageAndExit } from '../utils';
+import { formatUsageMessage } from '../utils'; // Changed from printUsageAndExit
 import * as crypto from 'crypto';
 import inquirer from 'inquirer';
+import { CliUsageError, PurchaseError, FileNotFoundError } from '../errors'; // Import custom errors
 
 /**
  * Polls a server endpoint to check for purchase confirmation and retrieve a purchase token.
@@ -115,48 +116,48 @@ async function pollForToken(checkUrl: string, cliSessionId: string, patchIdToVer
  * @param {string | null} cliSessionId - The CLI session ID, relevant for timeout or polling issues.
  * @param {string | null} purchaseToken - The purchase token, if obtained (relevant for download failures).
  * @param {string} underlyingErrorMessage - The original error message that led to this assistance request.
- * @returns {void} This function does not return as it exits the process.
+ * @returns {string} The formatted assistance message.
  */
-function displayPurchaseAssistanceMessage(
+function formatPurchaseAssistanceMessage(
     issueType: "Timeout" | "Download Failed" | "Polling Server Error",
     taysellData: TaysellFile,
     cliSessionId: string | null,
     purchaseToken: string | null,
     underlyingErrorMessage: string
-): void {
+): string {
     const title = issueType === "Timeout" ? "Purchase Confirmation Timed Out" :
         issueType === "Download Failed" ? "Payment Succeeded, Download Failed" :
             "Server Error During Purchase Confirmation";
-    console.error(`\n--- ${title} ---`);
+
+    let message = `--- ${title} ---\n\n`;
 
     if (issueType === "Timeout") {
-        console.error("We were unable to confirm your purchase within the time limit.");
-        console.error("This could be due to several reasons:");
-        console.error("  - The payment process was not completed in the browser.");
-        console.error("  - There was a network issue preventing communication with the server.");
-        console.error("  - The seller's server is experiencing delays.");
+        message += "We were unable to confirm your purchase within the time limit.\n";
+        message += "This could be due to several reasons:\n";
+        message += "  - The payment process was not completed in the browser.\n";
+        message += "  - There was a network issue preventing communication with the server.\n";
+        message += "  - The seller's server is experiencing delays.\n";
     } else if (issueType === "Polling Server Error") {
-        console.error("The seller's server reported an issue while we were trying to confirm your purchase status.");
-        console.error("This might be a temporary problem with the server or an issue with the purchase session.");
-        console.error("Details of the error encountered:");
-        // The underlyingErrorMessage will contain the status code from the server.
-        console.error(`  ${underlyingErrorMessage}`);
-    } else {
-        console.error("An error occurred while attempting to download the patch after your payment was processed.");
+        message += "The seller's server reported an issue while we were trying to confirm your purchase status.\n";
+        message += "This might be a temporary problem with the server or an issue with the purchase session.\n";
+        message += "Details of the error encountered:\n";
+        message += `  ${underlyingErrorMessage}\n`;
+    } else { // Download Failed
+        message += "An error occurred while attempting to download the patch after your payment was processed.\n";
     }
-    console.error("\nIf you believe your payment was successful (or in case of download failure), please contact the seller for assistance.\n");
+    message += "\nIf you believe your payment was successful (or in case of download failure), please contact the seller for assistance.\n\n";
 
     const sellerContact = taysellData.sellerInfo.contact;
     const patchName = taysellData.metadata.name;
 
-    console.error(`Seller Contact: ${sellerContact}\n`);
-    console.error("Please provide them with the following information if you contact them:\n");
-    console.error(`- Issue: ${issueType} for patch "${patchName}" (Patch ID: ${taysellData.patchId}).`);
-    if (cliSessionId) console.error(`- CLI Session ID: ${cliSessionId}`);
-    if (purchaseToken) console.error(`- Purchase Token: ${purchaseToken}`);
-    console.error("\n---------------------------\n");
-    console.error(`CRITICAL ERROR: ${underlyingErrorMessage}`); // Display the original error that led to this
-    process.exit(1);
+    message += `Seller Contact: ${sellerContact}\n\n`;
+    message += "Please provide them with the following information if you contact them:\n\n";
+    message += `- Issue: ${issueType} for patch "${patchName}" (Patch ID: ${taysellData.patchId}).\n`;
+    if (cliSessionId) message += `- CLI Session ID: ${cliSessionId}\n`;
+    if (purchaseToken) message += `- Purchase Token: ${purchaseToken}\n`;
+    message += "\n---------------------------\n";
+    // The underlyingErrorMessage will be part of the main PurchaseError message
+    return message;
 }
 
 /**
@@ -200,9 +201,7 @@ function displayPurchaseAssistanceMessage(
  * @param {string} CWD - The current working directory, used for resolving file paths.
  * @returns {Promise<void>} A promise that resolves when the buy operation (or dry run) is complete,
  *                          or if the user aborts the process.
- * @throws {Error} This function typically handles its own errors by calling `printUsageAndExit`
- *                 or `displayPurchaseAssistanceMessage` which terminate the process. It doesn't
- *                 usually throw errors to be caught by the main CLI handler.
+ * @throws {CliUsageError | FileNotFoundError | PurchaseError | Error} Throws custom errors on failure.
  */
 export async function handleBuyCommand(
     taysellFilePath: string,
@@ -210,67 +209,64 @@ export async function handleBuyCommand(
     CWD: string
 ): Promise<void> {
     if (!taysellFilePath.endsWith('.taysell')) {
-        printUsageAndExit(`Invalid file type for '${taysellFilePath}'. Expected a .taysell file.`);
-        return;
+        throw new CliUsageError(formatUsageMessage(`Invalid file type for '${taysellFilePath}'. Expected a .taysell file.`));
     }
 
     const fullTaysellPath = path.resolve(CWD, taysellFilePath);
     if (!await fs.pathExists(fullTaysellPath)) {
-        printUsageAndExit(`CRITICAL ERROR: Taysell file not found at: ${fullTaysellPath}`);
-        return;
+        throw new FileNotFoundError(`Taysell file not found at: ${fullTaysellPath}`);
     }
 
     let taysellData: TaysellFile;
     try {
         const fileContent = await fs.readFile(fullTaysellPath, 'utf-8');
         taysellData = JSON.parse(fileContent);
-        validateTaysellFileContent(taysellData);
+        validateTaysellFileContent(taysellData); // validateTaysellFileContent might throw its own errors
     } catch (error: any) {
-        printUsageAndExit(`Error reading or parsing taysell file ${taysellFilePath}: ${error.message}`);
-        return;
+        throw new CliUsageError(formatUsageMessage(`Error reading, parsing, or validating taysell file ${taysellFilePath}: ${error.message}`));
     }
 
     const { endpoints, patchId, metadata } = taysellData;
 
     if (!endpoints?.initiatePaymentUrl || !endpoints?.getPatchUrl) {
-        printUsageAndExit('Endpoint URLs (initiatePaymentUrl or getPatchUrl) are not defined in the taysell file.');
-        return;
+        throw new CliUsageError(formatUsageMessage('Endpoint URLs (initiatePaymentUrl or getPatchUrl) are not defined in the taysell file.'));
     }
     if (!patchId) {
-        printUsageAndExit('Patch ID is not defined in the taysell file.');
-        return;
+        throw new CliUsageError(formatUsageMessage('Patch ID is not defined in the taysell file.'));
     }
 
     const getPatchUrlObj = new URL(endpoints.getPatchUrl);
     if (getPatchUrlObj.protocol !== 'https:') {
-        printUsageAndExit('CRITICAL ERROR: for security reasons, getPatchUrl must use HTTPS.');
-        return;
+        throw new CliUsageError(formatUsageMessage('For security reasons, getPatchUrl must use HTTPS.'));
     }
 
-    // Added to avoid prompt if in test mode
-    if (!process.env.JEST_WORKER_ID) {
-        const { proceed } = await inquirer.prompt([{
-            type: 'confirm',
-            name: 'proceed',
-            message: `You are about to purchase the patch "${metadata.name}" from "${taysellData.sellerInfo.name}". Continue?`,
-            default: true,
-        }]);
-        if (!proceed) {
-            console.log('Purchase aborted by user.');
-            return;
+    if (!process.env.JEST_WORKER_ID) { // Avoid prompt in test environment
+        try {
+            const { proceed } = await inquirer.prompt([{
+                type: 'confirm',
+                name: 'proceed',
+                message: `You are about to purchase the patch "${metadata.name}" from "${taysellData.sellerInfo.name}". Continue?`,
+                default: true,
+            }]);
+            if (!proceed) {
+                console.log('Purchase aborted by user.');
+                return; // Graceful exit if user aborts
+            }
+        } catch (inquirerError: any) {
+            throw new Error(`Failed during purchase confirmation prompt: ${inquirerError.message}`);
         }
     }
-
 
     const cliSessionId = crypto.randomUUID();
     const initiatePaymentUrlWithParams = `${endpoints.initiatePaymentUrl}?cliSessionId=${cliSessionId}`;
 
     console.log('CLI: Opening browser for payment approval...');
     try {
-        const { default: open } = await import('open'); // Dynamic import
+        const { default: open } = await import('open');
         await open(initiatePaymentUrlWithParams);
-    } catch (error) {
-        console.error('CLI: Could not open browser. Please copy and paste the following URL into your browser:', error);
+    } catch (error: any) {
+        // Log that browser could not be opened, but continue as user can manually open URL.
+        console.warn(`CLI: Could not automatically open browser: ${error.message}. Please copy and paste the following URL into your browser:`);
         console.log(initiatePaymentUrlWithParams);
     }
 
@@ -280,38 +276,19 @@ export async function handleBuyCommand(
     try {
         const paymentApiBaseUrl = new URL(endpoints.initiatePaymentUrl).origin;
         const checkUrl = `${paymentApiBaseUrl}/check-purchase`;
-        console.log(`CLI: Starting polling to: ${checkUrl}/${cliSessionId}`);
+        console.log(`CLI: Starting polling to: ${checkUrl}/${cliSessionId}`); // For debugging/user info
         const pollResult = await pollForToken(checkUrl, cliSessionId, patchId);
         purchaseToken = pollResult.purchaseToken;
     } catch (error: any) {
-        if (error.message && error.message.startsWith('Timeout:')) {
-            displayPurchaseAssistanceMessage(
-                "Timeout",
-                taysellData,
-                cliSessionId,
-                null, // No purchase token yet if timeout occurred during polling
-                `Timeout confirming purchase for patch "${taysellData.metadata.name}". ${error.message}`
-            );
-            // process.exit(1) is called within displayPurchaseAssistanceMessage
-        } else if (error.message && error.message.includes('Purchase session not found (404)')) {
-            // This block should ideally not be reached if pollForToken retries on 404 until timeout.
-            // However, keeping it as a fallback or if other parts of the code could throw this.
-            // The more likely scenario now is a general timeout.
-            printUsageAndExit(`CLI: The purchase session was consistently not found (404) and polling timed out or was aborted.`);
-        } else if (error.message && error.message.startsWith('Server error during polling:')) {
-            displayPurchaseAssistanceMessage(
-                "Polling Server Error",
-                taysellData,
-                cliSessionId,
-                null, // No purchase token if polling failed due to server error
-                `The server returned an error while confirming purchase for patch "${taysellData.metadata.name}". ${error.message}`
-            );
-            // displayPurchaseAssistanceMessage calls process.exit(1), so this line should not be reached.
-            // The original printUsageAndExit message here was also misleading for this error type.
-        } else {
-            printUsageAndExit(`CLI: An unexpected error occurred while trying to retrieve the purchase token: ${error.message}`);
-        }
-        return; // Should be unreachable
+        const underlyingErrorMessage = `Failed to confirm purchase for patch "${taysellData.metadata.name}". ${error.message}`;
+        const assistanceMsg = formatPurchaseAssistanceMessage(
+            error.message && error.message.startsWith('Timeout:') ? "Timeout" : "Polling Server Error",
+            taysellData,
+            cliSessionId,
+            null,
+            underlyingErrorMessage
+        );
+        throw new PurchaseError(underlyingErrorMessage, assistanceMsg);
     }
 
     console.log(`CLI: Requesting patch from ${endpoints.getPatchUrl}...`);

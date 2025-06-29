@@ -1,8 +1,9 @@
 // lib/handlers/setup-backend-handler.ts
-import * as child_process from 'child_process';
+// import * as child_process from 'child_process'; // Not used directly
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import inquirer from 'inquirer'; // Importa inquirer
+import { BackendSetupError, FileNotFoundError } from '../errors'; // Import custom errors
 
 /**
  * Implements the `taylored setup-backend` command functionality.
@@ -41,33 +42,24 @@ import inquirer from 'inquirer'; // Importa inquirer
  *                       directory will be created.
  * @returns {Promise<void>} A promise that resolves when the setup process is complete
  *                          or if the user aborts the setup.
- * @throws {Error} The function may terminate the process with `process.exit(1)` if
- *                 critical errors occur, such as:
- *                 - Failure to find the backend template source.
- *                 - Inability to copy template files.
- *                 - Failure to write the `.env` file.
- *                 It doesn't explicitly throw errors to be caught by the caller in `index.ts`
- *                 but rather handles them by exiting.
+ * @throws {BackendSetupError | FileNotFoundError} Throws custom errors on failure.
  */
 export async function handleSetupBackend(cwd: string): Promise<void> {
     console.log('Starting Taysell backend setup...');
 
     const backendDestPath = path.join(cwd, 'taysell-server');
+    const templateSourcePath = path.resolve(
+        __dirname,
+        '../../templates/backend-in-a-box'
+    );
 
-    // 2. Copy "Backend-in-a-Box" template files
+    if (!await fs.pathExists(templateSourcePath)) {
+        throw new FileNotFoundError(`Backend template source directory not found at ${templateSourcePath}`);
+    }
+
     try {
-        const templateSourcePath = path.resolve(
-            __dirname,
-            '../../templates/backend-in-a-box'
-        );
-
-        if (!await fs.pathExists(templateSourcePath)) {
-            console.error(`CRITICAL ERROR: Backend template source directory not found at ${templateSourcePath}`);
-            process.exit(1);
-        }
-
         if (await fs.pathExists(backendDestPath)) {
-            if (!process.env.JEST_WORKER_ID) {
+            if (!process.env.JEST_WORKER_ID) { // Bypass prompt in test environment
                 const { overwrite } = await inquirer.prompt([{
                     type: 'confirm',
                     name: 'overwrite',
@@ -76,11 +68,15 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
                 }]);
                 if (!overwrite) {
                     console.log('Backend setup aborted by user.');
+                    // This is a user choice, not an error, so we just return.
+                    // The main handler in index.ts will simply exit cleanly.
                     return;
                 }
             }
+            // If overwrite is true or in test env, empty the directory
             await fs.emptyDir(backendDestPath);
         } else {
+            // If directory doesn't exist, ensure it's created
             await fs.ensureDir(backendDestPath);
         }
 
@@ -88,26 +84,27 @@ export async function handleSetupBackend(cwd: string): Promise<void> {
         console.log(`Backend template files copied to ${backendDestPath}`);
 
     } catch (error: any) {
-        console.error(`CRITICAL ERROR: Could not copy backend template files. Details: ${error.message}`);
-        process.exit(1);
+        // Catch errors from fs.emptyDir, fs.ensureDir, or fs.copy
+        throw new BackendSetupError(`Could not prepare backend destination directory or copy template files. Details: ${error.message}`);
     }
 
     let answers;
 
-    // 3. Interactive configuration wizard
+    // Interactive configuration wizard
     if (process.env.JEST_WORKER_ID) {
         console.log('Running in test environment, using default config for .env');
         answers = {
             paypalEnv: 'sandbox',
             paypalClientId: 'test-client-id',
             paypalClientSecret: 'test-client-secret',
-            paypalWebhookId: 'test-webhook-id', // Aggiunto per i test
+            paypalWebhookId: 'test-webhook-id',
             serverPublicUrl: 'https://test.example.com',
             patchEncryptionKey: 'test-encryption-key-that-is-32-characters-long',
             serverPort: '3001',
         };
     } else {
-        answers = await inquirer.prompt([
+        try {
+            answers = await inquirer.prompt([
             {
                 type: 'list',
                 name: 'paypalEnv',

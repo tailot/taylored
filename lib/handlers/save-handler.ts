@@ -3,6 +3,9 @@ import * as fsExtra from 'fs-extra';
 import * as path from 'path';
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../constants';
 import { getAndAnalyzeDiff } from '../utils';
+import { FileNotFoundError, GitOperationError, PatchPurityError } from '../errors'; // Added custom errors
+// Note: FileNotFoundError might not be directly thrown here but good to have for consistency if fsExtra.ensureDir fails in a specific way.
+// For now, fsExtra errors are generic.
 
 /**
  * Implements the `taylored --save <branch_name>` command functionality.
@@ -25,13 +28,10 @@ import { getAndAnalyzeDiff } from '../utils';
  * @param {string} CWD - The current working directory, which must be the root of a
  *                       Git repository for the diff operation to work correctly.
  * @returns {Promise<void>} A promise that resolves if the patch file is saved successfully.
- * @throws {Error} Throws an error if:
- *                 - The `.taylored` directory cannot be created.
- *                 - The `git diff` command fails (e.g., invalid branch name).
- *                 - The diff analysis fails.
- *                 - The diff is not "pure" (contains mixed additions and deletions).
- *                 - The diff output is unexpectedly undefined.
- *                 - Writing the patch file fails.
+ * @throws {Error | GitOperationError | PatchPurityError | FileNotFoundError} Throws custom errors on failure.
+ *                 - `Error` for generic fs issues (directory creation, file write).
+ *                 - `GitOperationError` if `git diff` command fails.
+ *                 - `PatchPurityError` if the diff is not "pure".
  */
 export async function handleSaveOperation(branchName: string, CWD: string): Promise<void> {
     const outputFileName = `${branchName.replace(/[/\\]/g, '-')}${TAYLORED_FILE_EXTENSION}`;
@@ -41,40 +41,23 @@ export async function handleSaveOperation(branchName: string, CWD: string): Prom
     try {
         await fsExtra.ensureDir(targetDirectoryPath);
     } catch (mkdirError: any) {
-        console.error(`CRITICAL ERROR: Failed to create directory '${targetDirectoryPath}'. Details: ${mkdirError.message}`);
-        throw mkdirError;
+        // For now, keep generic error for directory creation failure, as fsExtra errors are not specific enough
+        // to easily map to FileNotFoundError without more complex checks.
+        throw new Error(`Failed to create directory '${targetDirectoryPath}'. Details: ${mkdirError.message}`);
     }
 
+    // getAndAnalyzeDiff will now throw GitOperationError or PatchPurityError directly
+    // or a generic Error if diff analysis itself has an internal issue.
     const diffResult = getAndAnalyzeDiff(branchName, CWD);
 
-    if (diffResult.success && diffResult.isPure) {
-        if (typeof diffResult.diffOutput === 'string') {
-            try {
-                await fs.writeFile(resolvedOutputFileName, diffResult.diffOutput);
-            } catch (writeError: any) {
-                console.error(`CRITICAL ERROR: Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`);
-                throw writeError;
-            }
-        } else {
-            console.error(`CRITICAL ERROR: Diff output is unexpectedly undefined for branch '${branchName}' despite successful analysis.`);
-            throw new Error(`Undefined diff output for pure diff on branch '${branchName}'.`);
-        }
-    } else {
-        if (!diffResult.success && diffResult.errorMessage) {
-            console.error(diffResult.errorMessage);
-        } else {
-            console.error(`ERROR: Taylored file '${resolvedOutputFileName}' was NOT generated.`);
-            if (!diffResult.isPure) {
-                console.error(`Reason: The diff between "${branchName}" and HEAD contains a mix of content line additions and deletions.`);
-                console.error(`  Total lines added: ${diffResult.additions}`);
-                console.error(`  Total lines deleted: ${diffResult.deletions}`);
-                console.error("This script, for the --save operation, requires the diff to consist exclusively of additions or exclusively of deletions (of lines).");
-            } else if (typeof diffResult.diffOutput === 'undefined') {
-                 console.error(`Reason: Failed to obtain diff output for branch '${branchName}'. This may be due to an invalid branch name or other git error.`);
-            } else {
-                console.error(`Reason: An unspecified error occurred during diff generation or analysis for branch '${branchName}'.`);
-            }
-        }
-        throw new Error(diffResult.errorMessage || `Failed to save taylored file for branch '${branchName}' due to purity or diff generation issues.`);
+    // If getAndAnalyzeDiff was successful and didn't throw, diffResult.isPure must be true.
+    // The diffOutput is also guaranteed to be a string.
+    try {
+        await fs.writeFile(resolvedOutputFileName, diffResult.diffOutput);
+        console.log(`Successfully saved taylored file: ${resolvedOutputFileName}`); // Added success log
+    } catch (writeError: any) {
+        // Keep generic error for file write failure
+        throw new Error(`Failed to write diff file '${resolvedOutputFileName}'. Details: ${writeError.message}`);
     }
+    // No more complex else block, as errors from getAndAnalyzeDiff are thrown.
 }

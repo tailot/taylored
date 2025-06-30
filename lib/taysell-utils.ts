@@ -21,18 +21,24 @@ const PBKDF2_ITERATIONS = 310000; // OWASP recommended minimum
  * @returns A string in the format: salt:iv:authtag:ciphertext (all hex encoded).
  */
 export function encryptAES256GCM(text: string, passwordKey: string): string {
-    const salt = crypto.randomBytes(SALT_LENGTH);
-    const iv = crypto.randomBytes(IV_LENGTH);
+  const salt = crypto.randomBytes(SALT_LENGTH);
+  const iv = crypto.randomBytes(IV_LENGTH);
 
-    // Derive key using PBKDF2
-    const key = crypto.pbkdf2Sync(passwordKey, salt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha512');
+  // Derive key using PBKDF2
+  const key = crypto.pbkdf2Sync(
+    passwordKey,
+    salt,
+    PBKDF2_ITERATIONS,
+    KEY_LENGTH,
+    'sha512',
+  );
 
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    const tag = cipher.getAuthTag();
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const tag = cipher.getAuthTag();
 
-    return `${salt.toString('hex')}:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
+  return `${salt.toString('hex')}:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
 }
 
 /**
@@ -43,58 +49,69 @@ export function encryptAES256GCM(text: string, passwordKey: string): string {
  * @returns The decrypted plaintext.
  * @throws Error if decryption fails (e.g., wrong key, tampered data).
  */
-export function decryptAES256GCM(encryptedText: string, passwordKey: string): string {
-    const parts = encryptedText.split(':');
-    if (parts.length !== 4) {
-        throw new Error('Invalid encrypted text format. Expected salt:iv:authtag:ciphertext');
-    }
-    const salt = Buffer.from(parts[0], 'hex');
-    const iv = Buffer.from(parts[1], 'hex');
-    const tag = Buffer.from(parts[2], 'hex');
-    const ciphertext = parts[3];
+export function decryptAES256GCM(
+  encryptedText: string,
+  passwordKey: string,
+): string {
+  const parts = encryptedText.split(':');
+  if (parts.length !== 4) {
+    throw new Error(
+      'Invalid encrypted text format. Expected salt:iv:authtag:ciphertext',
+    );
+  }
+  const salt = Buffer.from(parts[0], 'hex');
+  const iv = Buffer.from(parts[1], 'hex');
+  const tag = Buffer.from(parts[2], 'hex');
+  const ciphertext = parts[3];
 
-    // Derive key using PBKDF2
-    const key = crypto.pbkdf2Sync(passwordKey, salt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha512');
+  // Derive key using PBKDF2
+  const key = crypto.pbkdf2Sync(
+    passwordKey,
+    salt,
+    PBKDF2_ITERATIONS,
+    KEY_LENGTH,
+    'sha512',
+  );
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
-    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
 }
 
 // Add other Taysell related utility functions here later (e.g., .taysell file validation)
 
 // Define interfaces for .taysell file structure (can be shared or defined here)
 export interface SellerInfo {
-    name: string;
-    website: string;
-    contact: string;
+  name: string;
+  website: string;
+  contact: string;
 }
 
 export interface PatchMetadata {
-    name:string;
-    description: string;
-    tayloredVersion: string;
+  name: string;
+  description: string;
+  tayloredVersion: string;
 }
 
 export interface Endpoints {
-    initiatePaymentUrl: string;
-    getPatchUrl: string;
+  initiatePaymentUrl: string;
+  getPatchUrl: string;
 }
 
 export interface PaymentInfo {
-    price: string;
-    currency: string;
+  price: string;
+  currency: string;
 }
 
 export interface TaysellFile {
-    taysellVersion: string;
-    patchId: string;
-    sellerInfo: SellerInfo;
-    metadata: PatchMetadata;
-    endpoints: Endpoints;
-    payment: PaymentInfo;
+  taysellVersion: string;
+  patchId: string;
+  sellerInfo: SellerInfo;
+  metadata: PatchMetadata;
+  endpoints: Endpoints;
+  payment: PaymentInfo;
 }
 
 /**
@@ -104,59 +121,103 @@ export interface TaysellFile {
  * @throws Error if validation fails.
  */
 export function validateTaysellFileContent(data: any): TaysellFile {
-    if (!data || typeof data !== 'object') {
-        throw new Error('Invalid .taysell file: content is not an object.');
-    }
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid .taysell file: content is not an object.');
+  }
 
-    const requiredFields = ['taysellVersion', 'patchId', 'sellerInfo', 'metadata', 'endpoints', 'payment'];
-    for (const field of requiredFields) {
-        if (!data[field]) {
-            throw new Error(`Invalid .taysell file: missing required field "${field}".`);
-        }
+  const requiredFields = [
+    'taysellVersion',
+    'patchId',
+    'sellerInfo',
+    'metadata',
+    'endpoints',
+    'payment',
+  ];
+  for (const field of requiredFields) {
+    if (!data[field]) {
+      throw new Error(
+        `Invalid .taysell file: missing required field "${field}".`,
+      );
     }
+  }
 
-    if (typeof data.taysellVersion !== 'string' || data.taysellVersion !== '1.0-decentralized') {
-        throw new Error(`Invalid .taysell file: unsupported taysellVersion "${data.taysellVersion}". Expected "1.0-decentralized".`);
-    }
-    if (typeof data.patchId !== 'string' || !data.patchId.trim()) {
-        throw new Error('Invalid .taysell file: patchId must be a non-empty string.');
-    }
+  if (
+    typeof data.taysellVersion !== 'string' ||
+    data.taysellVersion !== '1.0-decentralized'
+  ) {
+    throw new Error(
+      `Invalid .taysell file: unsupported taysellVersion "${data.taysellVersion}". Expected "1.0-decentralized".`,
+    );
+  }
+  if (typeof data.patchId !== 'string' || !data.patchId.trim()) {
+    throw new Error(
+      'Invalid .taysell file: patchId must be a non-empty string.',
+    );
+  }
 
-    // SellerInfo validation
-    if (typeof data.sellerInfo !== 'object' || !data.sellerInfo.name || typeof data.sellerInfo.name !== 'string') {
-        throw new Error('Invalid .taysell file: sellerInfo.name is missing or not a string.');
-    }
-    // Add more checks for sellerInfo.website (URL format), sellerInfo.contact (email format) if desired
+  // SellerInfo validation
+  if (
+    typeof data.sellerInfo !== 'object' ||
+    !data.sellerInfo.name ||
+    typeof data.sellerInfo.name !== 'string'
+  ) {
+    throw new Error(
+      'Invalid .taysell file: sellerInfo.name is missing or not a string.',
+    );
+  }
+  // Add more checks for sellerInfo.website (URL format), sellerInfo.contact (email format) if desired
 
-    // Metadata validation
-    if (typeof data.metadata !== 'object' || !data.metadata.name || typeof data.metadata.name !== 'string') {
-        throw new Error('Invalid .taysell file: metadata.name is missing or not a string.');
-    }
-    // Add more checks for metadata.description, metadata.tayloredVersion (semver format)
+  // Metadata validation
+  if (
+    typeof data.metadata !== 'object' ||
+    !data.metadata.name ||
+    typeof data.metadata.name !== 'string'
+  ) {
+    throw new Error(
+      'Invalid .taysell file: metadata.name is missing or not a string.',
+    );
+  }
+  // Add more checks for metadata.description, metadata.tayloredVersion (semver format)
 
-    // Endpoints validation
-    if (typeof data.endpoints !== 'object' ||
-        !data.endpoints.initiatePaymentUrl || typeof data.endpoints.initiatePaymentUrl !== 'string' ||
-        !data.endpoints.getPatchUrl || typeof data.endpoints.getPatchUrl !== 'string') {
-        throw new Error('Invalid .taysell file: endpoints.initiatePaymentUrl and endpoints.getPatchUrl must be non-empty strings.');
+  // Endpoints validation
+  if (
+    typeof data.endpoints !== 'object' ||
+    !data.endpoints.initiatePaymentUrl ||
+    typeof data.endpoints.initiatePaymentUrl !== 'string' ||
+    !data.endpoints.getPatchUrl ||
+    typeof data.endpoints.getPatchUrl !== 'string'
+  ) {
+    throw new Error(
+      'Invalid .taysell file: endpoints.initiatePaymentUrl and endpoints.getPatchUrl must be non-empty strings.',
+    );
+  }
+  try {
+    new URL(data.endpoints.initiatePaymentUrl); // Validate URL format
+    const getPatchUrlObj = new URL(data.endpoints.getPatchUrl); // Validate URL format
+    if (getPatchUrlObj.protocol !== 'https:') {
+      throw new Error(
+        'Invalid .taysell file: endpoints.getPatchUrl must use HTTPS.',
+      );
     }
-    try {
-        new URL(data.endpoints.initiatePaymentUrl); // Validate URL format
-        const getPatchUrlObj = new URL(data.endpoints.getPatchUrl); // Validate URL format
-        if (getPatchUrlObj.protocol !== 'https:') {
-             throw new Error('Invalid .taysell file: endpoints.getPatchUrl must use HTTPS.');
-        }
-    } catch (e: any) {
-        throw new Error(`Invalid .taysell file: one of the endpoint URLs is invalid. ${e.message}`);
-    }
+  } catch (e: any) {
+    throw new Error(
+      `Invalid .taysell file: one of the endpoint URLs is invalid. ${e.message}`,
+    );
+  }
 
+  // Payment validation
+  if (
+    typeof data.payment !== 'object' ||
+    !data.payment.price ||
+    typeof data.payment.price !== 'string' || // Assuming price as string e.g. "9.99"
+    !data.payment.currency ||
+    typeof data.payment.currency !== 'string' ||
+    data.payment.currency.length !== 3
+  ) {
+    throw new Error(
+      'Invalid .taysell file: payment.price must be a string and payment.currency must be a 3-letter string.',
+    );
+  }
 
-    // Payment validation
-    if (typeof data.payment !== 'object' ||
-        !data.payment.price || typeof data.payment.price !== 'string' || // Assuming price as string e.g. "9.99"
-        !data.payment.currency || typeof data.payment.currency !== 'string' || data.payment.currency.length !== 3) {
-        throw new Error('Invalid .taysell file: payment.price must be a string and payment.currency must be a 3-letter string.');
-    }
-
-    return data as TaysellFile; // If all checks pass, cast and return
+  return data as TaysellFile; // If all checks pass, cast and return
 }

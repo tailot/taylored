@@ -1,20 +1,34 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, ExecSyncOptionsWithStringEncoding } from 'child_process';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from '../../lib/constants';
+import {
+  TAYLORED_DIR_NAME,
+  TAYLORED_FILE_EXTENSION,
+} from '../../lib/constants';
 
 const PROJECT_ROOT_PATH = path.resolve(__dirname, '../..');
 const TAYLORED_CMD_BASE = `npx ts-node ${path.join(PROJECT_ROOT_PATH, 'index.ts')}`;
-const TEMP_TEST_DIR_BASE = path.join(PROJECT_ROOT_PATH, 'temp_e2e_compute_blocks');
+const TEMP_TEST_DIR_BASE = path.join(
+  PROJECT_ROOT_PATH,
+  'temp_e2e_compute_blocks',
+);
 
 // Helper to normalize line endings for consistent comparisons
-const normalizeLineEndings = (str: string): string => str.replace(/\r\n/g, '\n');
+const normalizeLineEndings = (str: string): string =>
+  str.replace(/\r\n/g, '\n');
 
 // Helper to run taylored command
-const runTayloredCommand = (repoPath: string, args: string): { stdout: string; stderr: string; status: number | null } => {
+const runTayloredCommand = (
+  repoPath: string,
+  args: string,
+): { stdout: string; stderr: string; status: number | null } => {
   try {
     // Run the command and capture stdout. Stderr is piped to stdout for compute blocks.
-    const stdout = execSync(`${TAYLORED_CMD_BASE} ${args}`, { cwd: repoPath, encoding: 'utf8', stdio: 'pipe' });
+    const stdout = execSync(`${TAYLORED_CMD_BASE} ${args}`, {
+      cwd: repoPath,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
     return { stdout, stderr: '', status: 0 };
   } catch (error: any) {
     return {
@@ -33,7 +47,11 @@ const setupTestRepo = (testName: string): string => {
   }
   fs.mkdirSync(repoPath, { recursive: true });
 
-  const execOpts: ExecSyncOptionsWithStringEncoding = { cwd: repoPath, encoding: 'utf8', stdio: 'pipe' };
+  const execOpts: ExecSyncOptionsWithStringEncoding = {
+    cwd: repoPath,
+    encoding: 'utf8',
+    stdio: 'pipe',
+  };
 
   execSync('git init -b main', execOpts);
   execSync('git config user.name "Test User"', execOpts);
@@ -41,7 +59,8 @@ const setupTestRepo = (testName: string): string => {
   execSync('git config commit.gpgsign false', execOpts);
 
   // Create and commit an initial file
-  const initialFileContent = '// Initial commit content for compute block testing\n';
+  const initialFileContent =
+    '// Initial commit content for compute block testing\n';
   fs.writeFileSync(path.join(repoPath, 'initial.js'), initialFileContent);
   execSync('git add initial.js', execOpts);
   execSync('git commit -m "Initial commit"', execOpts);
@@ -49,7 +68,11 @@ const setupTestRepo = (testName: string): string => {
 };
 
 // Helper to create a file (without committing, useful for compute test files)
-const createTestFile = (repoPath: string, relativeFilePath: string, content: string): string => {
+const createTestFile = (
+  repoPath: string,
+  relativeFilePath: string,
+  content: string,
+): string => {
   const fullFilePath = path.join(repoPath, relativeFilePath);
   const dirName = path.dirname(fullFilePath);
   if (!fs.existsSync(dirName)) {
@@ -97,19 +120,38 @@ describe('Compute Block Tests (JSON)', () => {
     it('should process a synchronous JSON compute block and replace it with its output in the .taylored file', () => {
       const result = runTayloredCommand(testRepoPath, '--automatic js main');
       expect(result.status).toBe(0);
-      const relevantStderr = result.stderr.split('\n').filter(line => line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')).join('\n');
+      const relevantStderr = result.stderr
+        .split('\n')
+        .filter(
+          (line) =>
+            line.toLowerCase().includes('error') ||
+            line.toLowerCase().includes('failed'),
+        )
+        .join('\n');
       expect(relevantStderr).toBe('');
 
-      const expectedTayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `${tayloredBlockNumber}${TAYLORED_FILE_EXTENSION}`);
-      expect(result.stdout).toContain(`Successfully created ${expectedTayloredFilePath}`);
+      const expectedTayloredFilePath = path.join(
+        testRepoPath,
+        TAYLORED_DIR_NAME,
+        `${tayloredBlockNumber}${TAYLORED_FILE_EXTENSION}`,
+      );
+      expect(result.stdout).toContain(
+        `Successfully created ${expectedTayloredFilePath}`,
+      );
       expect(fs.existsSync(expectedTayloredFilePath)).toBe(true);
 
-      const tayloredContent = normalizeLineEndings(fs.readFileSync(expectedTayloredFilePath, 'utf8'));
+      const tayloredContent = normalizeLineEndings(
+        fs.readFileSync(expectedTayloredFilePath, 'utf8'),
+      );
       // Check for removal of the original block (simplified to check for the start of the variable assignment)
-      expect(tayloredContent).toContain(`-const jsonSyncExample = {"taylored": ${tayloredBlockNumber}, "compute_id": "sync-json-id-001", "compute": "", "async": false, "content": "#!/bin/bash\\necho \\"SYNC_JSON_OUTPUT\\""}; // After block`);
+      expect(tayloredContent).toContain(
+        `-const jsonSyncExample = {"taylored": ${tayloredBlockNumber}, "compute_id": "sync-json-id-001", "compute": "", "async": false, "content": "#!/bin/bash\\necho \\"SYNC_JSON_OUTPUT\\""}; // After block`,
+      );
 
       // Check for the addition of the script's output
-      expect(tayloredContent).toMatch(/\+const jsonSyncExample = SYNC_JSON_OUTPUT\n\+; \/\/ After block/);
+      expect(tayloredContent).toMatch(
+        /\+const jsonSyncExample = SYNC_JSON_OUTPUT\n\+; \/\/ After block/,
+      );
 
       // The "// After block" comment is part of the removed line, so it won't be separately asserted unless the regex changes
     });
@@ -143,25 +185,46 @@ describe('Compute Block Tests (JSON)', () => {
       const duration = endTime - startTime;
 
       expect(result.status).toBe(0);
-      const relevantStderr = result.stderr.split('\n').filter(line => line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')).join('\n');
+      const relevantStderr = result.stderr
+        .split('\n')
+        .filter(
+          (line) =>
+            line.toLowerCase().includes('error') ||
+            line.toLowerCase().includes('failed'),
+        )
+        .join('\n');
       expect(relevantStderr).toBe('');
       expect(duration).toBeGreaterThanOrEqual(asyncDelay);
 
-      const expectedTayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `${tayloredBlockNumber}${TAYLORED_FILE_EXTENSION}`);
-      expect(result.stdout).toContain(`Successfully created ${expectedTayloredFilePath}`);
-      expect(result.stdout).toContain(`Asynchronously processing computed block ${tayloredBlockNumber}`);
+      const expectedTayloredFilePath = path.join(
+        testRepoPath,
+        TAYLORED_DIR_NAME,
+        `${tayloredBlockNumber}${TAYLORED_FILE_EXTENSION}`,
+      );
+      expect(result.stdout).toContain(
+        `Successfully created ${expectedTayloredFilePath}`,
+      );
+      expect(result.stdout).toContain(
+        `Asynchronously processing computed block ${tayloredBlockNumber}`,
+      );
       expect(result.stdout).toContain('All asynchronous tasks have completed.');
 
       expect(fs.existsSync(expectedTayloredFilePath)).toBe(true);
-      const tayloredContent = normalizeLineEndings(fs.readFileSync(expectedTayloredFilePath, 'utf8'));
+      const tayloredContent = normalizeLineEndings(
+        fs.readFileSync(expectedTayloredFilePath, 'utf8'),
+      );
       // Check for removal
-      expect(tayloredContent).toContain(`-const jsonAsyncExample = {"taylored": ${tayloredBlockNumber}, "compute_id": "async-json-id-001", "compute": "", "async": true, "content": "#!/bin/bash\\nsleep ${asyncDelay / 1000}\\necho \\"ASYNC_JSON_OUTPUT\\""}; // After async block`);
+      expect(tayloredContent).toContain(
+        `-const jsonAsyncExample = {"taylored": ${tayloredBlockNumber}, "compute_id": "async-json-id-001", "compute": "", "async": true, "content": "#!/bin/bash\\nsleep ${asyncDelay / 1000}\\necho \\"ASYNC_JSON_OUTPUT\\""}; // After async block`,
+      );
       // Check for addition
-      expect(tayloredContent).toMatch(/\+const jsonAsyncExample = ASYNC_JSON_OUTPUT\n\+; \/\/ After async block/);
+      expect(tayloredContent).toMatch(
+        /\+const jsonAsyncExample = ASYNC_JSON_OUTPUT\n\+; \/\/ After async block/,
+      );
     });
   });
 
-    describe('Mixed JSON (Async) and XML (Sync) Compute Blocks', () => {
+  describe('Mixed JSON (Async) and XML (Sync) Compute Blocks', () => {
     let testRepoPath: string;
     const jsonBlockNumber = 805;
     const xmlBlockNumber = 901;
@@ -171,7 +234,11 @@ describe('Compute Block Tests (JSON)', () => {
       testRepoPath = setupTestRepo('mixed_compute_test');
 
       const asyncJsonFileContent = `const jsonAsyncExampleInMixed = {"taylored": ${jsonBlockNumber}, "compute_id": "async-json-mixed-id-001", "compute": "", "async": true, "content": "#!/bin/bash\\nsleep ${mixedAsyncDelay / 1000}\\necho \\"ASYNC_JSON_MIXED_OUTPUT\\""};`;
-      createTestFile(testRepoPath, 'compute_async_mixed.js', asyncJsonFileContent);
+      createTestFile(
+        testRepoPath,
+        'compute_async_mixed.js',
+        asyncJsonFileContent,
+      );
 
       const syncXmlFileContent = `// --- XML Compute Block Example (Synchronous) ---
 // <taylored number="${xmlBlockNumber}" compute="/*,*/" async="false">
@@ -183,8 +250,13 @@ echo "console.log('This content was generated by a SYNC XML block in the mixed t
 // </taylored>`;
       createTestFile(testRepoPath, 'compute_sync_mixed.js', syncXmlFileContent);
 
-      execSync('git add compute_async_mixed.js compute_sync_mixed.js', { cwd: testRepoPath });
-      execSync('git commit -m "Add separate compute block files for mixed test"', { cwd: testRepoPath });
+      execSync('git add compute_async_mixed.js compute_sync_mixed.js', {
+        cwd: testRepoPath,
+      });
+      execSync(
+        'git commit -m "Add separate compute block files for mixed test"',
+        { cwd: testRepoPath },
+      );
     });
 
     afterEach(() => {
@@ -200,31 +272,66 @@ echo "console.log('This content was generated by a SYNC XML block in the mixed t
       const duration = endTime - startTime;
 
       expect(result.status).toBe(0);
-      const relevantStderr = result.stderr.split('\n').filter(line => line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')).join('\n');
+      const relevantStderr = result.stderr
+        .split('\n')
+        .filter(
+          (line) =>
+            line.toLowerCase().includes('error') ||
+            line.toLowerCase().includes('failed'),
+        )
+        .join('\n');
       expect(relevantStderr).toBe('');
       expect(duration).toBeGreaterThanOrEqual(mixedAsyncDelay);
 
-      const expectedJsonTayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `${jsonBlockNumber}${TAYLORED_FILE_EXTENSION}`);
-      
-      // Wait for all async tasks to complete before checking the output
-      await new Promise(resolve => setTimeout(resolve, mixedAsyncDelay + 200));
-      
-      const outputLines = result.stdout.split('\n');
-      const successMessageFound = outputLines.find(line => line.includes(`Successfully created ${expectedJsonTayloredFilePath}`));
-      expect(successMessageFound).toBeTruthy();
-      
-      expect(result.stdout).toContain(`Asynchronously processing computed block ${jsonBlockNumber}`);
-      expect(fs.existsSync(expectedJsonTayloredFilePath)).toBe(true);
-      const jsonTayloredContent = normalizeLineEndings(fs.readFileSync(expectedJsonTayloredFilePath, 'utf8'));
-      expect(jsonTayloredContent).toContain(`-const jsonAsyncExampleInMixed = {"taylored": ${jsonBlockNumber}, "compute_id": "async-json-mixed-id-001", "compute": "", "async": true, "content": "#!/bin/bash\\nsleep ${mixedAsyncDelay / 1000}\\necho \\"ASYNC_JSON_MIXED_OUTPUT\\""};`);
-      expect(jsonTayloredContent).toMatch(/\+const jsonAsyncExampleInMixed = ASYNC_JSON_MIXED_OUTPUT\n\+;/);
+      const expectedJsonTayloredFilePath = path.join(
+        testRepoPath,
+        TAYLORED_DIR_NAME,
+        `${jsonBlockNumber}${TAYLORED_FILE_EXTENSION}`,
+      );
 
-      const expectedXmlTayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `${xmlBlockNumber}${TAYLORED_FILE_EXTENSION}`);
-      expect(result.stdout).toContain(`Successfully created ${expectedXmlTayloredFilePath}`);
+      // Wait for all async tasks to complete before checking the output
+      await new Promise((resolve) =>
+        setTimeout(resolve, mixedAsyncDelay + 200),
+      );
+
+      const outputLines = result.stdout.split('\n');
+      const successMessageFound = outputLines.find((line) =>
+        line.includes(`Successfully created ${expectedJsonTayloredFilePath}`),
+      );
+      expect(successMessageFound).toBeTruthy();
+
+      expect(result.stdout).toContain(
+        `Asynchronously processing computed block ${jsonBlockNumber}`,
+      );
+      expect(fs.existsSync(expectedJsonTayloredFilePath)).toBe(true);
+      const jsonTayloredContent = normalizeLineEndings(
+        fs.readFileSync(expectedJsonTayloredFilePath, 'utf8'),
+      );
+      expect(jsonTayloredContent).toContain(
+        `-const jsonAsyncExampleInMixed = {"taylored": ${jsonBlockNumber}, "compute_id": "async-json-mixed-id-001", "compute": "", "async": true, "content": "#!/bin/bash\\nsleep ${mixedAsyncDelay / 1000}\\necho \\"ASYNC_JSON_MIXED_OUTPUT\\""};`,
+      );
+      expect(jsonTayloredContent).toMatch(
+        /\+const jsonAsyncExampleInMixed = ASYNC_JSON_MIXED_OUTPUT\n\+;/,
+      );
+
+      const expectedXmlTayloredFilePath = path.join(
+        testRepoPath,
+        TAYLORED_DIR_NAME,
+        `${xmlBlockNumber}${TAYLORED_FILE_EXTENSION}`,
+      );
+      expect(result.stdout).toContain(
+        `Successfully created ${expectedXmlTayloredFilePath}`,
+      );
       expect(fs.existsSync(expectedXmlTayloredFilePath)).toBe(true);
-      const xmlTayloredContent = normalizeLineEndings(fs.readFileSync(expectedXmlTayloredFilePath, 'utf8'));
-      expect(xmlTayloredContent).toContain(`-// <taylored number="${xmlBlockNumber}" compute="/*,*/" async="false">`);
-      expect(xmlTayloredContent).toContain(`+console.log('This content was generated by a SYNC XML block in the mixed test.');`);
+      const xmlTayloredContent = normalizeLineEndings(
+        fs.readFileSync(expectedXmlTayloredFilePath, 'utf8'),
+      );
+      expect(xmlTayloredContent).toContain(
+        `-// <taylored number="${xmlBlockNumber}" compute="/*,*/" async="false">`,
+      );
+      expect(xmlTayloredContent).toContain(
+        `+console.log('This content was generated by a SYNC XML block in the mixed test.');`,
+      );
 
       expect(result.stdout).toContain('All asynchronous tasks have completed.');
     });
@@ -264,24 +371,41 @@ const config = {
       // This test assumes the handler has been updated with a regex that can find nested blocks.
       const result = runTayloredCommand(testRepoPath, '--automatic js main');
       expect(result.status).toBe(0);
-      const relevantStderr = result.stderr.split('\n').filter(line => line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')).join('\n');
+      const relevantStderr = result.stderr
+        .split('\n')
+        .filter(
+          (line) =>
+            line.toLowerCase().includes('error') ||
+            line.toLowerCase().includes('failed'),
+        )
+        .join('\n');
       expect(relevantStderr).toBe('');
 
-      const expectedTayloredFilePath = path.join(testRepoPath, TAYLORED_DIR_NAME, `${tayloredBlockNumber}${TAYLORED_FILE_EXTENSION}`);
-      expect(result.stdout).toContain(`Successfully created ${expectedTayloredFilePath}`);
+      const expectedTayloredFilePath = path.join(
+        testRepoPath,
+        TAYLORED_DIR_NAME,
+        `${tayloredBlockNumber}${TAYLORED_FILE_EXTENSION}`,
+      );
+      expect(result.stdout).toContain(
+        `Successfully created ${expectedTayloredFilePath}`,
+      );
       expect(fs.existsSync(expectedTayloredFilePath)).toBe(true);
 
-      const tayloredContent = normalizeLineEndings(fs.readFileSync(expectedTayloredFilePath, 'utf8'));
+      const tayloredContent = normalizeLineEndings(
+        fs.readFileSync(expectedTayloredFilePath, 'utf8'),
+      );
 
       // The diff should show the replacement of the entire `tayloredConfig` property.
       // What gets replaced is the full match from the regex.
       // The script output is `NESTED_JSON_OUTPUT\n`.
       // The replacement in the file would make it `... someKey: "value", tayloredConfig: NESTED_JSON_OUTPUT, anotherKey: "value" ...`
-      
+
       // Check for removal of the original nested block
       expect(tayloredContent).toContain(`-  tayloredConfig: {`);
-      expect(tayloredContent).toContain(`-    "taylored": ${tayloredBlockNumber},`);
-      
+      expect(tayloredContent).toContain(
+        `-    "taylored": ${tayloredBlockNumber},`,
+      );
+
       // ** FIX: The regex should match the actual output from git diff **
       const addedLineRegex = /\+  tayloredConfig: NESTED_JSON_OUTPUT/;
       expect(tayloredContent).toMatch(addedLineRegex);

@@ -45,22 +45,30 @@ import { TAYLORED_DIR_NAME } from '../constants';
  *                 The error message from `updatePatchOffsets` will be logged.
  */
 export async function handleOffsetCommand(
-    userInputFileName: string,
-    CWD: string,
-    branchName?: string
+  userInputFileName: string,
+  CWD: string,
+  branchName?: string,
 ): Promise<void> {
-    const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
-    
-    try {
-        // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
-        const result = await updatePatchOffsets(resolvedTayloredFileName, CWD, undefined, branchName);
-    } catch (error: any) {
-        console.error(`\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`);
-        let message = error.message || 'An unknown error occurred during offset update.';
-        console.error(`  Error: ${message}`);
-        if (error.stderr) {
-            console.error(`  Git STDERR details: ${error.stderr}`);
-        }
-        throw error;
+  const resolvedTayloredFileName = resolveTayloredFileName(userInputFileName);
+
+  try {
+    // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
+    const result = await updatePatchOffsets(
+      resolvedTayloredFileName,
+      CWD,
+      undefined,
+      branchName,
+    );
+  } catch (error: any) {
+    console.error(
+      `\nCRITICAL ERROR: Failed to update offsets for '${resolvedTayloredFileName}'.`,
+    );
+    let message =
+      error.message || 'An unknown error occurred during offset update.';
+    console.error(`  Error: ${message}`);
+    if (error.stderr) {
+      console.error(`  Git STDERR details: ${error.stderr}`);
     }
+    throw error;
+  }
 }

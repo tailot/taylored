@@ -16,10 +16,10 @@ import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
  * resolveTayloredFileName("feature.taylored") // returns "feature.taylored"
  */
 export function resolveTayloredFileName(userInputFileName: string): string {
-    if (userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
-        return userInputFileName;
-    }
-    return userInputFileName + TAYLORED_FILE_EXTENSION;
+  if (userInputFileName.endsWith(TAYLORED_FILE_EXTENSION)) {
+    return userInputFileName;
+  }
+  return userInputFileName + TAYLORED_FILE_EXTENSION;
 }
 
 /**
@@ -39,43 +39,72 @@ export function resolveTayloredFileName(userInputFileName: string): string {
  *                       Defaults to false.
  * @returns {void} This function does not return a value as it exits the process.
  */
-export function printUsageAndExit(message?: string, printFullUsage: boolean = false): void {
-    if (message) {
-        console.error(message);
-    }
-    if (printFullUsage || message) { // Always print usage if there's a message
-        console.log(`
+export function printUsageAndExit(
+  message?: string,
+  printFullUsage: boolean = false,
+): void {
+  if (message) {
+    console.error(message);
+  }
+  if (printFullUsage || message) {
+    // Always print usage if there's a message
+    console.log(`
 Usage: taylored <option> [arguments]`);
-        console.log(`
+    console.log(`
 Core Patching Commands (require to be run in a Git repository root):`);
-        console.log(`  --add <taylored_file_name>          Applies the patch.`);
-        console.log(`  --remove <taylored_file_name>       Reverses the patch.`);
-        console.log(`  --verify-add <taylored_file_name>   Verifies if the patch can be applied.`);
-        console.log(`  --verify-remove <taylored_file_name> Verifies if the patch can be reversed.`);
-        console.log(`  --save <branch_name>                Creates a patch from changes in <branch_name>.`);
-        console.log(`  --list                              Lists all applied patches.`);
-        console.log(`  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.`);
-        console.log(`  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`);
-        console.log(`                                      Automatically computes and applies line offsets for patches based on Git history.`);
-        console.log(`  --upgrade <patch_file> [target_file_path]`);
-        console.log(`                                      Analyzes patch frames against the target file (or inferred file).`);
-        console.log(`                                      If frames are intact, updates the patch content from the target file.`);
+    console.log(`  --add <taylored_file_name>          Applies the patch.`);
+    console.log(`  --remove <taylored_file_name>       Reverses the patch.`);
+    console.log(
+      `  --verify-add <taylored_file_name>   Verifies if the patch can be applied.`,
+    );
+    console.log(
+      `  --verify-remove <taylored_file_name> Verifies if the patch can be reversed.`,
+    );
+    console.log(
+      `  --save <branch_name>                Creates a patch from changes in <branch_name>.`,
+    );
+    console.log(
+      `  --list                              Lists all applied patches.`,
+    );
+    console.log(
+      `  --offset <taylored_file_name> [BRANCH_NAME] Adjusts patch offsets based on current branch or specified BRANCH_NAME.`,
+    );
+    console.log(
+      `  --automatic <EXTENSIONS> <branch_name> [--exclude <DIR_LIST>]`,
+    );
+    console.log(
+      `                                      Automatically computes and applies line offsets for patches based on Git history.`,
+    );
+    console.log(`  --upgrade <patch_file> [target_file_path]`);
+    console.log(
+      `                                      Analyzes patch frames against the target file (or inferred file).`,
+    );
+    console.log(
+      `                                      If frames are intact, updates the patch content from the target file.`,
+    );
 
-        // <taylored number="9003">
-        console.log(`
+    // <taylored number="9003">
+    console.log(`
 Taysell Monetization Commands:`);
-        console.log(`  setup-backend                       Sets up the Taysell 'Backend-in-a-Box'.`);
-        console.log(`  create-taysell <file.taylored> [--price <price>] [--desc "description"]`);
-        console.log(`                                      Creates a .taysell package for selling a patch.`);
-        console.log(`  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.`);
-        // </taylored>
-    }
-    if (!message) {
-        process.exit(0);
-    }
-    process.exit(1);
+    console.log(
+      `  setup-backend                       Sets up the Taysell 'Backend-in-a-Box'.`,
+    );
+    console.log(
+      `  create-taysell <file.taylored> [--price <price>] [--desc "description"]`,
+    );
+    console.log(
+      `                                      Creates a .taysell package for selling a patch.`,
+    );
+    console.log(
+      `  --buy <file.taysell> [--dry-run]    Initiates the purchase and application of a patch.`,
+    );
+    // </taylored>
+  }
+  if (!message) {
+    process.exit(0);
+  }
+  process.exit(1);
 }
-
 
 /**
  * Parses git diff output to count additions and deletions and determine if the diff is "pure".
@@ -93,35 +122,47 @@ Taysell Monetization Commands:`);
  *          - `success`: Boolean indicating if the parsing and analysis were successful.
  *          - `errorMessage`: An optional message if parsing failed or input was invalid.
  */
-export function analyzeDiffContent(diffOutput: string | undefined): { additions: number; deletions: number; isPure: boolean; success: boolean; errorMessage?: string } {
-    let additions = 0;
-    let deletions = 0;
-    let isPure = false;
-    let success = true;
-    let errorMessage: string | undefined;
+export function analyzeDiffContent(diffOutput: string | undefined): {
+  additions: number;
+  deletions: number;
+  isPure: boolean;
+  success: boolean;
+  errorMessage?: string;
+} {
+  let additions = 0;
+  let deletions = 0;
+  let isPure = false;
+  let success = true;
+  let errorMessage: string | undefined;
 
-    if (typeof diffOutput === 'string') {
-        if (diffOutput.trim() === "") { // Handle empty diff string as no changes
-            isPure = true; // No changes is pure
-            // additions and deletions remain 0
-        } else {
-            try {
-                const parsedDiffFiles: parseDiffModule.File[] = parseDiffModule.default(diffOutput);
-                for (const file of parsedDiffFiles) {
-                    additions += file.additions;
-                    deletions += file.deletions;
-                }
-                isPure = (additions > 0 && deletions === 0) || (deletions > 0 && additions === 0) || (additions === 0 && deletions === 0);
-            } catch (parseError: any) {
-                errorMessage = `Failed to parse diff output. Error: ${parseError.message}`;
-                success = false;
-            }
+  if (typeof diffOutput === 'string') {
+    if (diffOutput.trim() === '') {
+      // Handle empty diff string as no changes
+      isPure = true; // No changes is pure
+      // additions and deletions remain 0
+    } else {
+      try {
+        const parsedDiffFiles: parseDiffModule.File[] =
+          parseDiffModule.default(diffOutput);
+        for (const file of parsedDiffFiles) {
+          additions += file.additions;
+          deletions += file.deletions;
         }
-    } else { // Should ideally not be called with undefined, but handle defensively
-        errorMessage = `Diff output was unexpectedly undefined.`;
+        isPure =
+          (additions > 0 && deletions === 0) ||
+          (deletions > 0 && additions === 0) ||
+          (additions === 0 && deletions === 0);
+      } catch (parseError: any) {
+        errorMessage = `Failed to parse diff output. Error: ${parseError.message}`;
         success = false;
+      }
     }
-    return { additions, deletions, isPure, success, errorMessage };
+  } else {
+    // Should ideally not be called with undefined, but handle defensively
+    errorMessage = `Diff output was unexpectedly undefined.`;
+    success = false;
+  }
+  return { additions, deletions, isPure, success, errorMessage };
 }
 
 /**
@@ -144,52 +185,78 @@ export function analyzeDiffContent(diffOutput: string | undefined): { additions:
  *          - `errorMessage`: An optional error message if the command or analysis failed.
  *          - `success`: Boolean indicating overall success of both fetching and analyzing the diff.
  */
-export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput?: string; additions: number; deletions: number; isPure: boolean; errorMessage?: string; success: boolean } {
-    const command = `git diff HEAD "${branchName.replace(/"/g, '\\"')}"`; // Basic quoting for branch name
-    let diffOutput: string | undefined;
-    let errorMessage: string | undefined;
-    let commandSuccess = false;
-    let additions = 0;
-    let deletions = 0;
-    let isPure = false;
+export function getAndAnalyzeDiff(
+  branchName: string,
+  CWD: string,
+): {
+  diffOutput?: string;
+  additions: number;
+  deletions: number;
+  isPure: boolean;
+  errorMessage?: string;
+  success: boolean;
+} {
+  const command = `git diff HEAD "${branchName.replace(/"/g, '\\"')}"`; // Basic quoting for branch name
+  let diffOutput: string | undefined;
+  let errorMessage: string | undefined;
+  let commandSuccess = false;
+  let additions = 0;
+  let deletions = 0;
+  let isPure = false;
 
-    try {
-        diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
-        commandSuccess = true; // Command succeeded, implies diffOutput is valid (even if empty)
-    } catch (error: any) {
-        if (error.status === 1 && typeof error.stdout === 'string') {
-            // git diff found differences and exited with 1. This is not an error for getAndAnalyzeDiff's purpose.
-            diffOutput = error.stdout;
-            commandSuccess = true;
-        } else {
-            // Actual error from execSync or git diff
-            errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
-            if (error.status) { errorMessage += ` Exit status: ${error.status}.`; }
-            if (error.stderr && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-                errorMessage += ` Git stderr: ${error.stderr.trim()}.`;
-            } else if (error.message) {
-                errorMessage += ` Error message: ${error.message}.`;
-            }
-            errorMessage += ` Attempted command: ${command}.`;
-            commandSuccess = false;
-            // diffOutput remains undefined
-        }
+  try {
+    diffOutput = execSync(command, { encoding: 'utf8', cwd: CWD });
+    commandSuccess = true; // Command succeeded, implies diffOutput is valid (even if empty)
+  } catch (error: any) {
+    if (error.status === 1 && typeof error.stdout === 'string') {
+      // git diff found differences and exited with 1. This is not an error for getAndAnalyzeDiff's purpose.
+      diffOutput = error.stdout;
+      commandSuccess = true;
+    } else {
+      // Actual error from execSync or git diff
+      errorMessage = `CRITICAL ERROR: 'git diff' command failed for branch '${branchName}'.`;
+      if (error.status) {
+        errorMessage += ` Exit status: ${error.status}.`;
+      }
+      if (
+        error.stderr &&
+        typeof error.stderr === 'string' &&
+        error.stderr.trim() !== ''
+      ) {
+        errorMessage += ` Git stderr: ${error.stderr.trim()}.`;
+      } else if (error.message) {
+        errorMessage += ` Error message: ${error.message}.`;
+      }
+      errorMessage += ` Attempted command: ${command}.`;
+      commandSuccess = false;
+      // diffOutput remains undefined
     }
+  }
 
-    if (commandSuccess) { // diffOutput could be an empty string (no diff) or the diff content
-        const analysis = analyzeDiffContent(diffOutput); // diffOutput is defined if commandSuccess is true
-        if (analysis.success) {
-            additions = analysis.additions;
-            deletions = analysis.deletions;
-            isPure = analysis.isPure;
-        } else {
-            errorMessage = (errorMessage ? errorMessage + "\n" : "") + `CRITICAL ERROR: Post-diff analysis failed. ${analysis.errorMessage}`;
-            commandSuccess = false; // Mark overall success as false if parsing/analysis fails
-        }
+  if (commandSuccess) {
+    // diffOutput could be an empty string (no diff) or the diff content
+    const analysis = analyzeDiffContent(diffOutput); // diffOutput is defined if commandSuccess is true
+    if (analysis.success) {
+      additions = analysis.additions;
+      deletions = analysis.deletions;
+      isPure = analysis.isPure;
+    } else {
+      errorMessage =
+        (errorMessage ? errorMessage + '\n' : '') +
+        `CRITICAL ERROR: Post-diff analysis failed. ${analysis.errorMessage}`;
+      commandSuccess = false; // Mark overall success as false if parsing/analysis fails
     }
-    // If !commandSuccess initially, diffOutput is undefined. additions, deletions, isPure remain 0, false.
+  }
+  // If !commandSuccess initially, diffOutput is undefined. additions, deletions, isPure remain 0, false.
 
-    return { diffOutput, additions, deletions, isPure, errorMessage, success: commandSuccess };
+  return {
+    diffOutput,
+    additions,
+    deletions,
+    isPure,
+    errorMessage,
+    success: commandSuccess,
+  };
 }
 
 /**
@@ -207,45 +274,58 @@ export function getAndAnalyzeDiff(branchName: string, CWD: string): { diffOutput
  * @returns The extracted message string, or null if no suitable message could be found
  *          or if the input is null/undefined.
  */
-export function extractMessageFromPatch(patchContent: string | null | undefined): string | null {
-    if (!patchContent || typeof patchContent !== 'string') {
-        return null;
-    }
-    const lines = patchContent.split('\n');
-    // Attempt to find Subject line
-    for (const line of lines) {
-        if (line.startsWith('Subject:')) {
-            let message = line.substring('Subject:'.length).trim();
-            // Remove common prefixes like [PATCH], [PATCH 0/N], [PATCH N/M]
-            message = message.replace(/^\[PATCH(?:\s+\d+\/\d+)?\]\s*/, '');
-            if (message) {
-                return message;
-            }
-        }
-    }
-
-    // Fallback: Look for non-header, non-diff lines near the beginning
-    let inHeader = true;
-    const potentialMessageLines: string[] = [];
-    for (const line of lines) {
-        if (line.startsWith('---') || line.startsWith('diff --git')) {
-            inHeader = false;
-            break; // Stop after first diff line
-        }
-        if (inHeader && (line.startsWith('From:') || line.startsWith('Date:') || line.startsWith('Signed-off-by:'))) {
-            continue; // Skip common header lines
-        }
-        // Heuristic: message lines don't usually start with space, and are not empty.
-        // Also, avoid lines that look like git commands or file paths if they were not caught by Subject
-        if (inHeader && line.trim() !== '' && !line.startsWith(' ') && !line.startsWith('git') && !line.includes('/')) {
-             potentialMessageLines.push(line.trim());
-        }
-    }
-
-    if (potentialMessageLines.length > 0) {
-        // Return the first few non-empty lines, joined.
-        return potentialMessageLines.slice(0, 3).join('\n');
-    }
-
+export function extractMessageFromPatch(
+  patchContent: string | null | undefined,
+): string | null {
+  if (!patchContent || typeof patchContent !== 'string') {
     return null;
+  }
+  const lines = patchContent.split('\n');
+  // Attempt to find Subject line
+  for (const line of lines) {
+    if (line.startsWith('Subject:')) {
+      let message = line.substring('Subject:'.length).trim();
+      // Remove common prefixes like [PATCH], [PATCH 0/N], [PATCH N/M]
+      message = message.replace(/^\[PATCH(?:\s+\d+\/\d+)?\]\s*/, '');
+      if (message) {
+        return message;
+      }
+    }
+  }
+
+  // Fallback: Look for non-header, non-diff lines near the beginning
+  let inHeader = true;
+  const potentialMessageLines: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith('---') || line.startsWith('diff --git')) {
+      inHeader = false;
+      break; // Stop after first diff line
+    }
+    if (
+      inHeader &&
+      (line.startsWith('From:') ||
+        line.startsWith('Date:') ||
+        line.startsWith('Signed-off-by:'))
+    ) {
+      continue; // Skip common header lines
+    }
+    // Heuristic: message lines don't usually start with space, and are not empty.
+    // Also, avoid lines that look like git commands or file paths if they were not caught by Subject
+    if (
+      inHeader &&
+      line.trim() !== '' &&
+      !line.startsWith(' ') &&
+      !line.startsWith('git') &&
+      !line.includes('/')
+    ) {
+      potentialMessageLines.push(line.trim());
+    }
+  }
+
+  if (potentialMessageLines.length > 0) {
+    // Return the first few non-empty lines, joined.
+    return potentialMessageLines.slice(0, 3).join('\n');
+  }
+
+  return null;
 }

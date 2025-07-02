@@ -1,5 +1,7 @@
 import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
+import * as fs from 'fs/promises'; // Added for findPatchesInDirectory
+import * as path from 'path'; // Added for findPatchesInDirectory and sortPatchesNumerically
 import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
 
 /**
@@ -328,4 +330,61 @@ export function extractMessageFromPatch(
   }
 
   return null;
+}
+
+/**
+ * Recursively finds files with a specific extension within a directory.
+ *
+ * @async
+ * @param {string} directoryPath - The starting directory for the recursive search.
+ * @returns {Promise<string[]>} A promise that resolves to an array of absolute file paths
+ *                              matching the .taylored extension.
+ */
+export async function findPatchesInDirectory(
+  directoryPath: string,
+): Promise<string[]> {
+  const allFiles: string[] = [];
+  const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      // Recursively search in subdirectories
+      allFiles.push(...(await findPatchesInDirectory(fullPath)));
+    } else if (entry.isFile() && entry.name.endsWith(TAYLORED_FILE_EXTENSION)) {
+      allFiles.push(fullPath);
+    }
+  }
+  return allFiles;
+}
+
+/**
+ * Sorts an array of file paths based on a numerical prefix in their basenames.
+ * Files with numerical prefixes are sorted in ascending order.
+ * Files without numerical prefixes are placed after numerically sorted files,
+ * and then sorted alphabetically among themselves.
+ *
+ * @param {string[]} filePaths - An array of file paths.
+ * @returns {string[]} A new array with file paths sorted numerically then alphabetically.
+ */
+export function sortPatchesNumerically(filePaths: string[]): string[] {
+  const extractNumber = (fileName: string): number => {
+    const match = path.basename(fileName).match(/^(\d+)/);
+    return match ? parseInt(match[1], 10) : Infinity;
+  };
+
+  return [...filePaths].sort((a, b) => {
+    const numA = extractNumber(a);
+    const numB = extractNumber(b);
+
+    if (numA !== Infinity && numB !== Infinity) {
+      return numA - numB;
+    } else if (numA !== Infinity) {
+      return -1; // a has a number, b does not, so a comes first
+    } else if (numB !== Infinity) {
+      return 1; // b has a number, a does not, so b comes first
+    } else {
+      // Neither has a number, sort alphabetically by basename
+      return path.basename(a).localeCompare(path.basename(b));
+    }
+  });
 }

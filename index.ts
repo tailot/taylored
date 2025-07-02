@@ -14,7 +14,12 @@ import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';
 import { handleOffsetCommand } from './lib/handlers/offset-handler';
 import { handleAutomaticOperation } from './lib/handlers/automatic-handler';
-import { resolveTayloredFileName, printUsageAndExit } from './lib/utils';
+import {
+  resolveTayloredFileName,
+  printUsageAndExit,
+  findPatchesInDirectory,
+  sortPatchesNumerically,
+} from './lib/utils';
 
 // <taylored number="9001">
 // Import new Taysell handlers
@@ -432,7 +437,8 @@ async function main(): Promise<void> {
       if (applyModes.includes(mode)) {
         if (rawArgs.length !== 2) {
           printUsageAndExit(
-            `CRITICAL ERROR: ${mode} requires a <taylored_file_name> argument.`,
+            // Corrected this call
+            `CRITICAL ERROR: ${mode} requires a <taylored_file_name_or_path> argument.`,
           );
         }
         const userInputFileName = rawArgs[1];
@@ -442,18 +448,28 @@ async function main(): Promise<void> {
             `CRITICAL ERROR: Invalid taylored file name '${userInputFileName}' after ${mode}. It cannot start with '--'.`,
           );
         }
-        if (
-          userInputFileName.includes(path.sep) ||
-          userInputFileName.includes('/') ||
-          userInputFileName.includes('\\')
-        ) {
-          printUsageAndExit(
-            `CRITICAL ERROR: <taylored_file_name> ('${userInputFileName}') must be a simple filename without path separators (e.g., 'my_patch'). It is assumed to be in the '${TAYLORED_DIR_NAME}/' directory.`,
-          );
-        }
 
-        const resolvedTayloredFileName =
-          resolveTayloredFileName(userInputFileName);
+        // Determine if the input is a directory or a file
+        const userInputAbsolutePath = path.join(
+          CWD,
+          TAYLORED_DIR_NAME,
+          userInputFileName,
+        );
+        let stats;
+        try {
+          stats = await fs.stat(userInputAbsolutePath);
+        } catch (e: any) {
+          // If stat fails, it might be a filename without extension or truly non-existent
+          // For directory operations, we expect the directory to exist.
+          // For file operations, resolveTayloredFileName might find it.
+          if (e.code !== 'ENOENT') {
+            // If it's not "file not found", it's a more serious error
+            printUsageAndExit(
+              `CRITICAL ERROR: Could not access '${userInputAbsolutePath}'. Details: ${e.message}`,
+            );
+            return; // Keep typescript happy
+          }
+        }
 
         let isVerify = false;
         let isReverse = false;
@@ -471,13 +487,90 @@ async function main(): Promise<void> {
             isReverse = true;
             break;
         }
-        await handleApplyOperation(
-          resolvedTayloredFileName,
-          isVerify,
-          isReverse,
-          mode,
-          CWD,
-        );
+
+        if (stats && stats.isDirectory()) {
+          // Input is a directory
+          console.log(
+            `INFO: Processing patch group in directory: ${userInputFileName}`,
+          );
+          const patches = await findPatchesInDirectory(userInputAbsolutePath);
+          if (patches.length === 0) {
+            console.log(
+              `INFO: No .taylored files found in directory '${userInputAbsolutePath}'. Nothing to do.`,
+            );
+            return;
+          }
+          let patchesToProcess = sortPatchesNumerically(patches);
+
+          if (isReverse) {
+            // For --remove and --verify-remove
+            patchesToProcess = patchesToProcess.reverse();
+            console.log(
+              `INFO: Found ${patchesToProcess.length} patch(es) to process in REVERSE order (for removal):`,
+            );
+          } else {
+            console.log(
+              `INFO: Found ${patchesToProcess.length} patch(es) to process in order:`,
+            );
+          }
+          patchesToProcess.forEach((p) =>
+            console.log(
+              `  - ${path.relative(path.join(CWD, TAYLORED_DIR_NAME), p)}`,
+            ),
+          );
+
+          for (const patchPath of patchesToProcess) {
+            // handleApplyOperation expects filename relative to .taylored dir, not absolute.
+            // And also not the full path from within .taylored, but just the name if it's at top level,
+            // or subfolder/name.taylored if it's nested.
+            // path.relative will give us that.
+            const patchFileNameForApply = path.relative(
+              path.join(CWD, TAYLORED_DIR_NAME),
+              patchPath,
+            );
+
+            console.log(`\nINFO: ==> ${mode} patch: ${patchFileNameForApply}`);
+            try {
+              await handleApplyOperation(
+                patchFileNameForApply,
+                isVerify,
+                isReverse,
+                mode,
+                CWD,
+              );
+              console.log(
+                `INFO: <== Successfully processed: ${patchFileNameForApply}`,
+              );
+            } catch (error: any) {
+              console.error(
+                `CRITICAL ERROR: Failed to process patch ${patchFileNameForApply} in group ${userInputFileName}. Halting group operation.`,
+              );
+              // The error from handleApplyOperation should have already been printed.
+              // We exit here because a failure in a sequence is critical.
+              process.exit(1);
+            }
+          }
+          console.log(
+            `\nINFO: Finished processing patch group: ${userInputFileName}`,
+          );
+        } else {
+          // Input is a single file (or presumed to be, resolveTayloredFileName will handle extension)
+          // The original check for path separators is removed to allow direct file paths like 'group1/1-first.taylored'
+          // However, handleApplyOperation expects the name relative to .taylored/, so userInputFileName is fine as is.
+          // If userInputFileName was "1-first", resolveTayloredFileName makes it "1-first.taylored"
+          // If userInputFileName was "group1/1-first", resolveTayloredFileName makes it "group1/1-first.taylored"
+          // This seems consistent with how handleApplyOperation constructs the full path.
+
+          const resolvedTayloredFileName =
+            resolveTayloredFileName(userInputFileName);
+          await handleApplyOperation(
+            resolvedTayloredFileName,
+            isVerify,
+            isReverse,
+            mode,
+            CWD,
+          );
+        }
       } else {
         printUsageAndExit(
           `CRITICAL ERROR: Unknown option or command '${mode}'.`,

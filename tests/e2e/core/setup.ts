@@ -9,7 +9,7 @@ export const TEST_DIR_FULL_PATH = path.join(
   PROJECT_ROOT_PATH,
   TEST_SUBDIR_NAME,
 );
-export const TAYLORED_CMD_BASE = `npx ts-node ${path.join(PROJECT_ROOT_PATH, 'index.ts')}`;
+export const TAYLORED_CMD_BASE = `node -r ts-node/register ${path.join(PROJECT_ROOT_PATH, 'index.ts')}`;
 export const TAYLORED_DIR_NAME = '.taylored';
 export const TAYLORED_DIR_FULL_PATH = path.join(
   TEST_DIR_FULL_PATH,

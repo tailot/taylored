@@ -33,13 +33,13 @@ interface BlockMatch {
  * @param {string} dir - The starting directory for the recursive search.
  * @param {string} ext - The file extension to search for (e.g., ".js", ".ts").
  * @param {string[]} allFiles - An accumulator array holding the paths of found files.
- *                              Typically initialized as an empty array by the caller.
+ * Typically initialized as an empty array by the caller.
  * @param {string[]} [excludeDirs] - An optional array of directory names or relative paths
- *                                   (from CWD) to exclude from the search.
+ * (from CWD) to exclude from the search.
  * @param {string} [CWD_ABS] - The absolute path to the current working directory (CWD).
- *                             Used to correctly resolve relative paths for `excludeDirs`.
+ * Used to correctly resolve relative paths for `excludeDirs`.
  * @returns {Promise<string[]>} A promise that resolves to an array of absolute file paths
- *                              matching the extension and exclusion criteria.
+ * matching the extension and exclusion criteria.
  */
 async function findFilesRecursive(
   dir: string,
@@ -81,31 +81,31 @@ async function findFilesRecursive(
  * This function orchestrates a complex Git workflow for each discovered block:
  * 1. Scans files matching specified `extensionsInput` within the `CWD`, respecting `excludeDirs`.
  * 2. For each file, it searches for Taylored blocks using a regex.
- *    The marker syntax is: `<taylored number="N" [disabled="true|false"] [compute="STRIP_CHARS"] [async="true|false"]>...content...</taylored>`
- *    - `number="N"`: (Required) Specifies the output file number (e.g., N.taylored).
- *    - `disabled="true|false"`: (Optional) If "true", the block is completely ignored by the `--automatic` process. If "false" or absent, the block is processed normally. Takes precedence over `compute` and `async`.
- *    - `compute="STRIP_CHARS"`: (Optional) If present, the block's content is treated as a script.
- *      `STRIP_CHARS` is a comma-separated list of patterns to remove from the script
- *      before execution (e.g., comment markers like "/*,*"/""). The script's stdout
- *      becomes the content of the patch.
- *    - `async="true|false"`: (Optional, for `compute` blocks) If "true", the compute script
- *      is executed asynchronously. Defaults to "false" (synchronous).
+ * The marker syntax is: `<taylored number="N" [disabled="true|false"] [compute="STRIP_CHARS"] [async="true|false"]>...content...</taylored>`
+ * - `number="N"`: (Required) Specifies the output file number (e.g., N.taylored).
+ * - `disabled="true|false"`: (Optional) If "true", the block is completely ignored by the `--automatic` process. If "false" or absent, the block is processed normally. Takes precedence over `compute` and `async`.
+ * - `compute="STRIP_CHARS"`: (Optional) If present, the block's content is treated as a script.
+ * `STRIP_CHARS` is a comma-separated list of patterns to remove from the script
+ * before execution (e.g., comment markers like "/*,*"/""). The script's stdout
+ * becomes the content of the patch.
+ * - `async="true|false"`: (Optional, for `compute` blocks) If "true", the compute script
+ * is executed asynchronously. Defaults to "false" (synchronous).
  * 3. **Git Workflow (for each block):**
- *    - **Static Blocks (no `compute`):**
- *      a. A temporary branch is created from the current branch (`originalBranchName`).
- *      b. On this temp branch, the Taylored block is removed from the source file, and the change is committed.
- *      c. A diff is generated between this temporary commit (block removed) and `originalBranchName` (block present).
- *         This diff, representing the addition of the block, is saved as `N.taylored`.
- *      d. The temporary branch is deleted, and the original branch is restored.
- *    - **Compute Blocks:**
- *      a. The script within the block is executed (stdout captured).
- *      b. A temporary branch is created from `originalBranchName`.
- *      c. On this temp branch, the original Taylored block markers are replaced with the script's stdout
- *         in the source file, and this change is committed.
- *      d. A diff is generated between this temporary commit and the target `branchName` (specified by user).
- *         This diff, representing the changes needed to apply the computed content to `branchName`,
- *         is saved as `N.taylored`.
- *      e. The temporary branch is deleted, and `originalBranchName` is restored.
+ * - **Static Blocks (no `compute`):**
+ * a. A temporary branch is created from the current branch (`originalBranchName`).
+ * b. On this temp branch, the Taylored block is removed from the source file, and the change is committed.
+ * c. A diff is generated between this temporary commit (block removed) and `originalBranchName` (block present).
+ * This diff, representing the addition of the block, is saved as `N.taylored`.
+ * d. The temporary branch is deleted, and the original branch is restored.
+ * - **Compute Blocks:**
+ * a. The script within the block is executed (stdout captured).
+ * b. A temporary branch is created from `originalBranchName`.
+ * c. On this temp branch, the original Taylored block markers are replaced with the script's stdout
+ * in the source file, and this change is committed.
+ * d. A diff is generated between this temporary commit and the target `branchName` (specified by user).
+ * This diff, representing the changes needed to apply the computed content to `branchName`,
+ * is saved as `N.taylored`.
+ * e. The temporary branch is deleted, and `originalBranchName` is restored.
  * 4. Ensures the repository is clean (no uncommitted changes) and not in a detached HEAD state before starting.
  * 5. Handles errors gracefully, attempts to clean up temporary branches, and logs progress.
  *
@@ -114,18 +114,18 @@ async function findFilesRecursive(
  *
  * @async
  * @param {string} extensionsInput - A comma-separated string of file extensions to scan
- *                                   (e.g., "ts,js,py").
+ * (e.g., "ts,js,py").
  * @param {string} branchName - The target Git branch against which computed blocks are diffed.
- *                              For static blocks, the current branch is implicitly the target for comparison.
+ * For static blocks, the current branch is implicitly the target for comparison.
  * @param {string} CWD - The current working directory, expected to be the root of the Git repository.
  * @param {string[]} [excludeDirs] - An optional array of directory names or relative paths
- *                                   (from CWD) to exclude from scanning.
+ * (from CWD) to exclude from scanning.
  * @returns {Promise<void>} A promise that resolves when all blocks have been processed.
  * @throws {Error} If critical pre-checks fail (e.g., dirty Git repository, detached HEAD state),
- *                 or if Git operations (checkout, commit, diff), file system operations (read,
- *                 write, unlink), or script execution (for compute blocks) encounter errors
- *                 during processing. Errors typically lead to the skipping of the problematic
- *                 block or premature termination of the command.
+ * or if Git operations (checkout, commit, diff), file system operations (read,
+ * write, unlink), or script execution (for compute blocks) encounter errors
+ * during processing. Errors typically lead to the skipping of the problematic
+ * block or premature termination of the command.
  */
 export async function handleAutomaticOperation(
   extensionsInput: string,
@@ -223,7 +223,7 @@ export async function handleAutomaticOperation(
   const blockRegex =
     /[^\n]*?<taylored\s+number="(\d+)"([^>]*)>([\s\S]*?)[^\n]*?<\/taylored>/g;
   const jsonBlockRegex =
-    /(?:"[^"]+"\s*:\s*)?({[^{}]*?"taylored"\s*:\s*(\d+)[^}]*?})/g;
+    /(?:const\s+\w+\s*=\s*)?({(?:[^{}]|{[^{}]*})*?"taylored"\s*:\s*(\d+)(?:[^{}]|{[^{}]*})*?});?/g;
   let totalBlocksProcessed = 0;
   const asyncScriptPromises: Promise<void>[] = [];
 
@@ -297,7 +297,9 @@ export async function handleAutomaticOperation(
         numero = matchInfo.match[2]; // Il numero è già disponibile nel 2° gruppo di cattura
 
         try {
-          const parsedJson = JSON.parse(jsonBlockText);
+          // Rimuove le righe di commento prima del parsing JSON
+          const cleanedJsonText = jsonBlockText.replace(/\/\/.*$/gm, '');
+          const parsedJson = JSON.parse(cleanedJsonText);
 
           if (typeof parsedJson.content !== 'string') {
             console.warn(

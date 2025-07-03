@@ -1,16 +1,15 @@
 --- a/package.json
 +++ b/package.json
-@@ -26,6 +26,47 @@
+@@ -26,6 +26,46 @@
    "bin": {
      "taylored": "dist/index.js"
    },
 +  "scripts": {
 +    "build": "tsc",
 +    "postbuild": "node -e \"require('fs-extra').copySync('templates/backend-in-a-box', 'dist/templates/backend-in-a-box', { overwrite: true })\"",
-+    "build:lite": "./scripts/build-lite.js",
 +    "prepublishOnly": "npm run build",
 +    "prepublish:lite": "./scripts/prepublish-lite.js",
-+    "publish:full": "npm run build && npx ts-node index.ts --remove scripts && npm publish",
++    "publish:full": "npm run build && npm publish",
 +    "publish:lite": "npm publish --ignore-scripts",
 +    "test": "jest --runInBand",
 +    "test:e2e:core:initial-setup": "jest --runInBand tests/e2e/core/initial-setup.test.ts",

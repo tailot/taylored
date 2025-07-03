@@ -1,8 +1,8 @@
 diff --git a/package.json b/package.json
-index cf34b93..821e482 100644
+index c4d030c..2b69e47 100644
 --- a/package.json
 +++ b/package.json
-@@ -66,6 +66,8 @@
+@@ -68,6 +68,8 @@
    },
    "dependencies": {
      "fs-extra": "^11.3.0",

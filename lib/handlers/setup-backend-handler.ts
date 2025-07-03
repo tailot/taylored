@@ -1,5 +1,4 @@
 // lib/handlers/setup-backend-handler.ts
-import * as child_process from 'child_process';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import inquirer from 'inquirer'; // Importa inquirer

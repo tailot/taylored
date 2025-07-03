@@ -763,12 +763,11 @@ index 0000000..a9ccfb8
 +}
 diff --git a/lib/handlers/setup-backend-handler.ts b/lib/handlers/setup-backend-handler.ts
 new file mode 100644
-index 0000000..036cef0
+index 0000000..166b401
 --- /dev/null
 +++ b/lib/handlers/setup-backend-handler.ts
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,238 @@
 +// lib/handlers/setup-backend-handler.ts
-+import * as child_process from 'child_process';
 +import * as fs from 'fs-extra';
 +import * as path from 'path';
 +import inquirer from 'inquirer'; // Importa inquirer
@@ -1008,10 +1007,10 @@ index 0000000..036cef0
 +}
 diff --git a/lib/taysell-utils.ts b/lib/taysell-utils.ts
 new file mode 100644
-index 0000000..ec0baba
+index 0000000..e3c0ead
 --- /dev/null
 +++ b/lib/taysell-utils.ts
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,222 @@
 +// Copyright (c) 2025 tailot@gmail.com
 +// SPDX-License-Identifier: MIT
 +
@@ -1021,7 +1020,6 @@ index 0000000..ec0baba
 +const ALGORITHM = 'aes-256-gcm';
 +const IV_LENGTH = 16; // For GCM, 12 is recommended, but 16 is also common. Node uses 16 by default for IV generation if not specified.
 +const SALT_LENGTH = 16;
-+const TAG_LENGTH = 16;
 +const KEY_LENGTH = 32; // AES-256
 +const PBKDF2_ITERATIONS = 310000; // OWASP recommended minimum
 +

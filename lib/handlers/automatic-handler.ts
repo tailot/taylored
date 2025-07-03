@@ -929,7 +929,7 @@ export async function handleAutomaticOperation(
           }
         }
 
-        const fileLines = fileContent.split('\n');
+        // const fileLines = fileContent.split('\n');
         // Use matchInfo.index directly as it's populated for both XML and JSON types
         const contentUpToMatch = fileContent.substring(0, matchInfo.index);
         const startLineNum = contentUpToMatch.split('\n').length;

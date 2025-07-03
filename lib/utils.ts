@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as parseDiffModule from 'parse-diff';
 import * as fs from 'fs/promises'; // Added for findPatchesInDirectory
 import * as path from 'path'; // Added for findPatchesInDirectory and sortPatchesNumerically
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './constants';
+import { TAYLORED_FILE_EXTENSION } from './constants';
 
 /**
  * Ensures a Taylored filename ends with the standard .taylored extension.

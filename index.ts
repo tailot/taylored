@@ -8,7 +8,7 @@
 
 import * as fs from 'fs/promises'; // Using fs/promises for async file operations
 import * as path from 'path';
-import { TAYLORED_DIR_NAME, TAYLORED_FILE_EXTENSION } from './lib/constants';
+import { TAYLORED_DIR_NAME } from './lib/constants';
 import { handleApplyOperation } from './lib/apply-logic';
 import { handleSaveOperation } from './lib/handlers/save-handler';
 import { handleListOperation } from './lib/handlers/list-handler';

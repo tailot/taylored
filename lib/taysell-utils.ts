@@ -7,7 +7,6 @@ import * as crypto from 'crypto';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16; // For GCM, 12 is recommended, but 16 is also common. Node uses 16 by default for IV generation if not specified.
 const SALT_LENGTH = 16;
-const TAG_LENGTH = 16;
 const KEY_LENGTH = 32; // AES-256
 const PBKDF2_ITERATIONS = 310000; // OWASP recommended minimum
 

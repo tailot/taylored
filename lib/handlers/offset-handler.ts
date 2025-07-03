@@ -1,7 +1,5 @@
-import * as path from 'path';
 import { updatePatchOffsets } from '../git-patch-offset-updater';
 import { resolveTayloredFileName } from '../utils';
-import { TAYLORED_DIR_NAME } from '../constants';
 
 /**
  * Implements the `taylored --offset <taylored_file_name> [BRANCH_NAME]` command.
@@ -53,7 +51,7 @@ export async function handleOffsetCommand(
 
   try {
     // Pass branchName to updatePatchOffsets. Custom commit message is no longer passed.
-    const result = await updatePatchOffsets(
+    await updatePatchOffsets(
       resolvedTayloredFileName,
       CWD,
       undefined,

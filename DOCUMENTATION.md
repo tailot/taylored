@@ -710,8 +710,8 @@ This command effectively "undoes" a `taylored --add` operation for a given plugi
 
     **Note on Group Operations (Removing a Directory):**
     *   When a directory is specified, Taylored will find all `.taylored` files recursively.
-    *   These files are **sorted numerically** (same logic as for `--add`) before removal.
-    *   Patches are typically removed in this determined order. For best results, especially if patches have dependencies or overlap, removing them in the reverse order of application is often safest. While Taylored sorts them for removal, the actual reverse order of a specific prior application sequence isn't stored, so it processes based on the sorted file list.
+    *   These files are first **sorted numerically** (based on leading numbers in filenames, e.g., `1-patch.taylored` before `10-patch.taylored`) and then alphabetically for non-numeric filenames or those with the same numeric prefix. This establishes a deterministic application order.
+    *   For removal, Taylored processes the patches in the **exact reverse of this determined application order**. This ensures that if patches were applied as a group, they are removed in the correct reverse sequence, which is crucial for maintaining consistency, especially if patches have dependencies.
 
 #### Use Cases (`--remove`)
 
@@ -1949,9 +1949,9 @@ The `taylored --buy <file.taysell>` command initiates the purchase process for a
         *   The patch is **not** applied to the repository.
     *   **If `--dry-run` is NOT specified (default behavior)**:
         *   The received patch content is saved into the local `.taylored/` directory. The filename is derived from the `patchId` (e.g., `<patchId_sanitized>.taylored`).
-        *   The command then automatically calls the equivalent of `taylored --add <saved_patch_file>` to apply the newly downloaded and saved patch to the user's current working directory.
-        *   The user is informed of the successful purchase, download, and application.
-8.  **Error Handling**: If any step fails (e.g., polling times out, payment is not confirmed, download fails, `.taysell` file is invalid), the command exits with an appropriate error message.
+        *   The user is informed of the successful purchase and download, and where the patch file has been saved.
+        *   **Important**: The patch is **not automatically applied**. The user must manually apply it using `taylored --add <saved_patch_filename>` if desired.
+8.  **Error Handling**: If any step fails (e.g., polling times out, payment is not confirmed, download fails, `.taysell` file is invalid), the command exits with an appropriate error message, potentially using `displayPurchaseAssistanceMessage` for more detailed guidance.
 
 #### Usage Example (`--buy`)<a name="usage-example-buy"></a>
 

@@ -529,6 +529,116 @@ export class PatchAnalyzer {
         continue;
       }
 
+      // Heuristic to determine if the patch covers the entire file.
+      let isEntireFilePatch = false;
+      if (singlePatch.hunks.length === 1) {
+        const hunk = singlePatch.hunks[0];
+        const isFullFileAddition = hunk.oldStart === 0 && hunk.oldCount === 0;
+        const isFullFileDeletion = hunk.newStart === 0 && hunk.newCount === 0;
+        const isFullFileReplacement =
+          hunk.oldStart > 0 &&
+          hunk.newStart > 0 &&
+          !hunk.changes.some((c) => c.type === ' ');
+
+        if (isFullFileAddition || isFullFileDeletion || isFullFileReplacement) {
+          isEntireFilePatch = true;
+        }
+      }
+
+      // **INIZIO LOGICA AGGIORNATA PER FILE INTERI**
+      if (isEntireFilePatch) {
+        const hunk = singlePatch.hunks[0];
+        const isFullAddition = hunk.oldStart === 0 && hunk.oldCount === 0;
+        const isFullDeletion = hunk.newStart === 0 && hunk.newCount === 0;
+
+        // Caso 1: Aggiunta di un file completo
+        if (isFullAddition) {
+          console.log(
+            `Patch for '${filePath}' is a full file addition. Updating content from target file...`,
+          );
+          const newFileLines = fs.readFileSync(filePath, 'utf8').split('\n');
+          hunk.changes = newFileLines.map((line) => ({
+            type: '+' as const,
+            content: line,
+            lineNumber: 0,
+          }));
+          hunk.newCount = newFileLines.length;
+          results.push({
+            file: filePath,
+            status: 'intact',
+            message:
+              'Full file patch content was updated from the target file.',
+            updated: true,
+          });
+          continue;
+        }
+
+        // Caso 2: Eliminazione di un file completo
+        if (isFullDeletion) {
+          console.log(
+            `Patch for '${filePath}' is a full file deletion. Checking if file exists...`,
+          );
+          if (!fs.existsSync(filePath)) {
+            results.push({
+              file: filePath,
+              status: 'intact',
+              message:
+                'Full file deletion patch is valid (file does not exist). No update needed.',
+              updated: false,
+            });
+          } else {
+            results.push({
+              file: filePath,
+              status: 'corrupted',
+              message:
+                'Full file deletion patch is corrupted (file still exists). No update performed.',
+              updated: false,
+            });
+          }
+          continue;
+        }
+
+        // Caso 3: Sostituzione completa del file (nessuna riga di contesto)
+        if (fs.existsSync(filePath)) {
+          console.log(
+            `Patch for '${filePath}' is a full file replacement. Updating content from target file...`,
+          );
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          const fileLines = fileContent.split('\n');
+          const originalLinesCount = hunk.changes.filter(
+            (c) => c.type === '-',
+          ).length;
+
+          hunk.changes = fileLines.map((line) => ({
+            type: '+' as const,
+            content: line,
+            lineNumber: 0,
+          }));
+
+          hunk.oldStart = 1;
+          hunk.oldCount = originalLinesCount;
+          hunk.newStart = 1;
+          hunk.newCount = fileLines.length;
+
+          results.push({
+            file: filePath,
+            status: 'intact',
+            message:
+              'Full file replacement patch content was updated from the target file.',
+            updated: true,
+          });
+        } else {
+          results.push({
+            file: filePath,
+            status: 'error',
+            message: `Target file not found for full file replacement: ${filePath}`,
+            updated: false,
+          });
+        }
+        continue;
+      }
+      // **FINE LOGICA AGGIORNATA PER FILE INTERI**
+
       if (!fs.existsSync(filePath)) {
         results.push({
           file: filePath,
@@ -541,27 +651,6 @@ export class PatchAnalyzer {
       const fileContent = fs.readFileSync(filePath, 'utf8');
       const fileLines = fileContent.split('\n');
       const modificationBlocks = this.identifyModificationBlocks(singlePatch);
-
-      // Heuristic to determine if the patch covers the entire file.
-      let isEntireFilePatch = false;
-      if (singlePatch.hunks.length === 1) {
-        const hunk = singlePatch.hunks[0];
-        // Case 1: Full file addition (e.g., @@ -0,0 +1,460 @@)
-        const isFullFileAddition = hunk.oldStart === 0 && hunk.oldCount === 0;
-        // Case 2: Full file deletion (e.g., @@ -1,460 +0,0 @@)
-        const isFullFileDeletion = hunk.newStart === 0 && hunk.newCount === 0;
-        // Case 3: Full file replacement (e.g., @@ -1,100 +1,120 @@ with no context lines)
-        const isFullFileReplacement =
-          hunk.oldStart === 1 && hunk.newStart === 1;
-
-        // A patch is for a full file if it's an addition/deletion or a replacement with no context lines.
-        if (
-          (isFullFileAddition || isFullFileDeletion || isFullFileReplacement) &&
-          !hunk.changes.some((c) => c.type === ' ')
-        ) {
-          isEntireFilePatch = true;
-        }
-      }
 
       if (modificationBlocks.length === 0) {
         results.push({
@@ -621,7 +710,7 @@ export class PatchAnalyzer {
         this.updatePatchBlocks(singlePatch, modificationBlocks, fileLines);
         const lastResult = results[results.length - 1];
         if (lastResult) {
-          lastResult.updated = true; // Mark that an update attempt was made and content was changed.
+          lastResult.updated = true;
           lastResult.message =
             'All frames are intact. Patch content has been updated from the target file.';
         }

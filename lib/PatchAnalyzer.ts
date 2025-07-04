@@ -545,13 +545,12 @@ export class PatchAnalyzer {
         }
       }
 
-      // **INIZIO LOGICA AGGIORNATA PER FILE INTERI**
       if (isEntireFilePatch) {
         const hunk = singlePatch.hunks[0];
         const isFullAddition = hunk.oldStart === 0 && hunk.oldCount === 0;
         const isFullDeletion = hunk.newStart === 0 && hunk.newCount === 0;
 
-        // Caso 1: Aggiunta di un file completo
+        // Case 1: Full file addition
         if (isFullAddition) {
           console.log(
             `Patch for '${filePath}' is a full file addition. Updating content from target file...`,
@@ -573,7 +572,7 @@ export class PatchAnalyzer {
           continue;
         }
 
-        // Caso 2: Eliminazione di un file completo
+        // Case 2: Full file deletion
         if (isFullDeletion) {
           console.log(
             `Patch for '${filePath}' is a full file deletion. Checking if file exists...`,
@@ -598,7 +597,7 @@ export class PatchAnalyzer {
           continue;
         }
 
-        // Caso 3: Sostituzione completa del file (nessuna riga di contesto)
+        // Case 3: Full file replacement (no context lines)
         if (fs.existsSync(filePath)) {
           console.log(
             `Patch for '${filePath}' is a full file replacement. Updating content from target file...`,
@@ -637,7 +636,6 @@ export class PatchAnalyzer {
         }
         continue;
       }
-      // **FINE LOGICA AGGIORNATA PER FILE INTERI**
 
       if (!fs.existsSync(filePath)) {
         results.push({

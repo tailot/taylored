@@ -155,11 +155,16 @@ export class PatchAnalyzer {
     if (!match) {
       throw new Error(`Invalid hunk header: ${header}`);
     }
+    const oldStart = parseInt(match[1], 10);
+    const oldCountRaw = parseInt(match[2], 10);
+    const newStart = parseInt(match[3], 10);
+    const newCountRaw = parseInt(match[4], 10);
+
     return {
-      oldStart: parseInt(match[1], 10),
-      oldCount: parseInt(match[2], 10) || 1,
-      newStart: parseInt(match[3], 10),
-      newCount: parseInt(match[4], 10) || 1,
+      oldStart: oldStart,
+      oldCount: isNaN(oldCountRaw) ? 1 : oldCountRaw,
+      newStart: newStart,
+      newCount: isNaN(newCountRaw) ? 1 : newCountRaw,
     };
   }
 
@@ -537,6 +542,27 @@ export class PatchAnalyzer {
       const fileLines = fileContent.split('\n');
       const modificationBlocks = this.identifyModificationBlocks(singlePatch);
 
+      // Heuristic to determine if the patch covers the entire file.
+      let isEntireFilePatch = false;
+      if (singlePatch.hunks.length === 1) {
+        const hunk = singlePatch.hunks[0];
+        // Case 1: Full file addition (e.g., @@ -0,0 +1,460 @@)
+        const isFullFileAddition = hunk.oldStart === 0 && hunk.oldCount === 0;
+        // Case 2: Full file deletion (e.g., @@ -1,460 +0,0 @@)
+        const isFullFileDeletion = hunk.newStart === 0 && hunk.newCount === 0;
+        // Case 3: Full file replacement (e.g., @@ -1,100 +1,120 @@ with no context lines)
+        const isFullFileReplacement =
+          hunk.oldStart === 1 && hunk.newStart === 1;
+
+        // A patch is for a full file if it's an addition/deletion or a replacement with no context lines.
+        if (
+          (isFullFileAddition || isFullFileDeletion || isFullFileReplacement) &&
+          !hunk.changes.some((c) => c.type === ' ')
+        ) {
+          isEntireFilePatch = true;
+        }
+      }
+
       if (modificationBlocks.length === 0) {
         results.push({
           file: filePath,
@@ -552,18 +578,19 @@ export class PatchAnalyzer {
       let allFramesIntact = true;
 
       for (const block of modificationBlocks) {
-        // It's crucial that checkFrame uses line numbers relevant to the *current* state of fileLines.
         const topFrameCheck = this.checkFrame(
           fileLines,
           block.topFrame,
           'top',
           block,
+          isEntireFilePatch,
         );
         const bottomFrameCheck = this.checkFrame(
           fileLines,
           block.bottomFrame,
           'bottom',
           block,
+          isEntireFilePatch,
         );
 
         blockChecks.push({
@@ -621,11 +648,14 @@ export class PatchAnalyzer {
     frame: Frame | null,
     position: 'top' | 'bottom',
     block: ModificationBlock,
+    isEntireFilePatch: boolean,
   ): FrameCheckResult {
     if (!frame) {
+      // A missing frame is now considered valid for any patch, not just full-file patches.
+      // This handles cases where a patch applies to the very start or end of a file.
       return {
         intact: true,
-        message: `Frame ${position} not present in patch block definition.`,
+        message: `Frame ${position} not present, which is valid for patches at file boundaries.`,
         expected: null,
         actual: null,
       };

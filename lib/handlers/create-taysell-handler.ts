@@ -244,7 +244,7 @@ export async function handleCreateTaysell(
     patchContent,
     patchEncryptionKey,
   );
-  const encryptedFileName = `${patchFileNameBase}.encrypted`;
+  const encryptedFileName = `${patchFileNameBase}.enc`;
   const encryptedFilePath = path.join(cwd, encryptedFileName); // Save in CWD for now
   await fs.writeFile(encryptedFilePath, encryptedPatchContent);
   console.log(`Patch encrypted successfully: ${encryptedFilePath}`);

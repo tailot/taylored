@@ -315,7 +315,7 @@ app.post('/get-patch', async (req, res) => {
         }
 
         // If we get here, the token was valid and has been consumed. Proceed to send the patch.
-        const encryptedFilePath = path.join(__dirname, 'patches', `${sanitizedPatchId}.taylored.enc`);
+        const encryptedFilePath = path.join(__dirname, 'patches', `${sanitizedPatchId}.taylored.patch.enc`);
         try {
             const encryptedContent = await fs.readFile(encryptedFilePath, 'utf-8');
             const decryptedContent = decryptAES256GCM(encryptedContent, encryptionKey);

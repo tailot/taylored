@@ -158,7 +158,7 @@ SELLER_CONTACT=e2e@seller.com
 
       const encryptedFilePath = path.join(
         currentTempDir,
-        `${dummyPatchName}${TAYLORED_FILE_EXTENSION}.encrypted`,
+        `${dummyPatchName}${TAYLORED_FILE_EXTENSION}.patch.enc`,
       );
       const metadataFilePath = path.join(
         currentTempDir,

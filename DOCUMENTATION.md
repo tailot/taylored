@@ -90,7 +90,7 @@
         *   [Arguments](#arguments-create-taysell)
         *   [Process](#process-create-taysell)
         *   [Usage Example](#usage-example-create-taysell)
-    *   [`taylored --buy <file.taysell> [--dry-run]`](#taylored---buy-filetaysell---dry-run)
+    *   [`taylored --buy <file.taysell> [--dry-run]` (or `taylored --buy --dry-run <file.taysell>)`](#taylored---buy-filetaysell---dry-run)
         *   [Purpose](#purpose-buy)
         *   [Arguments](#arguments-buy)
         *   [Process](#process-buy)
@@ -1789,6 +1789,11 @@ This forces the command to use `lib/new_path/component.js` for verification and 
 *   **Frame Stability is Key**: The reliability of the upgrade process hinges on the stability of the context lines (frames) immediately surrounding the patched code. If these frames have been significantly altered or have shifted such that their line numbers are no longer predictable from the original patch, the upgrade will likely not proceed.
 *   **Not a Replacement for `--offset`**: If a patch fails to apply due to major shifts in line numbers throughout the file (but the code structure is generally similar), `taylored --offset` might be more appropriate to adjust the patch's overall line number context. `--upgrade` focuses on content changes *within* stable frames.
 *   **Review Recommended**: While `--upgrade` aims to be safe, it's good practice to review the changes made to a `.taylored` file after an upgrade, especially if the changes are critical, for instance by using `git diff .taylored/your_plugin.taylored` before committing the updated plugin.
+    *   **Full File Patches**: The `--upgrade` command includes special handling for patches that represent complete file additions, deletions, or replacements (i.e., patches with no context lines, affecting the entire file). For these types of patches:
+        *   **Full Addition**: If the patch adds an entire new file, `--upgrade` will update the patch content to match the current content of the target file on disk.
+        *   **Full Deletion**: If the patch deletes an entire file, `--upgrade` verifies if the target file still exists. If it does not exist (matching the patch's intent), the patch is considered "intact." If the file exists, the patch is considered "corrupted." No content update occurs for deletion patches.
+        *   **Full Replacement**: If the patch replaces the entire content of a file, `--upgrade` will update the patch to reflect the current full content of the target file.
+        This behavior for full file patches bypasses the typical frame verification logic, as frames are not applicable in the same way.
 
 The `taylored --upgrade` command provides a valuable mechanism for reducing the maintenance burden of `.taylored` plugins in projects with ongoing development.
 
@@ -1920,7 +1925,8 @@ The `taylored --buy <file.taysell>` command initiates the purchase process for a
 
 *   **`--dry-run` (Optional)**:
     *   **Description**: If this flag is provided, the command will simulate the entire purchase and download process, including fetching the patch content from the server after successful payment polling. However, it will **not** save the patch to the local `.taylored/` directory and will **not** apply it to the repository. Instead, it will print the received patch content to the console. This is useful for inspecting the patch content or testing the purchase flow without making changes to the local project.
-    *   **Example**: `taylored --buy awesome-feature.taysell --dry-run`
+    *   **Placement**: This flag can be placed before or after the `<file.taysell>` argument.
+    *   **Example**: `taylored --buy awesome-feature.taysell --dry-run` or `taylored --buy --dry-run awesome-feature.taysell`
 
 #### Process (`--buy`)<a name="process-buy"></a>
 
